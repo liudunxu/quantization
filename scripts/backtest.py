@@ -29,7 +29,7 @@ from src.backtest import (
 def parse_args():
     parser = argparse.ArgumentParser(description='Backtest stock trading strategies')
     parser.add_argument('--stock', required=True, help='Stock code')
-    parser.add_argument('--days', type=int, default=30, help='Backtest days')
+    parser.add_argument('--backtest-days', type=int, default=30, help='Number of days for backtest')
     parser.add_argument('--train-days', type=int, default=365, help='Training days')
     parser.add_argument('--initial-cash', type=float, default=100000, help='Initial cash')
     parser.add_argument('--output', help='Output file for results (CSV)')
@@ -59,7 +59,7 @@ def main():
     print(" STOCK TRADING BACKTEST")
     print("="*60)
     print(f"\n  Stock Code     : {stock_code}")
-    print(f"  Backtest Days  : {args.days}")
+    print(f"  Backtest Days  : {args.backtest_days}")
     print(f"  Training Days  : {args.train_days}")
     print(f"  Initial Cash   : ${args.initial_cash:,.2f}")
 
@@ -83,8 +83,8 @@ def main():
         sys.exit(1)
 
     # Split data
-    backtest_df = features_df.iloc[-args.days:].copy()
-    train_df = features_df.iloc[:-args.days]
+    backtest_df = features_df.iloc[-args.backtest_days:].copy()
+    train_df = features_df.iloc[:-args.backtest_days]
 
     print(f"  Backtest samples: {len(backtest_df)}")
 
