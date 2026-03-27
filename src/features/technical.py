@@ -39,7 +39,9 @@ class TechnicalFeatures(BaseFeatureExtractor):
         # Ensure lowercase column names (data fetcher returns lowercase)
         data.columns = [c.lower() for c in data.columns]
 
-        df = pd.DataFrame(index=data.index)
+        # Create df with explicit date column (not using index)
+        df = pd.DataFrame()
+        df['date'] = pd.to_datetime(data['date'])
         df['stock_code'] = stock_code
 
         # Price data - handle both uppercase and lowercase
@@ -170,11 +172,5 @@ class TechnicalFeatures(BaseFeatureExtractor):
 
         # Fill NaN values with forward fill then backward fill for remaining
         df = df.ffill().bfill()
-        df = df.reset_index()
-        # Ensure date column name is lowercase
-        if 'Date' in df.columns:
-            df.rename(columns={'Date': 'date'}, inplace=True)
-        elif 'index' in df.columns:
-            df.rename(columns={'index': 'date'}, inplace=True)
 
         return df
