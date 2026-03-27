@@ -40,6 +40,7 @@ models/*.pkl
 models/*.joblib
 *.csv
 *.parquet
+catboost_info/
 
 # Logs
 *.log
