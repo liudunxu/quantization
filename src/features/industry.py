@@ -69,10 +69,12 @@ class IndustryFeatures(BaseFeatureExtractor):
                     def get_col(col):
                         return col.iloc[:, 0] if isinstance(col, pd.DataFrame) else col
 
-                    df_sector = pd.DataFrame(index=sector_data.index)
-                    df_sector['sector_close'] = get_col(sector_data['Close'])
+                    # Create df_sector with explicit date column (not from index)
+                    df_sector = pd.DataFrame()
+                    df_sector['date'] = pd.to_datetime(sector_data.index)
+                    df_sector['sector_close'] = get_col(sector_data['Close']).values
                     df_sector['sector_returns'] = df_sector['sector_close'].pct_change()
-                    df_sector['sector_volume'] = get_col(sector_data['Volume'])
+                    df_sector['sector_volume'] = get_col(sector_data['Volume']).values
                     df_sector['sector_ma20'] = df_sector['sector_close'].rolling(window=20).mean()
                     df_sector['sector_ma_ratio'] = df_sector['sector_close'] / df_sector['sector_ma20']
 
@@ -84,12 +86,6 @@ class IndustryFeatures(BaseFeatureExtractor):
                     df_sector['sector_rsi'] = 100 - (100 / (1 + rs))
 
                     df_sector = df_sector.dropna()
-                    df_sector = df_sector.reset_index()
-                    # Ensure date column name is lowercase
-                    if 'Date' in df_sector.columns:
-                        df_sector.rename(columns={'Date': 'date'}, inplace=True)
-                    elif 'index' in df_sector.columns:
-                        df_sector.rename(columns={'index': 'date'}, inplace=True)
                     # Normalize to date only for consistent merging
                     df_sector['date'] = pd.to_datetime(df_sector['date'].dt.date)
 
@@ -117,7 +113,5 @@ class IndustryFeatures(BaseFeatureExtractor):
             df['sector_ma20'] = np.nan
             df['sector_ma_ratio'] = np.nan
             df['sector_rsi'] = np.nan
-
-        df = df.reset_index(drop=True)
 
         return df
