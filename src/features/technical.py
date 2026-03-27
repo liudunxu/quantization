@@ -170,6 +170,48 @@ class TechnicalFeatures(BaseFeatureExtractor):
         mad = (tp - sma_tp).abs().rolling(window=14).mean()
         df['cci'] = (tp - sma_tp) / (0.015 * mad + 1e-8)
 
+        # ========== Streak features (连续涨跌) ==========
+        # Daily direction: 1 for up, -1 for down, 0 for unchanged
+        daily_dir = np.sign(df['close'].diff())
+        daily_dir = daily_dir.replace(0, np.nan).ffill().fillna(0)
+
+        # Count consecutive up/down days
+        # Consecutive up days
+        df['streak_up_2'] = (daily_dir.shift(1) >= 1).rolling(window=2).sum() >= 2
+        df['streak_up_2'] = df['streak_up_2'].astype(int)
+        df['streak_up_3'] = (daily_dir.shift(1) >= 1).rolling(window=3).sum() >= 3
+        df['streak_up_3'] = df['streak_up_3'].astype(int)
+
+        # Consecutive down days
+        df['streak_down_2'] = (daily_dir.shift(1) <= -1).rolling(window=2).sum() >= 2
+        df['streak_down_2'] = df['streak_down_2'].astype(int)
+        df['streak_down_3'] = (daily_dir.shift(1) <= -1).rolling(window=3).sum() >= 3
+        df['streak_down_3'] = df['streak_down_3'].astype(int)
+
+        # ========== Pattern features (10日内量价模式) ==========
+        # Returns and volume changes over last 10 days
+        ret_10d = df['close'].pct_change(10)
+        vol_change_10d = df['volume'].pct_change(10)
+
+        # Big drop then big rise (>5% drop, >5% rise in next period)
+        ret_5d_later = df['close'].shift(-5).pct_change(5)
+        df['pattern_drop_then_rise'] = ((ret_10d < -0.05) & (ret_5d_later > 0.05)).astype(int)
+
+        # Big rise then big drop
+        df['pattern_rise_then_drop'] = ((ret_10d > 0.05) & (ret_5d_later < -0.05)).astype(int)
+
+        # Volume surge pattern: massive volume increase followed by continued rise
+        vol_10d_ago = df['volume'].shift(10)
+        vol_now = df['volume']
+        df['pattern_vol_surge_rise'] = ((vol_now / vol_10d_ago > 2.0) & (ret_10d > 0)).astype(int)
+        df['pattern_vol_surge_drop'] = ((vol_now / vol_10d_ago > 2.0) & (ret_10d < 0)).astype(int)
+
+        # Recent momentum reversal: last 3 days opposite to prior 7 days
+        ret_3d = df['close'].pct_change(3)
+        ret_7d_prior = df['close'].shift(3).pct_change(7)
+        df['pattern_reversal_up'] = ((ret_7d_prior < -0.03) & (ret_3d > 0.03)).astype(int)
+        df['pattern_reversal_down'] = ((ret_7d_prior > 0.03) & (ret_3d < -0.03)).astype(int)
+
         # Fill NaN values with forward fill then backward fill for remaining
         df = df.ffill().bfill()
 
