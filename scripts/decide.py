@@ -195,12 +195,6 @@ def main():
         results_df = engine.compare_strategies(backtest_df, strategies, full_history_df=features_df)
         print_backtest_comparison(results_df)
 
-    # Cache info
-    print_section(" CACHE STATUS")
-    cache_info = cache.get_cache_info(stock_code)
-    print(f"\n  Cached feature types: {', '.join(cache_info.get('cached_types', ['None']))}")
-    print(f"  Total cached items   : {cache_info.get('count', 0)}")
-
     # Trading decision (moved to end)
     print_decision(prediction_action, prediction_confidence, prediction_proba)
 
