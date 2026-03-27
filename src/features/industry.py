@@ -33,10 +33,15 @@ class IndustryFeatures(BaseFeatureExtractor):
         if not sector:
             return pd.DataFrame()
 
-        df = pd.DataFrame(index=pd.date_range(end=pd.Timestamp.today(), periods=days))
+        date_index = pd.date_range(end=pd.Timestamp.today(), periods=days)
+        df = pd.DataFrame(index=date_index)
         df['stock_code'] = stock_code
         df['sector'] = sector
         df['industry'] = industry
+        df = df.reset_index()
+        df.rename(columns={'index': 'date'}, inplace=True)
+        # Normalize to date only for consistent merging
+        df['date'] = pd.to_datetime(df['date'].dt.date)
 
         # Sector ETF proxies (approximate mappings)
         sector_etfs = {
@@ -55,12 +60,19 @@ class IndustryFeatures(BaseFeatureExtractor):
 
         if sector in sector_etfs:
             try:
-                sector_data = yf.download(sector_etfs[sector], period=f"{days + 60}d", auto_adjust=True, progress=False)
+                sector_data = yf.download(sector_etfs[sector], period=f"{days + 60}d", auto_adjust=False, progress=False)
                 if not sector_data.empty:
+                    # Flatten multi-level columns if present
+                    if isinstance(sector_data.columns, pd.MultiIndex):
+                        sector_data.columns = [col[0] for col in sector_data.columns]
+
+                    def get_col(col):
+                        return col.iloc[:, 0] if isinstance(col, pd.DataFrame) else col
+
                     df_sector = pd.DataFrame(index=sector_data.index)
-                    df_sector['sector_close'] = sector_data['Close']
+                    df_sector['sector_close'] = get_col(sector_data['Close'])
                     df_sector['sector_returns'] = df_sector['sector_close'].pct_change()
-                    df_sector['sector_volume'] = sector_data['Volume']
+                    df_sector['sector_volume'] = get_col(sector_data['Volume'])
                     df_sector['sector_ma20'] = df_sector['sector_close'].rolling(window=20).mean()
                     df_sector['sector_ma_ratio'] = df_sector['sector_close'] / df_sector['sector_ma20']
 
@@ -73,7 +85,13 @@ class IndustryFeatures(BaseFeatureExtractor):
 
                     df_sector = df_sector.dropna()
                     df_sector = df_sector.reset_index()
-                    df_sector.rename(columns={'index': 'date'}, inplace=True)
+                    # Ensure date column name is lowercase
+                    if 'Date' in df_sector.columns:
+                        df_sector.rename(columns={'Date': 'date'}, inplace=True)
+                    elif 'index' in df_sector.columns:
+                        df_sector.rename(columns={'index': 'date'}, inplace=True)
+                    # Normalize to date only for consistent merging
+                    df_sector['date'] = pd.to_datetime(df_sector['date'].dt.date)
 
                     # Merge on date
                     df = pd.merge(df, df_sector, on=['date'], how='left')

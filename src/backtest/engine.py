@@ -146,6 +146,22 @@ class BacktestEngine:
         buy_hold_shares = self.initial_cash / prices[0]
         buy_hold_equity = [buy_hold_shares * p for p in prices]
 
+        # Handle initial buy signal at index 0
+        if signals.iloc[0] == 1 and position == 0:
+            first_price = prices[0] * (1 - self.slippage)
+            shares = int(self.initial_cash / first_price)
+            cost = shares * first_price
+            comm = cost * self.commission
+            cash = self.initial_cash - cost - comm
+            position = 1
+            trades.append(Trade(
+                date=dates[0] if hasattr(dates[0], 'date') else pd.Timestamp(dates[0]),
+                action='buy',
+                price=first_price,
+                quantity=shares,
+                commission=comm
+            ))
+
         for i in range(1, len(prices)):
             current_price = prices[i] * (1 + self.slippage if position == 1 else 1 - self.slippage)
             prev_price = prices[i-1]

@@ -31,21 +31,25 @@ class TechnicalFeatures(BaseFeatureExtractor):
         """Extract technical features for a stock."""
         days = kwargs.get('days', 120)
         try:
-            data = yf.download(stock_code, period=f"{days}d", auto_adjust=True, progress=False)
+            data = yf.download(stock_code, period=f"{days}d", auto_adjust=False, progress=False)
             if data.empty:
                 return pd.DataFrame()
         except Exception:
             return pd.DataFrame()
 
+        # Flatten multi-level columns if present
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = [col[0] for col in data.columns]
+
         df = pd.DataFrame(index=data.index)
         df['stock_code'] = stock_code
 
         # Price data
-        df['close'] = data['Close']
-        df['open'] = data['Open']
-        df['high'] = data['High']
-        df['low'] = data['Low']
-        df['volume'] = data['Volume']
+        df['close'] = data['Close'].iloc[:, 0] if isinstance(data['Close'], pd.DataFrame) else data['Close']
+        df['open'] = data['Open'].iloc[:, 0] if isinstance(data['Open'], pd.DataFrame) else data['Open']
+        df['high'] = data['High'].iloc[:, 0] if isinstance(data['High'], pd.DataFrame) else data['High']
+        df['low'] = data['Low'].iloc[:, 0] if isinstance(data['Low'], pd.DataFrame) else data['Low']
+        df['volume'] = data['Volume'].iloc[:, 0] if isinstance(data['Volume'], pd.DataFrame) else data['Volume']
 
         # Returns
         df['returns'] = df['close'].pct_change()
@@ -110,8 +114,13 @@ class TechnicalFeatures(BaseFeatureExtractor):
         # Price relative to high/low
         df['price_position'] = (df['close'] - df['low_20d']) / (df['high_20d'] - df['low_20d'] + 1e-10)
 
-        df = df.dropna()
+        # Fill NaN values with forward fill then backward fill for remaining
+        df = df.ffill().bfill()
         df = df.reset_index()
-        df.rename(columns={'index': 'date'}, inplace=True)
+        # Ensure date column name is lowercase
+        if 'Date' in df.columns:
+            df.rename(columns={'Date': 'date'}, inplace=True)
+        elif 'index' in df.columns:
+            df.rename(columns={'index': 'date'}, inplace=True)
 
         return df

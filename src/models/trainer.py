@@ -30,9 +30,9 @@ class StockTradingModel:
 
         feature_df = df.drop(columns=drop_cols, errors='ignore')
 
-        # Remove any remaining object columns
+        # Remove any remaining object or string columns
         for col in feature_df.columns:
-            if feature_df[col].dtype == 'object':
+            if feature_df[col].dtype == 'object' or feature_df[col].dtype == 'str':
                 feature_df = feature_df.drop(columns=[col])
 
         # Fill NaN with median
@@ -76,13 +76,16 @@ class StockTradingModel:
         # Create labels
         labels = self._create_labels(df, forward_days, threshold)
 
-        # Filter rows with valid labels
-        valid_idx = labels != 0
+        # Remove rows where forward returns couldn't be calculated (last forward_days rows)
+        valid_idx = ~labels.isna()
         X = X[valid_idx]
         labels = labels[valid_idx]
 
         if len(X) < 30:
             raise ValueError("Insufficient valid samples for training")
+
+        # Convert labels: -1->0, 0->1, 1->2 for CatBoost
+        labels = (labels + 1).astype(int)
 
         # Train model
         self.model = CatBoostClassifier(
@@ -96,20 +99,25 @@ class StockTradingModel:
         )
 
         train_data = X
-        train_labels = (labels + 1).astype(int)  # Convert -1,0,1 to 0,1,2
+        train_labels = labels  # Already converted to 0,1,2
 
         if eval_df is not None and not eval_df.empty:
             eval_X = self._prepare_features(eval_df)
             eval_labels = self._create_labels(eval_df, forward_days, threshold)
-            eval_valid_idx = eval_labels != 0
-            eval_X = eval_X[eval_valid_idx]
-            eval_labels = (eval_labels[eval_valid_idx] + 1).astype(int)
-            self.model.fit(
-                train_data, train_labels,
-                eval_set=(eval_X, eval_labels),
-                early_stopping_rounds=50,
-                verbose=False
-            )
+            eval_valid_idx = ~eval_labels.isna()
+            eval_X_valid = eval_X[eval_valid_idx]
+            eval_labels_valid = (eval_labels[eval_valid_idx] + 1).astype(int)
+
+            # Only use eval_set if we have valid samples
+            if len(eval_X_valid) > 0:
+                self.model.fit(
+                    train_data, train_labels,
+                    eval_set=(eval_X_valid, eval_labels_valid),
+                    early_stopping_rounds=50,
+                    verbose=False
+                )
+            else:
+                self.model.fit(train_data, train_labels, verbose=False)
         else:
             self.model.fit(train_data, train_labels, verbose=False)
 
@@ -122,9 +130,9 @@ class StockTradingModel:
             'train_samples': len(train_data),
             'feature_count': len(self.feature_names),
             'label_distribution': {
-                'buy': int((labels == 1).sum()),
-                'hold': int((labels == 0).sum()),
-                'sell': int((labels == -1).sum())
+                'buy': int((train_labels == 2).sum()),
+                'hold': int((train_labels == 1).sum()),
+                'sell': int((train_labels == 0).sum())
             }
         }
 
@@ -164,11 +172,19 @@ class StockTradingModel:
 
         probabilities = self.model.predict_proba(X_latest)[0]
 
-        return {
-            'sell_probability': float(probabilities[0]),
-            'hold_probability': float(probabilities[1]),
-            'buy_probability': float(probabilities[2])
-        }
+        # Handle case where only 2 classes were learned
+        if len(probabilities) == 2:
+            return {
+                'sell_probability': float(probabilities[0]),
+                'hold_probability': 0.0,
+                'buy_probability': float(probabilities[1])
+            }
+        else:
+            return {
+                'sell_probability': float(probabilities[0]),
+                'hold_probability': float(probabilities[1]),
+                'buy_probability': float(probabilities[2])
+            }
 
     def get_feature_importance(self) -> pd.DataFrame:
         """Get feature importance."""

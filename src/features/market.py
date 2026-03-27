@@ -31,22 +31,29 @@ class MarketFeatures(BaseFeatureExtractor):
             index_code = '^GSPC'
 
         try:
-            index_data = yf.download(index_code, period=f"{days + 60}d", auto_adjust=True, progress=False)
+            index_data = yf.download(index_code, period=f"{days + 60}d", auto_adjust=False, progress=False)
             if index_data.empty:
                 return pd.DataFrame()
         except Exception:
             return pd.DataFrame()
+
+        # Flatten multi-level columns if present
+        if isinstance(index_data.columns, pd.MultiIndex):
+            index_data.columns = [col[0] for col in index_data.columns]
 
         df = pd.DataFrame(index=index_data.index)
         df['stock_code'] = stock_code
         df['index_code'] = index_code
 
         # Index prices
-        df['index_close'] = index_data['Close']
-        df['index_open'] = index_data['Open']
-        df['index_high'] = index_data['High']
-        df['index_low'] = index_data['Low']
-        df['index_volume'] = index_data['Volume']
+        def get_col(col):
+            return col.iloc[:, 0] if isinstance(col, pd.DataFrame) else col
+
+        df['index_close'] = get_col(index_data['Close'])
+        df['index_open'] = get_col(index_data['Open'])
+        df['index_high'] = get_col(index_data['High'])
+        df['index_low'] = get_col(index_data['Low'])
+        df['index_volume'] = get_col(index_data['Volume'])
 
         # Index returns
         df['index_returns'] = df['index_close'].pct_change()
@@ -76,13 +83,24 @@ class MarketFeatures(BaseFeatureExtractor):
         df['index_volume_ma20'] = df['index_volume'].rolling(window=20).mean()
         df['index_volume_ratio'] = df['index_volume'] / df['index_volume_ma20']
 
-        # Index 52-week
-        df['index_high_52w'] = df['index_close'].rolling(window=252).max()
-        df['index_low_52w'] = df['index_close'].rolling(window=252).min()
-        df['index_position_52w'] = (df['index_close'] - df['index_low_52w']) / (df['index_high_52w'] - df['index_low_52w'] + 1e-10)
+        # Index 52-week (only if enough data)
+        if len(df) >= 252:
+            df['index_high_52w'] = df['index_close'].rolling(window=252).max()
+            df['index_low_52w'] = df['index_close'].rolling(window=252).min()
+            df['index_position_52w'] = (df['index_close'] - df['index_low_52w']) / (df['index_high_52w'] - df['index_low_52w'] + 1e-10)
+        else:
+            # Use available data for position calculation
+            df['index_high_52w'] = df['index_close'].rolling(window=min(60, len(df))).max()
+            df['index_low_52w'] = df['index_close'].rolling(window=min(60, len(df))).min()
+            df['index_position_52w'] = (df['index_close'] - df['index_low_52w']) / (df['index_high_52w'] - df['index_low_52w'] + 1e-10)
 
-        df = df.dropna()
+        # Fill NaN values with forward fill then backward fill for remaining
+        df = df.ffill().bfill()
         df = df.reset_index()
-        df.rename(columns={'index': 'date'}, inplace=True)
+        # Ensure date column name is lowercase
+        if 'Date' in df.columns:
+            df.rename(columns={'Date': 'date'}, inplace=True)
+        elif 'index' in df.columns:
+            df.rename(columns={'index': 'date'}, inplace=True)
 
         return df
