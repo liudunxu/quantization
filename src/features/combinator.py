@@ -96,6 +96,32 @@ class FeatureCombinator:
             combined['sector'] = features['industry']['sector'].iloc[0]
             combined['industry'] = features['industry']['industry'].iloc[0]
 
+        # ========== Relative performance features (相对表现) ==========
+        # Stock vs market (Alpha)
+        if 'returns' in combined.columns and 'index_returns' in combined.columns:
+            combined['alpha'] = combined['returns'] - combined['index_returns']
+            combined['alpha_5d'] = combined['momentum_5'] - combined.get('index_momentum_5', 0)
+            combined['alpha_10d'] = combined['momentum_10'] - combined.get('index_momentum_10', 0)
+
+        # Stock vs sector
+        if 'returns' in combined.columns and 'sector_returns' in combined.columns:
+            combined['sector_relative'] = combined['returns'] - combined['sector_returns']
+            combined['sector_relative_5d'] = combined['momentum_5'] - combined.get('sector_momentum_5', 0)
+
+        # Market correlation (rolling)
+        if 'returns' in combined.columns and 'index_returns' in combined.columns:
+            combined['market_corr_5'] = combined['returns'].rolling(window=5).corr(combined['index_returns'])
+            combined['market_corr_10'] = combined['returns'].rolling(window=10).corr(combined['index_returns'])
+
+        # Beta (stock volatility vs market)
+        if 'returns' in combined.columns and 'index_returns' in combined.columns:
+            combined['beta_5'] = combined['returns'].rolling(window=5).cov(combined['index_returns']) / (combined['index_returns'].rolling(window=5).std() + 1e-8)
+            combined['beta_20'] = combined['returns'].rolling(window=20).cov(combined['index_returns']) / (combined['index_returns'].rolling(window=20).std() + 1e-8)
+
+        # Volume vs market volume
+        if 'volume_change' in combined.columns and 'index_volume_ratio' in combined.columns:
+            combined['volume_vs_market'] = combined['volume_change'] - combined['index_volume_ratio']
+
         # Clean up column names
         combined.columns = [c.replace('_market', '').replace('_industry', '') for c in combined.columns]
 
