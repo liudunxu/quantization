@@ -114,6 +114,61 @@ class TechnicalFeatures(BaseFeatureExtractor):
         # Price relative to high/low
         df['price_position'] = (df['close'] - df['low_20d']) / (df['high_20d'] - df['low_20d'] + 1e-10)
 
+        # ========== Short-term momentum features ==========
+        # return_2d, return_3d: 2-day and 3-day returns
+        df['return_2d'] = df['close'].pct_change(2)
+        df['return_3d'] = df['close'].pct_change(3)
+
+        # momentum_acceleration: return_5d - return_10d (动量加速/减速)
+        df['momentum_acceleration'] = df['momentum_5'] - df['momentum_10']
+
+        # ========== Risk-adjusted features ==========
+        # volatility_20d: 20-day volatility (annualized)
+        df['volatility_20d'] = df['returns'].rolling(window=20).std() * np.sqrt(252)
+
+        # sharpe_like: return_5d / volatility_20d
+        df['sharpe_like'] = df['momentum_5'] / (df['volatility_20d'] + 1e-8)
+
+        # cv: coefficient of variation (std/mean) for returns stability
+        df['cv'] = df['returns'].rolling(window=20).std() / (df['returns'].rolling(window=20).mean().abs() + 1e-8)
+
+        # max_drawdown_20d: 20-day maximum drawdown
+        rolling_max = df['close'].rolling(window=20).max()
+        drawdown = (df['close'] - rolling_max) / rolling_max
+        df['max_drawdown_20d'] = drawdown.rolling(window=20).min()
+
+        # ========== Extra technical indicators ==========
+        # ADX_14 (Average Directional Index)
+        high_diff = df['high'].diff()
+        low_diff = -df['low'].diff()
+        plus_dm = high_diff.where((high_diff > low_diff) & (high_diff > 0), 0).rolling(window=14).mean()
+        minus_dm = low_diff.where((low_diff > high_diff) & (low_diff > 0), 0).rolling(window=14).mean()
+        atr_14 = df['atr']
+        plus_di = 100 * plus_dm / (atr_14 + 1e-8)
+        minus_di = 100 * minus_dm / (atr_14 + 1e-8)
+        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di + 1e-8)
+        df['adx'] = dx
+
+        # Stochastic Oscillator (%K and %D, 14-period)
+        lowest_low = df['low'].rolling(window=14).min()
+        highest_high = df['high'].rolling(window=14).max()
+        df['stoch_k'] = 100 * (df['close'] - lowest_low) / (highest_high - lowest_low + 1e-8)
+        df['stoch_d'] = df['stoch_k'].rolling(window=3).mean()
+
+        # MFI_14 (Money Flow Index, 14-period)
+        typical_price = (df['high'] + df['low'] + df['close']) / 3.0
+        money_flow = typical_price * df['volume']
+        positive_flow = money_flow.where(typical_price > typical_price.shift(1), 0).rolling(window=14).sum()
+        negative_flow = money_flow.where(typical_price < typical_price.shift(1), 0).rolling(window=14).sum()
+        mfi = 100 - (100 / (1 + positive_flow / (negative_flow + 1e-8)))
+        df['mfi'] = mfi
+
+        # CCI_14 (Commodity Channel Index, 14-period)
+        tp = (df['high'] + df['low'] + df['close']) / 3.0
+        sma_tp = tp.rolling(window=14).mean()
+        mad = (tp - sma_tp).abs().rolling(window=14).mean()
+        df['cci'] = (tp - sma_tp) / (0.015 * mad + 1e-8)
+
         # Fill NaN values with forward fill then backward fill for remaining
         df = df.ffill().bfill()
         df = df.reset_index()
