@@ -65,6 +65,48 @@ class TechnicalFeatures(BaseFeatureExtractor):
         for period in [12, 26]:
             df[f'ema_{period}'] = df['close'].ewm(span=period, adjust=False).mean()
 
+        # ========== MA Cross features (金叉死叉) ==========
+        # Golden cross: short MA crosses above long MA
+        # Death cross: short MA crosses below long MA
+        ma5_ma10_diff = df['ma_5'] - df['ma_10']
+        ma10_ma20_diff = df['ma_10'] - df['ma_20']
+        ma5_ma20_diff = df['ma_5'] - df['ma_20']
+
+        # MA5-MA10 cross
+        ma5_above_ma10_prev = (ma5_ma10_diff.shift(1) > 0)
+        ma5_above_ma10_now = (ma5_ma10_diff > 0)
+        df['golden_cross_5_10'] = (ma5_above_ma10_prev == False) & (ma5_above_ma10_now == True)
+        df['golden_cross_5_10'] = df['golden_cross_5_10'].astype(int)
+        df['death_cross_5_10'] = (ma5_above_ma10_prev == True) & (ma5_above_ma10_now == False)
+        df['death_cross_5_10'] = df['death_cross_5_10'].astype(int)
+
+        # MA10-MA20 cross
+        ma10_above_ma20_prev = (ma10_ma20_diff.shift(1) > 0)
+        ma10_above_ma20_now = (ma10_ma20_diff > 0)
+        df['golden_cross_10_20'] = (ma10_above_ma20_prev == False) & (ma10_above_ma20_now == True)
+        df['golden_cross_10_20'] = df['golden_cross_10_20'].astype(int)
+        df['death_cross_10_20'] = (ma10_above_ma20_prev == True) & (ma10_above_ma20_now == False)
+        df['death_cross_10_20'] = df['death_cross_10_20'].astype(int)
+
+        # MA5-MA20 cross
+        ma5_above_ma20_prev = (ma5_ma20_diff.shift(1) > 0)
+        ma5_above_ma20_now = (ma5_ma20_diff > 0)
+        df['golden_cross_5_20'] = (ma5_above_ma20_prev == False) & (ma5_above_ma20_now == True)
+        df['golden_cross_5_20'] = df['golden_cross_5_20'].astype(int)
+        df['death_cross_5_20'] = (ma5_above_ma20_prev == True) & (ma5_above_ma20_now == False)
+        df['death_cross_5_20'] = df['death_cross_5_20'].astype(int)
+
+        # ========== MA Arrangement features (多头/空头排列) ==========
+        # Bullish arrangement (多头排列): MA5 > MA10 > MA20
+        df['ma_bullish_arrange'] = ((df['ma_5'] > df['ma_10']) & (df['ma_10'] > df['ma_20'])).astype(int)
+        # Bearish arrangement (空头排列): MA5 < MA10 < MA20
+        df['ma_bearish_arrange'] = ((df['ma_5'] < df['ma_10']) & (df['ma_10'] < df['ma_20'])).astype(int)
+
+        # Partial arrangements
+        df['ma_5_above_10'] = (df['ma_5'] > df['ma_10']).astype(int)
+        df['ma_10_above_20'] = (df['ma_10'] > df['ma_20']).astype(int)
+        df['ma_5_above_20'] = (df['ma_5'] > df['ma_20']).astype(int)
+
         # RSI
         delta = df['close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=self.rsi_period).mean()
