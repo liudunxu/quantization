@@ -87,7 +87,7 @@ class StockTradingModel:
         # Convert labels: -1->0, 0->1, 1->2 for CatBoost
         labels = (labels + 1).astype(int)
 
-        # Train model
+        # Train model with class weights for balance
         self.model = CatBoostClassifier(
             iterations=self.iterations,
             depth=self.depth,
@@ -95,7 +95,8 @@ class StockTradingModel:
             l2_leaf_reg=self.l2_leaf_reg,
             random_seed=self.random_seed,
             verbose=False,
-            loss_function='MultiClass'
+            loss_function='MultiClass',
+            auto_class_weights='Balanced'  # Auto-balance classes
         )
 
         train_data = X

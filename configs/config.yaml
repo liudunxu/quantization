@@ -61,6 +61,13 @@ model:
     learning_rate: 0.03
     l2_leaf_reg: 3
     random_seed: 42
+  # Aggressive trading parameters
+  training:
+    forward_days: 1      # Very short-term prediction
+    threshold: 0.003     # Very low threshold = more signals (0.3%)
+  strategy:
+    min_samples: 20      # Start predicting earlier
+    confidence_threshold: 0.20  # Trade when >20% confidence
 
 backtest:
   initial_cash: 100000

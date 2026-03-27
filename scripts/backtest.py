@@ -95,9 +95,17 @@ def main():
     # Train ML model
     print("\n  Training ML model...")
     model = StockTradingModel()
+
+    # Get aggressive training params from config
+    model_config = config.get_section('model')
+    forward_days = model_config.get('training', {}).get('forward_days', 2)
+    threshold = model_config.get('training', {}).get('threshold', 0.005)
+    min_samples = model_config.get('strategy', {}).get('min_samples', 20)
+    confidence_threshold = model_config.get('strategy', {}).get('confidence_threshold', 0.25)
+
     try:
-        model.train(train_df, forward_days=5, threshold=0.02)
-        print("  Model trained successfully")
+        model.train(train_df, forward_days=forward_days, threshold=threshold)
+        print(f"  Model trained successfully (forward_days={forward_days}, threshold={threshold:.3f})")
     except Exception as e:
         print(f"  Error training model: {e}")
         sys.exit(1)
@@ -117,7 +125,7 @@ def main():
         BuyAndHoldStrategy(),
         HighSellLowBuyStrategy(lookback=20, threshold=0.15),
         HighSellLowBuyStrategy(lookback=10, threshold=0.10),
-        MLStrategy(model, name="ML Strategy (CatBoost)")
+        MLStrategy(model, name="ML Strategy (CatBoost)", min_samples=min_samples, confidence_threshold=confidence_threshold)
     ]
 
     results = []

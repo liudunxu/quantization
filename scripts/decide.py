@@ -129,15 +129,24 @@ def main():
 
     model = StockTradingModel()
 
+    # Get aggressive training params from config
+    model_config = config.get_section('model')
+    forward_days = model_config.get('training', {}).get('forward_days', 2)
+    threshold = model_config.get('training', {}).get('threshold', 0.005)
+    min_samples = model_config.get('strategy', {}).get('min_samples', 20)
+    confidence_threshold = model_config.get('strategy', {}).get('confidence_threshold', 0.25)
+
     # Split data for training and evaluation
     train_df = features_df.iloc[:-args.backtest_days]
     eval_df = features_df.iloc[-args.backtest_days:]
 
     print(f"\n  Training samples  : {len(train_df)}")
     print(f"  Evaluation samples: {len(eval_df)}")
+    print(f"  Forward days      : {forward_days}")
+    print(f"  Threshold         : {threshold:.3f} ({threshold*100:.2f}%)")
 
     try:
-        train_metrics = model.train(train_df, forward_days=5, threshold=0.02, eval_df=eval_df)
+        train_metrics = model.train(train_df, forward_days=forward_days, threshold=threshold, eval_df=eval_df)
         print(f"\n  Training accuracy : {train_metrics['train_accuracy']:.2%}")
         print(f"  Features used     : {train_metrics['feature_count']}")
         print(f"  Label distribution:")
@@ -173,7 +182,7 @@ def main():
         strategies = [
             BuyAndHoldStrategy(),
             HighSellLowBuyStrategy(lookback=20, threshold=0.15),
-            MLStrategy(model, name="ML Strategy")
+            MLStrategy(model, name="ML Strategy", min_samples=min_samples, confidence_threshold=confidence_threshold)
         ]
 
         engine = BacktestEngine(

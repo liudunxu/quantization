@@ -88,23 +88,26 @@ class HighSellLowBuyStrategy(Strategy):
 class MLStrategy(Strategy):
     """Machine learning based strategy."""
 
-    def __init__(self, model, name: str = "ML Strategy"):
+    def __init__(self, model, name: str = "ML Strategy", min_samples: int = 20, confidence_threshold: float = 0.0):
         super().__init__(name)
         self.model = model
+        self.min_samples = min_samples
+        self.confidence_threshold = confidence_threshold
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
         signals = pd.Series(0, index=df.index)
 
-        # Use model to predict for each day where we have enough history
-        min_samples = 50
-
-        if len(df) < min_samples:
+        if len(df) < self.min_samples:
             return signals
 
-        for i in range(min_samples, len(df)):
+        for i in range(self.min_samples, len(df)):
             try:
-                pred, _ = self.model.predict(df.iloc[:i+1])
-                signals.iloc[i] = pred
+                pred, confidence = self.model.predict(df.iloc[:i+1])
+                # Only signal if confidence exceeds threshold
+                if confidence >= self.confidence_threshold:
+                    signals.iloc[i] = pred
+                else:
+                    signals.iloc[i] = 0
             except Exception:
                 signals.iloc[i] = 0
 
