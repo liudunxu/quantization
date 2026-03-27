@@ -13,43 +13,49 @@ This project implements a machine learning-based stock trading decision system t
 ### Directory Structure
 ```
 /root/work/quarnt/
-├── configs/           # Configuration files
-├── cache/             # Feature cache (never expires)
+├── configs/           # Configuration files (config.yaml)
+├── cache/             # Feature cache (parquet, never expires)
 ├── data/              # Raw data storage
 ├── models/            # Trained model files
 ├── src/
+│   ├── data_providers/ # Multi-provider data fetching (yfinance, akshare, tushare)
 │   ├── features/      # Feature engineering
-│   ├── models/        # Model training and prediction
+│   ├── models/        # CatBoost model training/prediction
 │   ├── backtest/      # Backtesting engine
-│   └── utils/         # Utilities (cache, helpers)
-├── scripts/           # Entry point scripts
+│   └── utils/         # Utilities (cache, config, stock_info)
+├── scripts/           # Entry scripts (decide.py, backtest.py)
 └── tests/             # Unit tests
 ```
 
 ### Core Modules
 
-#### 1. Feature Engineering (`src/features/`)
+#### 1. Data Providers (`src/data_providers/`)
+Multi-provider data fetching with automatic fallback:
+- **yfinance**: Global stocks (US, HK) - default first choice
+- **akshare**: Chinese A-shares/HK fallback
+- **tushare**: Chinese A-shares/HK (requires TUSHARE_TOKEN env var)
+- Retry logic (3 attempts, configurable delay)
+- Auto-fallback chain per market type
+
+#### 2. Feature Engineering (`src/features/`)
+- **Technical Features**: MA, RSI, MACD, Bollinger, ATR, ADX, Stochastic, MFI, CCI, momentum
 - **Fundamental Features**: PE, PB, ROE, revenue growth, debt ratio
-- **Industry Features**: Sector performance, industry correlation
-- **Market Features**: Index performance, market sentiment, money flow
-- **Time Series Features**: Moving averages, RSI, MACD, Bollinger Bands, momentum
-- **Cache System**: File-based, never expires, supports manual refresh/delete
+- **Industry Features**: Sector performance, sector ETF proxies
+- **Market Features**: Index performance, market sentiment
+- **Cache System**: File-based parquet, never expires, manual refresh/delete
 
-#### 2. Model (`src/models/`)
+#### 3. Model (`src/models/`)
 - CatBoost classifier for buy/sell/hold decisions
+- Auto class balancing, early stopping
 - Feature importance analysis
-- Model persistence and loading
 
-#### 3. Backtest (`src/backtest/`)
-- Implements multiple strategies:
-  - **ML Strategy**: Based on model predictions
-  - **Buy & Hold**: Baseline strategy
-  - **High Sell Low Buy**: Contrarian strategy
-- Metrics: Returns, Sharpe ratio, max drawdown, win rate
+#### 4. Backtest (`src/backtest/`)
+- Multiple strategies: ML Strategy, Buy & Hold, High Sell Low Buy
+- Metrics: Returns, Sharpe ratio, max drawdown, win rate, trade count
 
-#### 4. Decision Script (`scripts/decide.py`)
-- Input: Stock code (e.g., 000001.SZ, 0700.HK, AAPL)
-- Output: Trading decision (buy/sell/hold) with confidence
+#### 5. Scripts (`scripts/`)
+- `decide.py`: Trading decision with confidence/probabilities
+- `backtest.py`: Strategy comparison backtest
 
 ## Feature Caching
 
@@ -85,14 +91,15 @@ cache.clear_all()
 
 ### Run Decision
 ```bash
-python scripts/decide.py --stock 000001.SZ
-python scripts/decide.py --stock 0700.HK
+python scripts/decide.py --stock 000001.SZ --train-days 365 --backtest-days 30
+python scripts/decide.py --stock 0700.HK --refresh  # Force refresh cache
 python scripts/decide.py --stock AAPL
 ```
 
 ### Run Backtest
 ```bash
-python scripts/backtest.py --stock 000001.SZ --days 30
+python scripts/backtest.py --stock 000001.SZ --days 30 --train-days 365
+python scripts/backtest.py --stock 603986.SH --days 30 --output results.csv
 ```
 
 ## Configuration
