@@ -1,0 +1,72 @@
+stock:
+  # A股市场
+  a_share:
+    sz_prefix: "SZ"
+    sh_prefix: "SH"
+
+  # 港股市场
+  hk_prefix: "HK"
+
+  # 美股市场
+  us_prefix: ""
+
+data:
+  # 回测天数
+  backtest_days: 30
+
+  # 训练数据天数
+  train_days: 365
+
+  # 缓存目录
+  cache_dir: "cache"
+
+  # 数据目录
+  data_dir: "data"
+
+features:
+  fundamental:
+    enabled: true
+    lookback_days: 30
+
+  technical:
+    enabled: true
+    ma_periods: [5, 10, 20, 60]
+    rsi_period: 14
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    bollinger_period: 20
+    bollinger_std: 2
+
+  market:
+    enabled: true
+    # A股: 000001.SH (上证指数)
+    # 港股: HSI.HK (恒生指数)
+    # 美股: ^GSPC (标普500)
+    indices:
+      a_share: "000001.SH"
+      hk_share: "HSI.HK"
+      us_share: "^GSPC"
+
+  industry:
+    enabled: true
+
+  sentiment:
+    enabled: true
+
+model:
+  catboost:
+    iterations: 500
+    depth: 6
+    learning_rate: 0.03
+    l2_leaf_reg: 3
+    random_seed: 42
+
+backtest:
+  initial_cash: 100000
+  commission: 0.001
+  slippage: 0.001
+
+logging:
+  level: "INFO"
+  file: "logs/trading.log"

@@ -1,0 +1,105 @@
+"""Industry features extractor."""
+
+from typing import Optional
+import pandas as pd
+import numpy as np
+import yfinance as yf
+from ..utils.cache import FeatureCache
+from .base import BaseFeatureExtractor
+
+
+class IndustryFeatures(BaseFeatureExtractor):
+    """Extract industry/sector features."""
+
+    def __init__(self, cache: Optional[FeatureCache] = None):
+        super().__init__(cache)
+
+    @property
+    def feature_type(self) -> str:
+        return 'industry'
+
+    def extract(self, stock_code: str, **kwargs) -> pd.DataFrame:
+        """Extract industry features for a stock."""
+        days = kwargs.get('days', 30)
+
+        try:
+            ticker = yf.Ticker(stock_code)
+            info = ticker.info
+            sector = info.get('sector', None)
+            industry = info.get('industry', None)
+        except Exception:
+            return pd.DataFrame()
+
+        if not sector:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(index=pd.date_range(end=pd.Timestamp.today(), periods=days))
+        df['stock_code'] = stock_code
+        df['sector'] = sector
+        df['industry'] = industry
+
+        # Sector ETF proxies (approximate mappings)
+        sector_etfs = {
+            'Technology': 'XLK',
+            'Healthcare': 'XLV',
+            'Financials': 'XLF',
+            'Consumer Discretionary': 'XLY',
+            'Consumer Staples': 'XLP',
+            'Energy': 'XLE',
+            'Industrials': 'XLI',
+            'Materials': 'XLB',
+            'Real Estate': 'XLRE',
+            'Utilities': 'XLU',
+            'Communication Services': 'XLC'
+        }
+
+        if sector in sector_etfs:
+            try:
+                sector_data = yf.download(sector_etfs[sector], period=f"{days + 60}d", auto_adjust=True, progress=False)
+                if not sector_data.empty:
+                    df_sector = pd.DataFrame(index=sector_data.index)
+                    df_sector['sector_close'] = sector_data['Close']
+                    df_sector['sector_returns'] = df_sector['sector_close'].pct_change()
+                    df_sector['sector_volume'] = sector_data['Volume']
+                    df_sector['sector_ma20'] = df_sector['sector_close'].rolling(window=20).mean()
+                    df_sector['sector_ma_ratio'] = df_sector['sector_close'] / df_sector['sector_ma20']
+
+                    # Sector RSI
+                    delta = df_sector['sector_close'].diff()
+                    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                    rs = gain / loss.replace(0, np.nan)
+                    df_sector['sector_rsi'] = 100 - (100 / (1 + rs))
+
+                    df_sector = df_sector.dropna()
+                    df_sector = df_sector.reset_index()
+                    df_sector.rename(columns={'index': 'date'}, inplace=True)
+
+                    # Merge on date
+                    df = pd.merge(df, df_sector, on=['date'], how='left')
+                    df = df.dropna()
+                else:
+                    df['sector_close'] = np.nan
+                    df['sector_returns'] = np.nan
+                    df['sector_volume'] = np.nan
+                    df['sector_ma20'] = np.nan
+                    df['sector_ma_ratio'] = np.nan
+                    df['sector_rsi'] = np.nan
+            except Exception:
+                df['sector_close'] = np.nan
+                df['sector_returns'] = np.nan
+                df['sector_volume'] = np.nan
+                df['sector_ma20'] = np.nan
+                df['sector_ma_ratio'] = np.nan
+                df['sector_rsi'] = np.nan
+        else:
+            df['sector_close'] = np.nan
+            df['sector_returns'] = np.nan
+            df['sector_volume'] = np.nan
+            df['sector_ma20'] = np.nan
+            df['sector_ma_ratio'] = np.nan
+            df['sector_rsi'] = np.nan
+
+        df = df.reset_index(drop=True)
+
+        return df
