@@ -72,6 +72,10 @@ class AKShareProvider(BaseDataProvider):
 
         last_error = None
 
+        # Calculate date range based on days needed (add buffer for indicators)
+        start_date = (pd.Timestamp.today() - pd.Timedelta(days=days * 2)).strftime('%Y%m%d')
+        end_date = pd.Timestamp.today().strftime('%Y%m%d')
+
         for attempt in range(retry_count):
             try:
                 if exchange == 'hk':
@@ -79,8 +83,8 @@ class AKShareProvider(BaseDataProvider):
                     df = akshare_lib.stock_hk_hist(
                         symbol=symbol,
                         period="daily",
-                        start_date="20200101",
-                        end_date="20300101",
+                        start_date=start_date,
+                        end_date=end_date,
                         adjust=""
                     )
                 else:
@@ -88,8 +92,8 @@ class AKShareProvider(BaseDataProvider):
                     df = akshare_lib.stock_zh_a_hist(
                         symbol=symbol,
                         period="daily",
-                        start_date="20200101",
-                        end_date="20300101",
+                        start_date=start_date,
+                        end_date=end_date,
                         adjust="qfq"
                     )
 

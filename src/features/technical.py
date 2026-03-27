@@ -43,18 +43,12 @@ class TechnicalFeatures(BaseFeatureExtractor):
         df['stock_code'] = stock_code
 
         # Price data - handle both uppercase and lowercase
-        def get_col(col, df=data):
-            col_lower = col.lower()
-            if col_lower in df.columns:
-                val = df[col_lower]
-                return val.iloc[:, 0] if isinstance(val, pd.DataFrame) else val
-            raise KeyError(f"Column '{col}' not found. Available: {list(df.columns)}")
-
-        df['close'] = get_col('close')
-        df['open'] = get_col('open')
-        df['high'] = get_col('high')
-        df['low'] = get_col('low')
-        df['volume'] = get_col('volume')
+        for col_name in ['close', 'open', 'high', 'low', 'volume']:
+            if col_name in data.columns:
+                val = data[col_name]
+                df[col_name] = val.iloc[:, 0] if isinstance(val, pd.DataFrame) else val
+            else:
+                raise KeyError(f"Column '{col_name}' not found. Available: {list(data.columns)}")
 
         # Returns
         df['returns'] = df['close'].pct_change()
