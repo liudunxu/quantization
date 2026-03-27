@@ -182,7 +182,7 @@ def main():
             slippage=config.get('backtest.slippage', 0.001)
         )
 
-        results_df = engine.compare_strategies(backtest_df, strategies)
+        results_df = engine.compare_strategies(backtest_df, strategies, full_history_df=features_df)
         print_backtest_comparison(results_df)
 
     # Cache info

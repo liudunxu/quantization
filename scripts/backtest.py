@@ -122,7 +122,13 @@ def main():
 
     results = []
     for strategy in strategies:
-        result = engine.run(backtest_df, strategy)
+        # For MLStrategy, use full history to generate signals
+        if isinstance(strategy, MLStrategy):
+            signals = strategy.generate_signals(features_df)
+            signals = signals.iloc[-len(backtest_df):]
+            result = engine.run(backtest_df, strategy, precomputed_signals=signals)
+        else:
+            result = engine.run(backtest_df, strategy)
         results.append(result)
         print_result(result)
 

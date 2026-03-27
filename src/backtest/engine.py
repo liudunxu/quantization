@@ -123,13 +123,25 @@ class BacktestEngine:
         self,
         df: pd.DataFrame,
         strategy: Strategy,
-        benchmark: Optional[Strategy] = None
+        benchmark: Optional[Strategy] = None,
+        precomputed_signals: Optional[pd.Series] = None
     ) -> BacktestResult:
-        """Run backtest for a strategy."""
+        """Run backtest for a strategy.
+
+        Args:
+            df: DataFrame with price data
+            strategy: Strategy to use
+            benchmark: Optional benchmark strategy
+            precomputed_signals: Optional pre-generated signals (for ML strategy with history)
+        """
         if df.empty:
             raise ValueError("Empty DataFrame")
 
-        signals = strategy.generate_signals(df)
+        # Use precomputed signals if provided, otherwise generate from strategy
+        if precomputed_signals is not None:
+            signals = precomputed_signals
+        else:
+            signals = strategy.generate_signals(df)
         prices = df['close'].values
         dates = df['date'].values if 'date' in df.columns else df.index
 
@@ -248,13 +260,27 @@ class BacktestEngine:
     def compare_strategies(
         self,
         df: pd.DataFrame,
-        strategies: List[Strategy]
+        strategies: List[Strategy],
+        full_history_df: Optional[pd.DataFrame] = None
     ) -> pd.DataFrame:
-        """Compare multiple strategies."""
+        """Compare multiple strategies.
+
+        Args:
+            df: DataFrame with backtest period data
+            strategies: List of strategies to compare
+            full_history_df: Full history DataFrame (for ML strategy signal generation)
+        """
         results = []
 
         for strategy in strategies:
-            result = self.run(df, strategy)
+            # For MLStrategy, use full history to generate signals
+            if isinstance(strategy, MLStrategy) and full_history_df is not None:
+                signals = strategy.generate_signals(full_history_df)
+                # Extract only signals for the backtest period
+                signals = signals.iloc[-len(df):]
+                result = self.run(df, strategy, precomputed_signals=signals)
+            else:
+                result = self.run(df, strategy)
             results.append({
                 'Strategy': result.strategy_name,
                 'Total Return': f"{result.total_return:.2%}",
