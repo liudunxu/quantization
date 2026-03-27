@@ -35,16 +35,18 @@ class MarketFeatures(BaseFeatureExtractor):
         if index_data.empty:
             return pd.DataFrame()
 
-        df = pd.DataFrame(index=range(len(index_data)))
+        # Use date from index_data
+        df = pd.DataFrame()
+        df['date'] = pd.to_datetime(index_data['date'])
         df['stock_code'] = stock_code
         df['index_code'] = index_code
 
         # Index prices
-        df['index_close'] = index_data['close']
-        df['index_open'] = index_data['open']
-        df['index_high'] = index_data['high']
-        df['index_low'] = index_data['low']
-        df['index_volume'] = index_data['volume']
+        df['index_close'] = index_data['close'].values
+        df['index_open'] = index_data['open'].values
+        df['index_high'] = index_data['high'].values
+        df['index_low'] = index_data['low'].values
+        df['index_volume'] = index_data['volume'].values
 
         # Index returns
         df['index_returns'] = df['index_close'].pct_change()
@@ -87,11 +89,5 @@ class MarketFeatures(BaseFeatureExtractor):
 
         # Fill NaN values with forward fill then backward fill for remaining
         df = df.ffill().bfill()
-        df = df.reset_index()
-        # Ensure date column name is lowercase
-        if 'Date' in df.columns:
-            df.rename(columns={'Date': 'date'}, inplace=True)
-        elif 'index' in df.columns:
-            df.rename(columns={'index': 'date'}, inplace=True)
 
         return df
