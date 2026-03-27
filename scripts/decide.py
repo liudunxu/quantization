@@ -157,12 +157,13 @@ def main():
         sys.exit(1)
 
     # Get prediction
-    print_section(" GENERATING PREDICTION")
+    prediction_action = None
+    prediction_confidence = None
+    prediction_proba = None
 
     try:
-        action, confidence = model.predict(features_df)
-        probabilities = model.predict_proba(features_df)
-        print_decision(action, confidence, probabilities)
+        prediction_action, prediction_confidence = model.predict(features_df)
+        prediction_proba = model.predict_proba(features_df)
     except Exception as e:
         print(f"  Error generating prediction: {e}")
         sys.exit(1)
@@ -199,6 +200,9 @@ def main():
     cache_info = cache.get_cache_info(stock_code)
     print(f"\n  Cached feature types: {', '.join(cache_info.get('cached_types', ['None']))}")
     print(f"  Total cached items   : {cache_info.get('count', 0)}")
+
+    # Trading decision (moved to end)
+    print_decision(prediction_action, prediction_confidence, prediction_proba)
 
     print("\n" + "="*60)
     print(" Decision process completed!")
