@@ -3,10 +3,10 @@
 from typing import Optional, Dict, Any
 import pandas as pd
 import numpy as np
-import yfinance as yf
 from ..utils.cache import FeatureCache
 from ..utils.config import get_config
 from .base import BaseFeatureExtractor
+from ..data_providers import fetch_stock_data
 
 
 class TechnicalFeatures(BaseFeatureExtractor):
@@ -30,26 +30,31 @@ class TechnicalFeatures(BaseFeatureExtractor):
     def extract(self, stock_code: str, **kwargs) -> pd.DataFrame:
         """Extract technical features for a stock."""
         days = kwargs.get('days', 120)
-        try:
-            data = yf.download(stock_code, period=f"{days}d", auto_adjust=False, progress=False)
-            if data.empty:
-                return pd.DataFrame()
-        except Exception:
+
+        # Use multi-provider data fetcher with fallback
+        data = fetch_stock_data(stock_code, days=days)
+        if data.empty:
             return pd.DataFrame()
 
-        # Flatten multi-level columns if present
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = [col[0] for col in data.columns]
+        # Ensure lowercase column names (data fetcher returns lowercase)
+        data.columns = [c.lower() for c in data.columns]
 
         df = pd.DataFrame(index=data.index)
         df['stock_code'] = stock_code
 
-        # Price data
-        df['close'] = data['Close'].iloc[:, 0] if isinstance(data['Close'], pd.DataFrame) else data['Close']
-        df['open'] = data['Open'].iloc[:, 0] if isinstance(data['Open'], pd.DataFrame) else data['Open']
-        df['high'] = data['High'].iloc[:, 0] if isinstance(data['High'], pd.DataFrame) else data['High']
-        df['low'] = data['Low'].iloc[:, 0] if isinstance(data['Low'], pd.DataFrame) else data['Low']
-        df['volume'] = data['Volume'].iloc[:, 0] if isinstance(data['Volume'], pd.DataFrame) else data['Volume']
+        # Price data - handle both uppercase and lowercase
+        def get_col(col, df=data):
+            col_lower = col.lower()
+            if col_lower in df.columns:
+                val = df[col_lower]
+                return val.iloc[:, 0] if isinstance(val, pd.DataFrame) else val
+            raise KeyError(f"Column '{col}' not found. Available: {list(df.columns)}")
+
+        df['close'] = get_col('close')
+        df['open'] = get_col('open')
+        df['high'] = get_col('high')
+        df['low'] = get_col('low')
+        df['volume'] = get_col('volume')
 
         # Returns
         df['returns'] = df['close'].pct_change()

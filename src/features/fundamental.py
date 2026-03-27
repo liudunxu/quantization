@@ -21,13 +21,18 @@ class FundamentalFeatures(BaseFeatureExtractor):
 
     def extract(self, stock_code: str, **kwargs) -> pd.DataFrame:
         """Extract fundamental features for a stock."""
+        info = {}
+
+        # Try yfinance first
         try:
             ticker = yf.Ticker(stock_code)
-            info = ticker.info
-
-            if not info or len(info) < 5:
-                return pd.DataFrame()
+            info = ticker.info or {}
         except Exception:
+            pass
+
+        if not info or len(info) < 5:
+            # Return empty DataFrame for now if no fundamental data
+            # Could add akshare fallback here for Chinese stocks
             return pd.DataFrame()
 
         df = pd.DataFrame(index=[0])

@@ -3,11 +3,11 @@
 from typing import Optional
 import pandas as pd
 import numpy as np
-import yfinance as yf
 from ..utils.cache import FeatureCache
 from ..utils.stock_info import StockInfoResolver
 from ..utils.config import get_config
 from .base import BaseFeatureExtractor
+from ..data_providers import fetch_stock_data
 
 
 class MarketFeatures(BaseFeatureExtractor):
@@ -30,30 +30,21 @@ class MarketFeatures(BaseFeatureExtractor):
         except ValueError:
             index_code = '^GSPC'
 
-        try:
-            index_data = yf.download(index_code, period=f"{days + 60}d", auto_adjust=False, progress=False)
-            if index_data.empty:
-                return pd.DataFrame()
-        except Exception:
+        # Use multi-provider data fetcher for index
+        index_data = fetch_stock_data(index_code, days=days + 60)
+        if index_data.empty:
             return pd.DataFrame()
 
-        # Flatten multi-level columns if present
-        if isinstance(index_data.columns, pd.MultiIndex):
-            index_data.columns = [col[0] for col in index_data.columns]
-
-        df = pd.DataFrame(index=index_data.index)
+        df = pd.DataFrame(index=range(len(index_data)))
         df['stock_code'] = stock_code
         df['index_code'] = index_code
 
         # Index prices
-        def get_col(col):
-            return col.iloc[:, 0] if isinstance(col, pd.DataFrame) else col
-
-        df['index_close'] = get_col(index_data['Close'])
-        df['index_open'] = get_col(index_data['Open'])
-        df['index_high'] = get_col(index_data['High'])
-        df['index_low'] = get_col(index_data['Low'])
-        df['index_volume'] = get_col(index_data['Volume'])
+        df['index_close'] = index_data['close']
+        df['index_open'] = index_data['open']
+        df['index_high'] = index_data['high']
+        df['index_low'] = index_data['low']
+        df['index_volume'] = index_data['volume']
 
         # Index returns
         df['index_returns'] = df['index_close'].pct_change()
