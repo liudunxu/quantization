@@ -254,6 +254,188 @@ class TechnicalFeatures(BaseFeatureExtractor):
         df['pattern_reversal_up'] = ((ret_7d_prior < -0.03) & (ret_3d > 0.03)).astype(int)
         df['pattern_reversal_down'] = ((ret_7d_prior > 0.03) & (ret_3d < -0.03)).astype(int)
 
+        # ========== MA120 (120日均线) ==========
+        if 120 not in self.ma_periods:
+            df['ma_120'] = df['close'].rolling(window=120).mean()
+            df['ma_120_ratio'] = df['close'] / df['ma_120']
+
+        # ========== MA Slope features (均线斜率) ==========
+        # MA20 slope: rate of change of MA20
+        df['ma_slope_20'] = df['ma_20'].pct_change(5) / 5  # 5-day rate of change per day
+
+        # ========== Deviation features (乖离率) ==========
+        # Absolute deviation from moving averages
+        df['deviation_ma5_abs'] = np.abs((df['close'] - df['ma_5']) / df['ma_5'] * 100)
+        df['deviation_ma10_abs'] = np.abs((df['close'] - df['ma_10']) / df['ma_10'] * 100)
+        df['deviation_ma20_abs'] = np.abs((df['close'] - df['ma_20']) / df['ma_20'] * 100)
+
+        # ========== MACD Cross features (MACD交叉) ==========
+        macd_diff = df['macd'] - df['macd_signal']
+        macd_diff_prev = macd_diff.shift(1)
+        # MACD金叉: MACD从负转正或上穿信号线
+        df['macd_cross_up'] = ((macd_diff_prev <= 0) & (macd_diff > 0)).astype(int)
+        # MACD在零轴上方金叉
+        df['macd_cross_above_zero'] = ((df['macd'] > 0) & (macd_diff_prev <= 0) & (macd_diff > 0)).astype(int)
+        # MACD在零轴上方
+        df['macd_position'] = (df['macd'] > 0).astype(int)
+
+        # ========== MACD Divergence features (MACD背驰) ==========
+        # Top divergence: price makes new high but MACD histogram decreases
+        price_high = df['close'].rolling(window=20).max()
+        macd_hist_20 = df['macd_hist'].rolling(window=20).max()
+        macd_hist_20_min = df['macd_hist'].rolling(window=20).min()
+
+        # Price创新高但MACD红柱缩小
+        price_new_high = (df['close'] == price_high) & (df['close'] > df['close'].shift(20))
+        macd_hist_decreasing = (df['macd_hist'] < df['macd_hist'].shift(1)) & (df['macd_hist'] > 0)
+        df['top_divergence'] = (price_new_high & macd_hist_decreasing).astype(int)
+
+        # Bottom divergence: price makes new low but MACD histogram increases
+        price_new_low = (df['close'] == df['close'].rolling(window=20).min()) & (df['close'] < df['close'].shift(20))
+        macd_hist_increasing = (df['macd_hist'] > df['macd_hist'].shift(1)) & (df['macd_hist'] < 0)
+        df['bottom_divergence'] = (price_new_low & macd_hist_increasing).astype(int)
+
+        # Divergence strength: how much MACD histogram diverges from price
+        price_change = df['close'].pct_change(20)
+        macd_hist_change = df['macd_hist'].pct_change(20)
+        df['divergence_strength'] = np.abs(macd_hist_change - price_change) / (np.abs(price_change) + 1e-8)
+
+        # ========== Volume Pattern features (量能形态) ==========
+        # Volume breakout flag: volume > 2x average
+        df['volume_breakout_flag'] = (df['volume_ratio'] > 2.0).astype(int)
+
+        # Bottom volume flag: volume > 3x average AND price at low position
+        df['bottom_volume_flag'] = ((df['volume_ratio'] > 3.0) & (df['price_position'] < 0.2)).astype(int)
+
+        # Shrink pullback flag: volume < 0.7x average AND price near MA
+        df['shrink_pullback_flag'] = ((df['volume_ratio'] < 0.7) & (df['ma_20_ratio'].between(0.95, 1.05))).astype(int)
+
+        # Volume increasing: 3 consecutive days of volume increase
+        vol_increase = df['volume_change'] > 0
+        df['volume_increasing'] = (vol_increase & vol_increase.shift(1) & vol_increase.shift(2)).astype(int)
+
+        # ========== Candlestick Pattern features (K线形态) ==========
+        # Candle body and shadows
+        candle_range = df['high'] - df['low']
+        df['body_ratio'] = np.abs(df['close'] - df['open']) / (candle_range + 1e-8)
+        df['upper_shadow_ratio'] = (df['high'] - np.maximum(df['open'], df['close'])) / (candle_range + 1e-8)
+        df['lower_shadow_ratio'] = (np.minimum(df['open'], df['close']) - df['low']) / (candle_range + 1e-8)
+
+        # Is bullish candle
+        df['is_bullish'] = (df['close'] > df['open']).astype(int)
+
+        # Close position within day's range
+        df['close_position'] = (df['close'] - df['low']) / (df['high'] - df['low'] + 1e-8)
+
+        # Long lower shadow: lower shadow > 60% of range
+        df['long_lower_shadow'] = (df['lower_shadow_ratio'] > 0.6).astype(int)
+
+        # ========== One Yang Three Yin pattern (一阳三阴形态) ==========
+        # Pattern: first day big bullish, next 3 days shrinking volume, last day breakout
+        if len(df) >= 5:
+            # First day big bullish (>2% body)
+            d1_bullish = df['is_bullish'].shift(4) == 1
+            d1_body = df['body_ratio'].shift(4) > 0.02
+            # Next 3 days volume shrinking (< 0.8x previous day)
+            d2_vol = df['volume'].shift(3) / (df['volume'].shift(4) + 1e-8)
+            d3_vol = df['volume'].shift(2) / (df['volume'].shift(3) + 1e-8)
+            d4_vol = df['volume'].shift(1) / (df['volume'].shift(2) + 1e-8)
+            d2_shrink = d2_vol < 0.8
+            d3_shrink = d3_vol < 0.8
+            d4_shrink = d4_vol < 0.8
+            # Last day bullish breakout
+            d5_bullish = df['is_bullish'] == 1
+            d5_breakout = df['close'].shift(4) < df['close']  # above first day close
+            # Support hold: days 2-4 lowest not below day 1 open
+            d2_low = df['low'].shift(3) > df['open'].shift(4)
+            d3_low = df['low'].shift(2) > df['open'].shift(4)
+            d4_low = df['low'].shift(1) > df['open'].shift(4)
+
+            df['oyty_bullish_body'] = (d1_bullish & d1_body).astype(int)
+            df['oyty_shrink_volume'] = (d2_shrink & d3_shrink & d4_shrink).astype(int)
+            df['oyty_support_hold'] = (d2_low & d3_low & d4_low).astype(int)
+            df['oyty_breakout'] = (d5_bullish & d5_breakout).astype(int)
+            df['oyty_pattern'] = (df['oyty_bullish_body'] & df['oyty_shrink_volume'] &
+                                   df['oyty_support_hold'] & df['oyty_breakout']).astype(int)
+        else:
+            df['oyty_bullish_body'] = 0
+            df['oyty_shrink_volume'] = 0
+            df['oyty_support_hold'] = 0
+            df['oyty_breakout'] = 0
+            df['oyty_pattern'] = 0
+
+        # ========== Bottom volume surge (跌幅后放量) ==========
+        # Price drop > 15% then volume surge > 3x
+        price_drop = df['close'].pct_change(10) < -0.15
+        vol_surge = df['volume_ratio'] > 3.0
+        df['bottom_volume_surge'] = (price_drop & vol_surge).astype(int)
+
+        # Price stabilize: bullish close holding recent low
+        df['price_stabilize'] = (df['is_bullish'] == 1) & (df['close'] > df['low_20d']).astype(int)
+
+        # ========== Box/Range features (箱体特征) ==========
+        # Rolling box: 20-day high/low as proxy for box top/bottom
+        df['box_top'] = df['close'].rolling(window=20).max()
+        df['box_bottom'] = df['close'].rolling(window=20).min()
+        df['box_width_pct'] = (df['box_top'] - df['box_bottom']) / df['box_bottom'] * 100
+
+        # Box touch counts
+        touch_top = (df['high'] >= df['box_top'] * 0.99)  # near box top
+        touch_bottom = (df['low'] <= df['box_bottom'] * 1.01)  # near box bottom
+        df['box_touch_top_count'] = touch_top.rolling(window=20).sum()
+        df['box_touch_bottom_count'] = touch_bottom.rolling(window=20).sum()
+
+        # ========== Support/Resistance features (支撑阻力) ==========
+        # Distance to support/resistance
+        df['distance_to_support'] = (df['close'] - df['box_bottom']) / df['box_bottom'] * 100
+        df['distance_to_resistance'] = (df['box_top'] - df['close']) / df['box_top'] * 100
+
+        # Near box boundaries
+        df['near_box_bottom'] = (df['distance_to_support'] <= 5).astype(int)
+        df['near_box_top'] = (df['distance_to_resistance'] <= 5).astype(int)
+
+        # In box middle (middle 1/3)
+        box_middle = (df['close'] > df['box_bottom'] + df['box_width_pct'] / 3) & \
+                     (df['close'] < df['box_top'] - df['box_width_pct'] / 3)
+        df['in_box_middle'] = box_middle.astype(int)
+
+        # ========== Breakout features (突破信号) ==========
+        df['breakout_up'] = (df['close'] > df['box_top']).astype(int)
+        df['breakout_down'] = (df['close'] < df['box_bottom']).astype(int)
+        df['breakout_volume_confirm'] = ((df['breakout_up'] | df['breakout_down']) & (df['volume_ratio'] > 2.0)).astype(int)
+
+        # ========== MA Convergence features (均线收敛) ==========
+        # Calculate MA convergence as variance of MA ratios
+        ma_ratios = df[['ma_5_ratio', 'ma_10_ratio', 'ma_20_ratio']].std(axis=1)
+        df['ma_convergence'] = 1 - ma_ratios  # Lower std = more convergence
+
+        # ATR shrinking: ATR in lower quartile
+        atr_pct = df['atr'] / df['close'] * 100
+        df['atr_shrinking'] = (atr_pct < atr_pct.rolling(60).quantile(0.2)).astype(int)
+
+        # Low volatility flag: volatility in lower 20% of history
+        vol_level = df['volatility_20d'].rank(pct=True)
+        df['low_volatility_flag'] = (vol_level < 0.2).astype(int)
+
+        # ========== Composite Signals (综合信号) ==========
+        # Trend score: based on MA arrangement and RSI
+        ma_trend = df['ma_bullish_arrange'] * 2 - df['ma_bearish_arrange']
+        rsi_trend = (df['rsi'] - 50) / 50  # normalize to -1 to 1
+        df['trend_score'] = (ma_trend + rsi_trend).clip(-1, 1)
+
+        # Signal features
+        df['signal_buy'] = ((df['golden_cross_5_10'] == 1) | (df['bottom_divergence'] == 1) |
+                            (df['breakout_up'] == 1)).astype(int)
+        df['signal_sell'] = ((df['death_cross_5_10'] == 1) | (df['top_divergence'] == 1) |
+                             (df['breakout_down'] == 1)).astype(int)
+        df['signal_hold'] = (df['in_box_middle'] == 1).astype(int)
+
+        # Risk level based on volatility
+        vol_pct = df['volatility_20d'].rank(pct=True)
+        df['risk_level'] = pd.cut(vol_pct, bins=[0, 0.33, 0.66, 1.0],
+                                   labels=[0, 1, 2]).astype(float)  # 0=low, 1=medium, 2=high
+
+        # ========== Fill NaN values ==========
         # Fill NaN values with forward fill then backward fill for remaining
         df = df.ffill().bfill()
 

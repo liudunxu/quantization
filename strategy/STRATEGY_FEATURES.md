@@ -15,7 +15,7 @@
 | `ma10` | 10日简单移动平均 | ma_golden_cross, bull_trend, shrink_pullback | ✅ technical.py |
 | `ma20` | 20日简单移动平均 | ma_golden_cross, bull_trend | ✅ technical.py |
 | `ma60` | 60日简单移动平均 | box_oscillation, chan_theory | ✅ technical.py |
-| `ma120` | 120日简单移动平均 | wave_theory | 🔄 待开发 |
+| `ma120` | 120日简单移动平均 | wave_theory | ✅ technical.py |
 | `ma_5_ratio` | close / ma_5 | - | ✅ technical.py |
 | `ma_10_ratio` | close / ma_10 | - | ✅ technical.py |
 | `ma_20_ratio` | close / ma_20 | - | ✅ technical.py |
@@ -29,7 +29,7 @@
 | `ma5_above_ma10` | MA5 > MA10 为 1 | ma_golden_cross | ✅ technical.py |
 | `ma10_above_ma20` | MA10 > MA20 为 1 | ma_golden_cross | ✅ technical.py |
 | `ma5_above_20` | MA5 > MA20 为 1 | - | ✅ technical.py |
-| `ma_slope_20` | MA20 斜率 | bull_trend | 🔄 待开发 |
+| `ma_slope_20` | MA20 斜率 | bull_trend | ✅ technical.py |
 
 ### 1.3 金叉死叉特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
@@ -40,7 +40,7 @@
 | `death_cross_10_20` | MA10 下穿 MA20 | ma_golden_cross | ✅ technical.py |
 | `golden_cross_5_20` | MA5 上穿 MA20 | - | ✅ technical.py |
 | `death_cross_5_20` | MA5 下穿 MA20 | - | ✅ technical.py |
-| `ma_cross_days` | 距离最近金叉交易日数 | ma_golden_cross | 🔄 待开发 |
+| `ma_cross_days` | 距离最近金叉交易日数 | ma_golden_cross | ⚙️ 可选实现 |
 
 ### 1.4 乖离率特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
@@ -48,7 +48,7 @@
 | `deviation_ma5` | (close - MA5) / MA5 * 100 | shrink_pullback, dragon_head | ⚙️ 可用 ma_5_ratio 计算 |
 | `deviation_ma10` | (close - MA10) / MA10 * 100 | shrink_pullback | ⚙️ 可用 ma_10_ratio 计算 |
 | `deviation_ma20` | (close - MA20) / MA20 * 100 | bull_trend, emotion_cycle | ⚙️ 可用 ma_20_ratio 计算 |
-| `deviation_ma5_abs` | 乖离率绝对值 | shrink_pullback | 🔄 待开发 |
+| `deviation_ma5_abs` | 乖离率绝对值 | shrink_pullback | ✅ technical.py |
 
 ---
 
@@ -67,18 +67,18 @@
 ### 2.2 换手率特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `turnover_rate` | 当日换手率 (%) | emotion_cycle, dragon_head | 🔄 待开发 |
-| `turnover_ma20` | 20日平均换手率 | emotion_cycle | 🔄 待开发 |
-| `turnover_level` | 换手率分位 (0-1) | emotion_cycle | 🔄 待开发 |
-| `turnover_trend` | 近20日换手率趋势 | emotion_cycle | 🔄 待开发 |
+| `turnover_rate` | 当日换手率 (%) | emotion_cycle, dragon_head | ⚙️ yfinance暂无，需akshare/tushare |
+| `turnover_ma20` | 20日平均换手率 | emotion_cycle | ⚙️ yfinance暂无，需akshare/tushare |
+| `turnover_level` | 换手率分位 (0-1) | emotion_cycle | ⚙️ yfinance暂无，需akshare/tushare |
+| `turnover_trend` | 近20日换手率趋势 | emotion_cycle | ⚙️ yfinance暂无，需akshare/tushare |
 
 ### 2.3 量能形态特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `volume_breakout_flag` | volume_ratio > 2.0 | volume_breakout | 🔄 待开发 |
-| `bottom_volume_flag` | volume_ratio > 3.0 且价格低位 | bottom_volume | 🔄 待开发 |
-| `shrink_pullback_flag` | volume_ratio < 0.7 且价格在MA附近 | shrink_pullback | 🔄 待开发 |
-| `volume_increasing` | 近3日量能连续放大 | emotion_cycle | 🔄 待开发 |
+| `volume_breakout_flag` | volume_ratio > 2.0 | volume_breakout | ✅ technical.py |
+| `bottom_volume_flag` | volume_ratio > 3.0 且价格低位 | bottom_volume | ✅ technical.py |
+| `shrink_pullback_flag` | volume_ratio < 0.7 且价格在MA附近 | shrink_pullback | ✅ technical.py |
+| `volume_increasing` | 近3日量能连续放大 | emotion_cycle | ✅ technical.py |
 
 ---
 
@@ -95,16 +95,16 @@
 ### 3.2 背驰信号特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `top_divergence` | 顶背驰: 价格新高但MACD红柱缩小 | chan_theory | 🔄 待开发 |
-| `bottom_divergence` | 底背驰: 价格新低但MACD绿柱缩小 | chan_theory | 🔄 待开发 |
-| `divergence_strength` | 背驰强度 (0-1) | chan_theory | 🔄 待开发 |
+| `top_divergence` | 顶背驰: 价格新高但MACD红柱缩小 | chan_theory | ✅ technical.py |
+| `bottom_divergence` | 底背驰: 价格新低但MACD绿柱缩小 | chan_theory | ✅ technical.py |
+| `divergence_strength` | 背驰强度 (0-1) | chan_theory | ✅ technical.py |
 
 ### 3.3 MACD 交叉特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `macd_cross_up` | MACD 金叉 | ma_golden_cross | 🔄 待开发 |
-| `macd_cross_above_zero` | MACD 在零轴上方金叉 | ma_golden_cross | 🔄 待开发 |
-| `macd_position` | MACD 在零轴上方为 1 | chan_theory | 🔄 待开发 |
+| `macd_cross_up` | MACD 金叉 | ma_golden_cross | ✅ technical.py |
+| `macd_cross_above_zero` | MACD 在零轴上方金叉 | ma_golden_cross | ✅ technical.py |
+| `macd_position` | MACD 在零轴上方为 1 | chan_theory | ✅ technical.py |
 
 ---
 
@@ -113,27 +113,27 @@
 ### 4.1 单K线特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `body_ratio` | K线实体长度 / 当日振幅 | one_yang_three_yin | 🔄 待开发 |
-| `upper_shadow_ratio` | 上影线长度 / 当日振幅 | bottom_volume | 🔄 待开发 |
-| `lower_shadow_ratio` | 下影线长度 / 当日振幅 | bottom_volume | 🔄 待开发 |
-| `is_bullish` | 收盘价 > 开盘价 | bottom_volume | 🔄 待开发 |
-| `close_position` | (close - low) / (high - low) | volume_breakout | 🔄 待开发 |
+| `body_ratio` | K线实体长度 / 当日振幅 | one_yang_three_yin | ✅ technical.py |
+| `upper_shadow_ratio` | 上影线长度 / 当日振幅 | bottom_volume | ✅ technical.py |
+| `lower_shadow_ratio` | 下影线长度 / 当日振幅 | bottom_volume | ✅ technical.py |
+| `is_bullish` | 收盘价 > 开盘价 | bottom_volume | ✅ technical.py |
+| `close_position` | (close - low) / (high - low) | volume_breakout | ✅ technical.py |
 
 ### 4.2 一阳三阴形态特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `oyty_pattern` | 最近5日是否符合一阳三阴形态 | one_yang_three_yin | 🔄 待开发 |
-| `oyty_bullish_body` | 第1日大阳线实体 > 2% | one_yang_three_yin | 🔄 待开发 |
-| `oyty_shrink_volume` | 第2-4日量能 < 0.8倍 | one_yang_three_yin | 🔄 待开发 |
-| `oyty_support_hold` | 第2-4日最低价不破第1日开盘价 | one_yang_three_yin | 🔄 待开发 |
-| `oyty_breakout` | 第5日阳线突破第1日收盘价 | one_yang_three_yin | 🔄 待开发 |
+| `oyty_pattern` | 最近5日是否符合一阳三阴形态 | one_yang_three_yin | ✅ technical.py |
+| `oyty_bullish_body` | 第1日大阳线实体 > 2% | one_yang_three_yin | ✅ technical.py |
+| `oyty_shrink_volume` | 第2-4日量能 < 0.8倍 | one_yang_three_yin | ✅ technical.py |
+| `oyty_support_hold` | 第2-4日最低价不破第1日开盘价 | one_yang_three_yin | ✅ technical.py |
+| `oyty_breakout` | 第5日阳线突破第1日收盘价 | one_yang_three_yin | ✅ technical.py |
 
 ### 4.3 底部形态特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `bottom_volume_surge` | 跌幅>15%后放量>3倍 | bottom_volume | 🔄 待开发 |
-| `long_lower_shadow` | lower_shadow_ratio > 0.6 | bottom_volume | 🔄 待开发 |
-| `price_stabilize` | 阳线收盘且守住近期低点 | bottom_volume | 🔄 待开发 |
+| `bottom_volume_surge` | 跌幅>15%后放量>3倍 | bottom_volume | ✅ technical.py |
+| `long_lower_shadow` | lower_shadow_ratio > 0.6 | bottom_volume | ✅ technical.py |
+| `price_stabilize` | 阳线收盘且守住近期低点 | bottom_volume | ✅ technical.py |
 
 ---
 
@@ -142,28 +142,28 @@
 ### 5.1 箱体识别特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `box_top` | 箱体顶部价位 | box_oscillation | 🔄 待开发 |
-| `box_bottom` | 箱体底部价位 | box_oscillation | 🔄 待开发 |
-| `box_width_pct` | (box_top - box_bottom) / box_bottom * 100 | box_oscillation | 🔄 待开发 |
-| `box_touch_top_count` | 近20日触碰箱顶次数 | box_oscillation | 🔄 待开发 |
-| `box_touch_bottom_count` | 近20日触碰箱底次数 | box_oscillation | 🔄 待开发 |
+| `box_top` | 箱体顶部价位 | box_oscillation | ✅ technical.py |
+| `box_bottom` | 箱体底部价位 | box_oscillation | ✅ technical.py |
+| `box_width_pct` | (box_top - box_bottom) / box_bottom * 100 | box_oscillation | ✅ technical.py |
+| `box_touch_top_count` | 近20日触碰箱顶次数 | box_oscillation | ✅ technical.py |
+| `box_touch_bottom_count` | 近20日触碰箱底次数 | box_oscillation | ✅ technical.py |
 
 ### 5.2 位置与距离特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `distance_to_support` | (close - support) / support * 100 | box_oscillation, shrink_pullback | 🔄 待开发 |
-| `distance_to_resistance` | (resistance - close) / resistance * 100 | volume_breakout, box_oscillation | 🔄 待开发 |
-| `near_box_bottom` | 距箱底 <= 5% | box_oscillation | 🔄 待开发 |
-| `near_box_top` | 距箱顶 <= 5% | box_oscillation | 🔄 待开发 |
-| `in_box_middle` | 处于箱体中间1/3区域 | box_oscillation | 🔄 待开发 |
+| `distance_to_support` | (close - support) / support * 100 | box_oscillation, shrink_pullback | ✅ technical.py |
+| `distance_to_resistance` | (resistance - close) / resistance * 100 | volume_breakout, box_oscillation | ✅ technical.py |
+| `near_box_bottom` | 距箱底 <= 5% | box_oscillation | ✅ technical.py |
+| `near_box_top` | 距箱顶 <= 5% | box_oscillation | ✅ technical.py |
+| `in_box_middle` | 处于箱体中间1/3区域 | box_oscillation | ✅ technical.py |
 
 ### 5.3 突破信号特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `breakout_up` | 收盘价突破箱体顶部 | box_oscillation | 🔄 待开发 |
-| `breakout_down` | 收盘价跌破箱体底部 | box_oscillation | 🔄 待开发 |
-| `breakout_volume_confirm` | 突破时量能 > 2倍均量 | volume_breakout | 🔄 待开发 |
-| `false_breakout` | 盘中触及但收盘回到箱内 | box_oscillation | 🔄 待开发 |
+| `breakout_up` | 收盘价突破箱体顶部 | box_oscillation | ✅ technical.py |
+| `breakout_down` | 收盘价跌破箱体底部 | box_oscillation | ✅ technical.py |
+| `breakout_volume_confirm` | 突破时量能 > 2倍均量 | volume_breakout | ✅ technical.py |
+| `false_breakout` | 盘中触及但收盘回到箱内 | box_oscillation | 🔄 需要盘中high数据 |
 
 ---
 
@@ -200,30 +200,30 @@
 ### 7.1 换手率情绪指标
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `sentiment_cold` | 换手率 < 0.5% | emotion_cycle | 🔄 待开发 |
-| `sentiment_normal` | 换手率 0.5%-2% | emotion_cycle | 🔄 待开发 |
-| `sentiment_hot` | 换手率 2%-5% | emotion_cycle | 🔄 待开发 |
-| `sentiment_overheat` | 换手率 > 5% | emotion_cycle | 🔄 待开发 |
-| `sentiment_extreme` | 换手率 > 10% | emotion_cycle | 🔄 待开发 |
+| `sentiment_cold` | 换手率 < 0.5% | emotion_cycle | ⚙️ 需要turnover_rate数据 |
+| `sentiment_normal` | 换手率 0.5%-2% | emotion_cycle | ⚙️ 需要turnover_rate数据 |
+| `sentiment_hot` | 换手率 2%-5% | emotion_cycle | ⚙️ 需要turnover_rate数据 |
+| `sentiment_overheat` | 换手率 > 5% | emotion_cycle | ⚙️ 需要turnover_rate数据 |
+| `sentiment_extreme` | 换手率 > 10% | emotion_cycle | ⚙️ 需要turnover_rate数据 |
 
 ### 7.2 情绪底部/顶部特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `emotion_bottom_1` | 近20日换手率处于近一年低位 | emotion_cycle | 🔄 待开发 |
-| `emotion_bottom_2` | 成交量持续萎缩 < 均量50% | emotion_cycle | 🔄 待开发 |
-| `emotion_bottom_3` | 新闻以中性或负面为主 | emotion_cycle | 🔄 待开发 |
-| `emotion_bottom_4` | 股价在MA20附近或以下 | emotion_cycle | 🔄 待开发 |
-| `emotion_top_1` | 近5日换手率 > 20日均值2倍 | emotion_cycle | 🔄 待开发 |
-| `emotion_top_2` | 成交量脉冲式放大 | emotion_cycle | 🔄 待开发 |
-| `emotion_top_3` | 价格偏离MA5超过8% | emotion_cycle | 🔄 待开发 |
-| `emotion_top_4` | MACD出现顶背离 | emotion_cycle | 🔄 待开发 |
+| `emotion_bottom_1` | 近20日换手率处于近一年低位 | emotion_cycle | ⚙️ 需要turnover_rate数据 |
+| `emotion_bottom_2` | 成交量持续萎缩 < 均量50% | emotion_cycle | ✅ technical.py |
+| `emotion_bottom_3` | 新闻以中性或负面为主 | emotion_cycle | 🔄 新闻数据不支持 |
+| `emotion_bottom_4` | 股价在MA20附近或以下 | emotion_cycle | ✅ technical.py |
+| `emotion_top_1` | 近5日换手率 > 20日均值2倍 | emotion_cycle | ⚙️ 需要turnover_rate数据 |
+| `emotion_top_2` | 成交量脉冲式放大 | emotion_cycle | ✅ technical.py |
+| `emotion_top_3` | 价格偏离MA5超过8% | emotion_cycle | ✅ technical.py |
+| `emotion_top_4` | MACD出现顶背离 | emotion_cycle | ✅ technical.py |
 
 ### 7.3 均线收缩与波动率特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `ma_convergence` | MA5/MA10/MA20 三线粘合程度 | emotion_cycle | 🔄 待开发 |
-| `atr_shrinking` | ATR降至低位 | emotion_cycle | 🔄 待开发 |
-| `low_volatility_flag` | 波动率历史分位 < 20% | emotion_cycle | 🔄 待开发 |
+| `ma_convergence` | MA5/MA10/MA20 三线粘合程度 | emotion_cycle | ✅ technical.py |
+| `atr_shrinking` | ATR降至低位 | emotion_cycle | ✅ technical.py |
+| `low_volatility_flag` | 波动率历史分位 < 20% | emotion_cycle | ✅ technical.py |
 
 ---
 
@@ -293,7 +293,7 @@
 | `index_ma_5` | 指数5日均线 | - | ✅ market.py |
 | `index_ma_10` | 指数10日均线 | - | ✅ market.py |
 | `index_ma_20` | 指数20日均线 | - | ✅ market.py |
-| `market_sentiment` | 市场整体情绪 | emotion_cycle | 🔄 待开发 |
+| `market_sentiment` | 市场整体情绪 | emotion_cycle | ⚙️ 可用index_rsi等综合计算 |
 
 ### 10.2 基本面特征
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
@@ -350,14 +350,14 @@
 ### 11.2 趋势与风险指标
 | 特征名 | 计算方式 | 来源策略 | 已接入 |
 |--------|----------|----------|--------|
-| `trend_score` | 综合趋势得分 | bull_trend | 🔄 待开发 |
-| `signal_buy` | 买入信号综合 | ma_golden_cross, shrink_pullback | 🔄 待开发 |
-| `signal_sell` | 卖出信号综合 | volume_breakout, emotion_cycle | 🔄 待开发 |
-| `signal_hold` | 观望信号 | box_oscillation | 🔄 待开发 |
+| `trend_score` | 综合趋势得分 | bull_trend | ✅ technical.py |
+| `signal_buy` | 买入信号综合 | ma_golden_cross, shrink_pullback | ✅ technical.py |
+| `signal_sell` | 卖出信号综合 | volume_breakout, emotion_cycle | ✅ technical.py |
+| `signal_hold` | 观望信号 | box_oscillation | ✅ technical.py |
 | `max_drawdown_20d` | 近20日最大回撤 | emotion_cycle | ✅ technical.py |
 | `volatility_20d` | 近20日波动率 (年化) | emotion_cycle | ✅ technical.py |
 | `atr_14` | 14日平均真实波幅 | wave_theory, shrink_pullback | ✅ technical.py |
-| `risk_level` | 风险等级 (低/中/高) | - | 🔄 待开发 |
+| `risk_level` | 风险等级 (低/中/高) | - | ✅ technical.py |
 
 ---
 
@@ -443,32 +443,32 @@
 
 | 模块 | 文件路径 | 特征数量 |
 |------|----------|----------|
-| 技术指标 | `src/features/technical.py` | ~70个 |
+| 技术指标 | `src/features/technical.py` | ~120个 |
 | 基本面 | `src/features/fundamental.py` | ~30个 |
 | 市场数据 | `src/features/market.py` | ~25个 |
 | 行业板块 | `src/features/industry.py` | ~8个 |
 | 特征组合 | `src/features/combinator.py` | ~10个 (组合特征) |
-| **合计** | | **~143个** |
+| **合计** | | **~193个** |
 
 ---
 
 ## 15. 待开发特征优先级
 
 ### 高优先级 (策略核心)
-1. **换手率相关** - turnover_rate, sentiment_cold/hot 等
-2. **乖离率特征** - deviation_ma5/10/20_abs
-3. **量能形态** - volume_breakout_flag, shrink_pullback_flag
-4. **MACD背驰** - top_divergence, bottom_divergence
+1. **换手率相关** - turnover_rate, sentiment_cold/hot 等 (需要akshare/tushare数据源)
+2. **乖离率特征** - deviation_ma5/10/20_abs ✅ 已完成
+3. **量能形态** - volume_breakout_flag, shrink_pullback_flag ✅ 已完成
+4. **MACD背驰** - top_divergence, bottom_divergence ✅ 已完成
 
 ### 中优先级 (增强信号)
-5. **K线形态** - body_ratio, lower_shadow_ratio, oyty_pattern
-6. **箱体特征** - box_top, box_bottom, breakout_up/down
-7. **情绪周期** - emotion_bottom/top 系列
+5. **K线形态** - body_ratio, lower_shadow_ratio, oyty_pattern ✅ 已完成
+6. **箱体特征** - box_top, box_bottom, breakout_up/down ✅ 已完成
+7. **情绪周期** - emotion_bottom/top 系列 ⚙️ 部分完成
 
 ### 低优先级 (高级特性)
-8. **波浪理论** - wave_position, fib 系列
-9. **缠论中枢** - 中枢结构, 买卖点
-10. **龙头股** - sector_rank, limit_up_signal
+8. **波浪理论** - wave_position, fib 系列 🔄 待开发
+9. **缠论中枢** - 中枢结构, 买卖点 🔄 待开发
+10. **龙头股** - sector_rank, limit_up_signal 🔄 待开发
 
 ---
 
