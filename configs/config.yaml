@@ -67,7 +67,7 @@ model:
     threshold: 0.01       # 1% threshold - reduces noise signals
   strategy:
     min_samples: 30       # More samples before starting predictions
-    confidence_threshold: 0.35  # Higher confidence for better signals
+    confidence_threshold: 0.30  # Balanced confidence threshold
 
 backtest:
   initial_cash: 100000

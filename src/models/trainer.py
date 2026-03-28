@@ -21,8 +21,40 @@ class StockTradingModel:
         self.random_seed = self.config.get('random_seed', 42)
         self.model: Optional[CatBoostClassifier] = None
         self.feature_names: Optional[List[str]] = None
+        self.selected_features: Optional[List[str]] = None
+        self.max_features: int = 80  # Maximum features to use
 
-    def _prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _select_features(self, df: pd.DataFrame, labels: pd.Series) -> List[str]:
+        """Select top features based on importance and diversity."""
+        # Drop non-feature columns
+        drop_cols = ['date', 'stock_code', 'sector', 'industry', 'close', 'open', 'high', 'low', 'volume']
+        drop_cols = [c for c in drop_cols if c in df.columns]
+        feature_df = df.drop(columns=drop_cols, errors='ignore')
+
+        # Remove object columns
+        object_cols = [c for c in feature_df.columns if feature_df[c].dtype == 'object' or feature_df[c].dtype == 'str']
+        feature_df = feature_df.drop(columns=object_cols, errors='ignore')
+
+        # Remove features with low variance (near-constant)
+        variances = feature_df.var()
+        low_var_cols = variances[variances < 0.0001].index.tolist()
+        feature_df = feature_df.drop(columns=low_var_cols, errors='ignore')
+
+        # Remove features highly correlated with each other
+        corr_matrix = feature_df.corr().abs()
+        upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+        to_drop = [column for column in upper_tri.columns if any(upper_tri[column] > 0.95)]
+        feature_df = feature_df.drop(columns=to_drop, errors='ignore')
+
+        # If too many features, keep top N by variance
+        if len(feature_df.columns) > self.max_features:
+            variances = feature_df.var()
+            top_cols = variances.nlargest(self.max_features).index.tolist()
+            feature_df = feature_df[top_cols]
+
+        return feature_df.columns.tolist()
+
+    def _prepare_features(self, df: pd.DataFrame, use_selection: bool = True) -> pd.DataFrame:
         """Prepare features for modeling."""
         # Drop non-feature columns
         drop_cols = ['date', 'stock_code', 'sector', 'industry']
@@ -34,6 +66,12 @@ class StockTradingModel:
         for col in feature_df.columns:
             if feature_df[col].dtype == 'object' or feature_df[col].dtype == 'str':
                 feature_df = feature_df.drop(columns=[col])
+
+        # Apply feature selection if trained
+        if use_selection and self.selected_features is not None:
+            available_features = [f for f in self.selected_features if f in feature_df.columns]
+            if len(available_features) > 0:
+                feature_df = feature_df[available_features]
 
         # Fill NaN with median
         for col in feature_df.columns:
@@ -69,12 +107,16 @@ class StockTradingModel:
         if df.empty or len(df) < 50:
             raise ValueError("Insufficient data for training")
 
-        # Prepare features
-        X = self._prepare_features(df)
-        self.feature_names = list(X.columns)
-
-        # Create labels
+        # Create labels first
         labels = self._create_labels(df, forward_days, threshold)
+
+        # Select features before preparing
+        self.selected_features = self._select_features(df, labels)
+        print(f"  Selected {len(self.selected_features)} features out of {len(df.columns)}")
+
+        # Prepare features with selection
+        X = self._prepare_features(df, use_selection=True)
+        self.feature_names = list(X.columns)
 
         # Remove rows where forward returns couldn't be calculated (last forward_days rows)
         valid_idx = ~labels.isna()
@@ -103,8 +145,8 @@ class StockTradingModel:
         train_labels = labels  # Already converted to 0,1,2
 
         if eval_df is not None and not eval_df.empty:
-            eval_X = self._prepare_features(eval_df)
             eval_labels = self._create_labels(eval_df, forward_days, threshold)
+            eval_X = self._prepare_features(eval_df, use_selection=True)
             eval_valid_idx = ~eval_labels.isna()
             eval_X_valid = eval_X[eval_valid_idx]
             eval_labels_valid = (eval_labels[eval_valid_idx] + 1).astype(int)
