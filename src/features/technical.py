@@ -435,6 +435,92 @@ class TechnicalFeatures(BaseFeatureExtractor):
         df['risk_level'] = pd.cut(vol_pct, bins=[0, 0.33, 0.66, 1.0],
                                    labels=[0, 1, 2]).astype(float)  # 0=low, 1=medium, 2=high
 
+        # ========== VWAP (Volume Weighted Average Price) ==========
+        # VWAP = cumulative(price * volume) / cumulative(volume)
+        df['vwap'] = (df['close'] * df['volume']).cumsum() / df['volume'].cumsum()
+        df['price_to_vwap'] = df['close'] / df['vwap']
+
+        # ========== Aroon Indicator (阿隆指标) ==========
+        # Aroon Up = (period - periods since highest) / period * 100
+        # Aroon Down = (period - periods since lowest) / period * 100
+        aroon_period = 25
+        df['aroon_high'] = df['high'].rolling(window=aroon_period + 1).apply(lambda x: float(np.argmax(x)), raw=True)
+        df['aroon_low'] = df['low'].rolling(window=aroon_period + 1).apply(lambda x: float(np.argmin(x)), raw=True)
+        df['aroon_up'] = (aroon_period - df['aroon_high']) / aroon_period * 100
+        df['aroon_down'] = (aroon_period - df['aroon_low']) / aroon_period * 100
+        df['aroon_oscillator'] = df['aroon_up'] - df['aroon_down']
+        df['aroon_trend'] = (df['aroon_up'] > df['aroon_down']).astype(int)
+
+        # ========== Accumulation/Distribution (A/D Line) ==========
+        # A/D = previous A/D + money flow multiplier * volume
+        mf_multiplier = ((df['close'] - df['low']) - (df['high'] - df['close'])) / (df['high'] - df['low'] + 1e-10)
+        mf_volume = mf_multiplier * df['volume']
+        df['ad_line'] = mf_volume.cumsum()
+        df['ad_oscillator'] = df['ad_line'] - df['ad_line'].rolling(5).mean()
+
+        # ========== Rate of Change (ROC) ==========
+        # ROC = (close - close n periods ago) / close n periods ago * 100
+        for period in [5, 10, 20]:
+            df[f'roc_{period}'] = (df['close'] - df['close'].shift(period)) / df['close'].shift(period) * 100
+
+        # ========== DMI (Directional Movement Index) ==========
+        # Plus DI and Minus DI
+        high_diff = df['high'].diff()
+        low_diff = -df['low'].diff()
+        plus_dm = high_diff.where((high_diff > low_diff) & (high_diff > 0), 0)
+        minus_dm = low_diff.where((low_diff > high_diff) & (low_diff > 0), 0)
+
+        # Smoothed DM
+        smooth_plus_dm = plus_dm.rolling(window=14).mean()
+        smooth_minus_dm = minus_dm.rolling(window=14).mean()
+
+        # DI
+        atr_14 = df['atr']
+        plus_di = 100 * smooth_plus_dm / (atr_14 + 1e-8)
+        minus_di = 100 * smooth_minus_dm / (atr_14 + 1e-8)
+
+        df['dmi_plus_di'] = plus_di
+        df['dmi_minus_di'] = minus_di
+        df['dmi_di_diff'] = plus_di - minus_di
+        df['dmi_adx'] = df['adx']  # ADX already calculated
+
+        # ========== Lag Features (滞后特征) ==========
+        # Lag returns
+        for lag in [1, 2, 3, 5]:
+            df[f'return_lag_{lag}'] = df['returns'].shift(lag)
+            df[f'volume_change_lag_{lag}'] = df['volume_change'].shift(lag)
+
+        # Lag RSI
+        for lag in [1, 2, 3]:
+            df[f'rsi_lag_{lag}'] = df['rsi'].shift(lag)
+
+        # Lag MACD
+        for lag in [1, 2]:
+            df[f'macd_lag_{lag}'] = df['macd'].shift(lag)
+            df[f'macd_hist_lag_{lag}'] = df['macd_hist'].shift(lag)
+
+        # ========== Rolling Features (滚动特征) ==========
+        # Rolling returns std (volatility persistence)
+        df['returns_std_5'] = df['returns'].rolling(5).std()
+        df['returns_std_10'] = df['returns'].rolling(10).std()
+
+        # Rolling skewness and kurtosis
+        df['returns_skew_10'] = df['returns'].rolling(10).skew()
+        df['returns_skew_20'] = df['returns'].rolling(20).skew()
+
+        # Rolling max drawdown
+        rolling_max = df['close'].expanding().max()
+        drawdown = (df['close'] - rolling_max) / rolling_max
+        df['expanding_drawdown'] = drawdown
+
+        # ========== Cross-asset Features (跨资产特征) ==========
+        # Price relative to VWAP
+        df['price_vs_vwap'] = (df['close'] > df['vwap']).astype(int)
+
+        # Aroon + DMI combination signal
+        df['aroon_dmi_bullish'] = ((df['aroon_up'] > df['aroon_down']) & (df['dmi_plus_di'] > df['dmi_minus_di'])).astype(int)
+        df['aroon_dmi_bearish'] = ((df['aroon_down'] > df['aroon_up']) & (df['dmi_minus_di'] > df['dmi_plus_di'])).astype(int)
+
         # ========== Fill NaN values ==========
         # Fill NaN values with forward fill then backward fill for remaining
         df = df.ffill().bfill()

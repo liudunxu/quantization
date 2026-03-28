@@ -439,20 +439,90 @@
 
 ---
 
-## 14. 已接入代码位置汇总
+## 14. 高级技术指标特征
+
+### 14.1 VWAP 指标
+| 特征名 | 计算方式 | 来源策略 | 已接入 |
+|--------|----------|----------|--------|
+| `vwap` | 成交量加权平均价 = cumsum(price*volume) / cumsum(volume) | - | ✅ technical.py |
+| `price_to_vwap` | close / vwap | - | ✅ technical.py |
+| `price_vs_vwap` | close > vwap 为 1 | - | ✅ technical.py |
+
+### 14.2 Aroon 指标
+| 特征名 | 计算方式 | 来源策略 | 已接入 |
+|--------|----------|----------|--------|
+| `aroon_up` | (period - 距最高价天数) / period * 100 | - | ✅ technical.py |
+| `aroon_down` | (period - 距最低价天数) / period * 100 | - | ✅ technical.py |
+| `aroon_oscillator` | aroon_up - aroon_down | - | ✅ technical.py |
+| `aroon_trend` | aroon_up > aroon_down 为 1 | - | ✅ technical.py |
+| `aroon_dmi_bullish` | aroon看涨 + DMI看涨组合信号 | - | ✅ technical.py |
+| `aroon_dmi_bearish` | aroon看跌 + DMI看跌组合信号 | - | ✅ technical.py |
+
+### 14.3 Accumulation/Distribution (A/D)
+| 特征名 | 计算方式 | 来源策略 | 已接入 |
+|--------|----------|----------|--------|
+| `ad_line` | 累计资金流量线 | - | ✅ technical.py |
+| `ad_oscillator` | A/D线 - 5日A/D均线 | - | ✅ technical.py |
+
+### 14.4 ROC (Rate of Change)
+| 特征名 | 计算方式 | 来源策略 | 已接入 |
+|--------|----------|----------|--------|
+| `roc_5` | 5日变化率 = (close - close_5d_ago) / close_5d_ago * 100 | - | ✅ technical.py |
+| `roc_10` | 10日变化率 | - | ✅ technical.py |
+| `roc_20` | 20日变化率 | - | ✅ technical.py |
+
+### 14.5 DMI (Directional Movement Index)
+| 特征名 | 计算方式 | 来源策略 | 已接入 |
+|--------|----------|----------|--------|
+| `dmi_plus_di` | +DI 方向指标 | - | ✅ technical.py |
+| `dmi_minus_di` | -DI 方向指标 | - | ✅ technical.py |
+| `dmi_di_diff` | +DI - (-DI) | - | ✅ technical.py |
+| `dmi_adx` | ADX 平均趋向指数 | - | ✅ technical.py |
+
+### 14.6 滞后特征 (Lag Features)
+| 特征名 | 计算方式 | 来源策略 | 已接入 |
+|--------|----------|----------|--------|
+| `return_lag_1` | 1日前收益率 | - | ✅ technical.py |
+| `return_lag_2` | 2日前收益率 | - | ✅ technical.py |
+| `return_lag_3` | 3日前收益率 | - | ✅ technical.py |
+| `return_lag_5` | 5日前收益率 | - | ✅ technical.py |
+| `volume_change_lag_1` | 1日前成交量变化 | - | ✅ technical.py |
+| `volume_change_lag_2` | 2日前成交量变化 | - | ✅ technical.py |
+| `volume_change_lag_3` | 3日前成交量变化 | - | ✅ technical.py |
+| `volume_change_lag_5` | 5日前成交量变化 | - | ✅ technical.py |
+| `rsi_lag_1` | 1日前RSI | - | ✅ technical.py |
+| `rsi_lag_2` | 2日前RSI | - | ✅ technical.py |
+| `rsi_lag_3` | 3日前RSI | - | ✅ technical.py |
+| `macd_lag_1` | 1日前MACD | - | ✅ technical.py |
+| `macd_lag_2` | 2日前MACD | - | ✅ technical.py |
+| `macd_hist_lag_1` | 1日前MACD柱状图 | - | ✅ technical.py |
+| `macd_hist_lag_2` | 2日前MACD柱状图 | - | ✅ technical.py |
+
+### 14.7 滚动统计特征
+| 特征名 | 计算方式 | 来源策略 | 已接入 |
+|--------|----------|----------|--------|
+| `returns_std_5` | 5日收益率标准差 | - | ✅ technical.py |
+| `returns_std_10` | 10日收益率标准差 | - | ✅ technical.py |
+| `returns_skew_10` | 10日收益偏度 | - | ✅ technical.py |
+| `returns_skew_20` | 20日收益偏度 | - | ✅ technical.py |
+| `expanding_drawdown` | 回撤 (从历史最高点) | - | ✅ technical.py |
+
+---
+
+## 15. 已接入代码位置汇总
 
 | 模块 | 文件路径 | 特征数量 |
 |------|----------|----------|
-| 技术指标 | `src/features/technical.py` | ~120个 |
+| 技术指标 | `src/features/technical.py` | ~180个 |
 | 基本面 | `src/features/fundamental.py` | ~30个 |
 | 市场数据 | `src/features/market.py` | ~25个 |
 | 行业板块 | `src/features/industry.py` | ~8个 |
 | 特征组合 | `src/features/combinator.py` | ~10个 (组合特征) |
-| **合计** | | **~193个** |
+| **合计** | | **~253个** |
 
 ---
 
-## 15. 待开发特征优先级
+## 16. 待开发特征优先级
 
 ### 高优先级 (策略核心)
 1. **换手率相关** - turnover_rate, sentiment_cold/hot 等 (需要akshare/tushare数据源)
@@ -472,7 +542,7 @@
 
 ---
 
-## 16. 特征工程注意事项
+## 17. 特征工程注意事项
 
 ### 16.1 缺失值处理
 - 均线数据: 使用前向填充 (forward fill) 再后向填充
