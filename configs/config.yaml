@@ -41,11 +41,11 @@ features:
   market:
     enabled: true
     # A股: 000001.SH (上证指数)
-    # 港股: HSI.HK (恒生指数)
+    # 港股: ^HSI (恒生指数)
     # 美股: ^GSPC (标普500)
     indices:
       a_share: "000001.SH"
-      hk_share: "HSI.HK"
+      hk_share: "^HSI"
       us_share: "^GSPC"
 
   industry:
@@ -56,18 +56,18 @@ features:
 
 model:
   catboost:
-    iterations: 500
-    depth: 6
+    iterations: 300      # Reduced to prevent overfitting
+    depth: 4              # Reduced from 6 to prevent overfitting
     learning_rate: 0.03
-    l2_leaf_reg: 3
+    l2_leaf_reg: 5        # Increased for more regularization
     random_seed: 42
-  # Aggressive trading parameters
+  # Trading parameters - balanced for HK stocks
   training:
-    forward_days: 1      # Very short-term prediction
-    threshold: 0.003     # Very low threshold = more signals (0.3%)
+    forward_days: 5       # Longer prediction horizon for stability
+    threshold: 0.01       # 1% threshold - reduces noise signals
   strategy:
-    min_samples: 20      # Start predicting earlier
-    confidence_threshold: 0.20  # Trade when >20% confidence
+    min_samples: 30       # More samples before starting predictions
+    confidence_threshold: 0.35  # Higher confidence for better signals
 
 backtest:
   initial_cash: 100000
