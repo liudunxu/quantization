@@ -758,10 +758,13 @@ class BacktestEngine:
         buy_hold_shares = self.initial_cash / prices[0]
         buy_hold_equity = [buy_hold_shares * p for p in prices]
 
-        # Handle initial buy signal at index 0
+        # Handle initial position at index 0 - default to 10 lots if no signal
+        # Always buy 10 lots (1000 shares) on day 1 as starting position
+        first_price = prices[0] * (1 - self.slippage)
+        first_atr = atr_values[0] if len(atr_values) > 0 else first_price * 0.02
+
         if signals.iloc[0] == 1 and position == 0:
-            first_price = prices[0] * (1 - self.slippage)
-            first_atr = atr_values[0] if len(atr_values) > 0 else first_price * 0.02
+            # Strategy signals buy - use calculated position size
             shares = self._calculate_position_size(
                 signal=1,
                 cash=self.initial_cash,
@@ -772,7 +775,13 @@ class BacktestEngine:
                 avg_cost=first_price,
                 atr=first_atr
             )
-            shares = min(shares, int(self.initial_cash / first_price))  # Can't exceed cash
+            shares = min(shares, int(self.initial_cash / first_price))
+        else:
+            # Default: buy 10 lots (1000 shares) on first day
+            shares = 10 * self.lot_size
+            shares = min(shares, int(self.initial_cash / first_price))
+
+        if position == 0 and shares >= 100:
             cost = shares * first_price
             comm = cost * self.commission
             cash = self.initial_cash - cost - comm

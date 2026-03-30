@@ -151,23 +151,6 @@ def calculate_suggested_lots(
         'stop_loss': stop_loss,
         'take_profit': take_profit
     }
-    recent_sum = recent.sum()
-
-    if last_signal == 1:
-        # BUY signal - check conviction
-        conviction = 0.6 + 0.1 * min(abs(recent_sum), 3)  # 0.6-0.9 based on recent history
-        return 'BUY', min(conviction, 1.0)
-    elif last_signal == -1:
-        # SELL signal - higher conviction for sell
-        conviction = 0.7 + 0.1 * min(abs(recent_sum), 3)  # 0.7-1.0
-        return 'SELL', min(conviction, 1.0)
-    else:
-        # HOLD - check if recent signals show momentum
-        if recent_sum > 2:
-            return 'HOLD', 0.4  # Slightly bullish momentum
-        elif recent_sum < -2:
-            return 'HOLD', 0.4  # Slightly bearish momentum
-        return 'HOLD', 0.2
 
 
 def _parse_return(return_str: str) -> float:

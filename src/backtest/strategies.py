@@ -49,11 +49,11 @@ MARKET_PARAMS = {
     },
     'us': {
         # 美股市场：趋势性强、波动相对平稳
-        'highsell_lookback': 20,       # 中等lookback
-        'highsell_threshold': 0.12,     # 适度threshold
-        'ml_confidence_threshold': 0.45,  # 适中置信度
-        'rolling_train_window': 180,   # 中等训练窗口
-        'rolling_retrain_interval': 20,  # 适度retrain频率
+        'highsell_lookback': 10,       # 较短lookback产生更多信号
+        'highsell_threshold': 0.08,     # 较低threshold产生更多信号
+        'ml_confidence_threshold': 0.35,  # 较低置信度产生更多信号
+        'rolling_train_window': 90,    # 较短训练窗口
+        'rolling_retrain_interval': 10,  # 更频繁的retrain
         'bear_market_threshold': -0.005,
     },
     'default': {
