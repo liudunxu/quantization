@@ -585,6 +585,7 @@ class BacktestEngine:
         entry_price: float,
         avg_cost: float,
         atr: float = None,
+        shares: int = 0,
     ) -> int:
         """Calculate position size using professional volatility-based approach.
 
@@ -696,8 +697,10 @@ class BacktestEngine:
         elif signal == -1 and position == 1:
             # Sell signal - use P&L and momentum
 
-            # Current position - estimate based on account value
-            current_shares = int(account_value * 0.3 / current_price)  # Rough estimate
+            # Use actual shares passed from caller
+            current_shares = (
+                shares if shares > 0 else int(account_value * 0.3 / current_price)
+            )
 
             # Calculate unrealized P&L
             if avg_cost > 0:
@@ -962,16 +965,20 @@ class BacktestEngine:
                         entry_price=entry_price,
                         avg_cost=avg_cost,
                         atr=current_atr,
+                        shares=shares,
                     )
                     shares_to_sell = min(
                         target_shares, shares, self.max_shares_per_trade
                     )
 
                     # Force minimum 1 lot sell if we have a sell signal and enough shares
-                    if shares_to_sell < 100 and shares >= 100:
-                        shares_to_sell = min(100, shares)
+                    if shares_to_sell < 50 and shares >= 50:
+                        shares_to_sell = min(50, shares)
+                    elif shares_to_sell == 0 and shares > 0:
+                        # If we have shares but calculated 0, sell all shares
+                        shares_to_sell = shares
 
-                    if shares_to_sell >= 100:  # At least 1 lot
+                    if shares_to_sell >= 50:  # At least 50 shares (reduced from 100)
                         proceeds = shares_to_sell * current_price
                         comm = proceeds * self.commission
                         cash = cash + proceeds - comm
