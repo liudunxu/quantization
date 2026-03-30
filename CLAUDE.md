@@ -42,20 +42,41 @@ Multi-provider data fetching with automatic fallback:
 - **Fundamental Features**: PE, PB, ROE, revenue growth, debt ratio
 - **Industry Features**: Sector performance, sector ETF proxies
 - **Market Features**: Index performance, market sentiment
+- **Money Flow Features**: A-share specific (automatically skipped for US/HK stocks)
 - **Cache System**: File-based parquet, never expires, manual refresh/delete
 
 #### 3. Model (`src/models/`)
 - CatBoost classifier for buy/sell/hold decisions
 - Auto class balancing, early stopping
 - Feature importance analysis
+- Composite label generation (combining returns, trend, momentum, market)
 
 #### 4. Backtest (`src/backtest/`)
-- Multiple strategies: ML Strategy, Buy & Hold, High Sell Low Buy
+- Multiple strategies: ML Strategy, Buy & Hold, High Sell Low Buy, and more
+- Dynamic position sizing based on ATR risk model
+- Support for adding to existing positions (pyramiding)
 - Metrics: Returns, Sharpe ratio, max drawdown, win rate, trade count
 
 #### 5. Scripts (`scripts/`)
-- `decide.py`: Trading decision with confidence/probabilities
+- `decide.py`: Trading decision with confidence/probabilities and suggested position
 - `backtest.py`: Strategy comparison backtest
+
+## Position Sizing Model
+
+The system uses ATR-based position sizing:
+- **Risk per trade**: 1% of capital
+- **ATR multiplier**: 1.2 (stop loss distance)
+- **Minimum lot**: 50 shares for expensive stocks (>$100), 100 shares otherwise
+- **Maximum lots per trade**: 3 lots (300 shares)
+
+Position formula: `shares = risk_amount / (ATR * atr_multiplier / price)`
+
+## Market Filtering
+
+- Uses 3-day average market return to determine regime (smoother than single day)
+- Bear market threshold varies by market (A-shares: -1%, US: -0.5%)
+- High confidence buy signals (≥0.7) allowed even in bear market
+- All strategies use consistent initial position sizing
 
 ## Feature Caching
 
@@ -67,6 +88,7 @@ Multi-provider data fetching with automatic fallback:
 - `{stock_code}_technical.parquet` - Technical indicators
 - `{stock_code}_market.parquet` - Market data
 - `{stock_code}_industry.parquet` - Industry data
+- `{stock_code}_money_flow.parquet` - Money flow data (A-shares only)
 
 ### Cache Commands
 ```python
@@ -96,11 +118,20 @@ python scripts/decide.py --stock 0700.HK --refresh  # Force refresh cache
 python scripts/decide.py --stock AAPL
 ```
 
-**Decision Flow:** Train model → Backtest 4 strategies → Output each strategy's decision → Use best-performer as final recommendation.
+**Decision Flow:** Train model → Backtest strategies → Output each strategy's decision → Use best-performer as final recommendation.
 
 **Key Parameters:**
 - `--train-days`: Training data size (365 default). Larger = more stable but may include outdated patterns.
 - `--backtest-days`: Backtest window (30 default). Used to select best strategy and evaluate performance.
+
+**Output Sections:**
+- **BACKTEST RESULTS**: Sorted by total return (highest first)
+- **ALL STRATEGY DECISIONS**: Each strategy's decision, return, and score
+- **FINAL RECOMMENDATION**: 
+  - Majority vote decision
+  - Best strategy by score
+  - Best strategy by return
+  - Suggested position (lots, shares, position %, stop loss, take profit)
 
 ### Run Backtest
 ```bash

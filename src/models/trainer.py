@@ -11,35 +11,72 @@ from ..utils.config import get_config
 
 # Feature categories for market-aware selection
 FEATURE_CATEGORIES = {
-    'universal': [
+    "universal": [
         # Core technical indicators that work across all markets
-        'returns', 'momentum_', 'rsi', 'macd', 'volume_ratio',
-        'ma_', 'volatility', 'atr_', 'bb_', 'stoch_',
-        'cci', 'adx', 'mfi', 'turnover', 'drawdown'
+        "returns",
+        "momentum_",
+        "rsi",
+        "macd",
+        "volume_ratio",
+        "ma_",
+        "volatility",
+        "atr_",
+        "bb_",
+        "stoch_",
+        "cci",
+        "adx",
+        "mfi",
+        "turnover",
+        "drawdown",
     ],
-    'a_share': [
+    "a_share": [
         # A-share specific features
-        'net_flow', 'institutional_ratio', 'main_net_flow',
-        'super_large', 'large_net_flow', 'medium_net_flow', 'small_net_flow',
-        'huanshou', '换手'  # turnover in Chinese
+        "net_flow",
+        "institutional_ratio",
+        "main_net_flow",
+        "super_large",
+        "large_net_flow",
+        "medium_net_flow",
+        "small_net_flow",
+        "huanshou",
+        "换手",  # turnover in Chinese
     ],
-    'hk': [
+    "hk": [
         # HK-specific features (mostly index-related)
-        'hsi', 'hang_seng', 'hk_'
+        "hsi",
+        "hang_seng",
+        "hk_",
     ],
-    'us': [
+    "us": [
         # US-specific features
-        'sp_', 'nasdaq', 'dow_', '^gspc', 'qqq'
+        "sp_",
+        "nasdaq",
+        "dow_",
+        "^gspc",
+        "qqq",
     ],
-    'market': [
+    "market": [
         # Market-wide features (index, correlation, beta)
-        'index_', 'market_', 'alpha', 'beta', 'corr', 'sector_'
+        "index_",
+        "market_",
+        "alpha",
+        "beta",
+        "corr",
+        "sector_",
     ],
-    'fundamental': [
+    "fundamental": [
         # Fundamental features
-        'pe_', 'pb_', 'roe_', 'revenue_', 'debt_', 'profit_',
-        'growth_', 'dividend', 'book_', 'asset_'
-    ]
+        "pe_",
+        "pb_",
+        "roe_",
+        "revenue_",
+        "debt_",
+        "profit_",
+        "growth_",
+        "dividend",
+        "book_",
+        "asset_",
+    ],
 }
 
 
@@ -47,13 +84,15 @@ class StockTradingModel:
     """CatBoost model for stock trading decisions."""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        self.config = config or get_config().get_section('model').get('catboost', {})
-        self.iterations = self.config.get('iterations', 500)
-        self.depth = self.config.get('depth', 6)
-        self.learning_rate = self.config.get('learning_rate', 0.03)
-        self.l2_leaf_reg = self.config.get('l2_leaf_reg', 3)
-        self.random_seed = self.config.get('random_seed', 42)
-        self.n_estimators = self.config.get('n_estimators', 3)  # Number of models in ensemble
+        self.config = config or get_config().get_section("model").get("catboost", {})
+        self.iterations = self.config.get("iterations", 500)
+        self.depth = self.config.get("depth", 6)
+        self.learning_rate = self.config.get("learning_rate", 0.03)
+        self.l2_leaf_reg = self.config.get("l2_leaf_reg", 3)
+        self.random_seed = self.config.get("random_seed", 42)
+        self.n_estimators = self.config.get(
+            "n_estimators", 3
+        )  # Number of models in ensemble
         self.model: Optional[CatBoostClassifier] = None
         self.models: List[CatBoostClassifier] = []  # Ensemble of models
         self.feature_names: Optional[List[str]] = None
@@ -66,18 +105,21 @@ class StockTradingModel:
         columns = df.columns.tolist()
 
         # Check for A-share money flow features
-        if any('net_flow' in c.lower() for c in columns):
-            return 'a_share'
+        if any("net_flow" in c.lower() for c in columns):
+            return "a_share"
 
         # Check for HK features
-        if any('hsi' in c.lower() or 'hang_seng' in c.lower() for c in columns):
-            return 'hk'
+        if any("hsi" in c.lower() or "hang_seng" in c.lower() for c in columns):
+            return "hk"
 
         # Check for US features
-        if any(c.lower().startswith('sp_') or 'nasdaq' in c.lower() or '^gspc' in c.lower() for c in columns):
-            return 'us'
+        if any(
+            c.lower().startswith("sp_") or "nasdaq" in c.lower() or "^gspc" in c.lower()
+            for c in columns
+        ):
+            return "us"
 
-        return 'a_share'  # Default
+        return "a_share"  # Default
 
     def _get_feature_categories(self, feature: str, columns: List[str]) -> List[str]:
         """Determine which categories a feature belongs to."""
@@ -90,9 +132,11 @@ class StockTradingModel:
                     categories.append(category)
                     break
 
-        return categories if categories else ['other']
+        return categories if categories else ["other"]
 
-    def _select_features(self, df: pd.DataFrame, labels: pd.Series, market_type: str = None) -> List[str]:
+    def _select_features(
+        self, df: pd.DataFrame, labels: pd.Series, market_type: str = None
+    ) -> List[str]:
         """Select top features based on importance, diversity, and market applicability.
 
         Uses a market-aware multi-stage approach:
@@ -102,13 +146,27 @@ class StockTradingModel:
         4. Select diverse features across categories
         """
         # Drop non-feature columns
-        drop_cols = ['date', 'stock_code', 'sector', 'industry', 'close', 'open', 'high', 'low', 'volume']
+        drop_cols = [
+            "date",
+            "stock_code",
+            "sector",
+            "industry",
+            "close",
+            "open",
+            "high",
+            "low",
+            "volume",
+        ]
         drop_cols = [c for c in drop_cols if c in df.columns]
-        feature_df = df.drop(columns=drop_cols, errors='ignore')
+        feature_df = df.drop(columns=drop_cols, errors="ignore")
 
         # Remove object columns
-        object_cols = [c for c in feature_df.columns if feature_df[c].dtype == 'object' or feature_df[c].dtype == 'str']
-        feature_df = feature_df.drop(columns=object_cols, errors='ignore')
+        object_cols = [
+            c
+            for c in feature_df.columns
+            if feature_df[c].dtype == "object" or feature_df[c].dtype == "str"
+        ]
+        feature_df = feature_df.drop(columns=object_cols, errors="ignore")
 
         # Detect market type
         if market_type is None:
@@ -117,11 +175,13 @@ class StockTradingModel:
 
         # Define category priority by market
         category_priority = {
-            'a_share': ['universal', 'a_share', 'market', 'fundamental'],
-            'hk': ['universal', 'market', 'fundamental'],
-            'us': ['universal', 'market', 'fundamental']
+            "a_share": ["universal", "a_share", "market", "fundamental"],
+            "hk": ["universal", "market", "fundamental"],
+            "us": ["universal", "market", "fundamental"],
         }
-        priority = category_priority.get(market_type, ['universal', 'market', 'fundamental'])
+        priority = category_priority.get(
+            market_type, ["universal", "market", "fundamental"]
+        )
 
         # Remove rows where labels are NaN
         valid_idx = ~labels.isna()
@@ -132,8 +192,8 @@ class StockTradingModel:
             # Not enough samples - use variance-based selection
             variances = feature_df.var()
             low_var_cols = variances[variances < 0.0001].index.tolist()
-            feature_df = feature_df.drop(columns=low_var_cols, errors='ignore')
-            return feature_df.columns.tolist()[:self.max_features]
+            feature_df = feature_df.drop(columns=low_var_cols, errors="ignore")
+            return feature_df.columns.tolist()[: self.max_features]
 
         # Quick preliminary model to get feature importance
         quick_model = CatBoostClassifier(
@@ -141,25 +201,24 @@ class StockTradingModel:
             depth=4,
             learning_rate=0.1,
             random_seed=self.random_seed,
-            verbose=False
+            verbose=False,
         )
         quick_model.fit(X_quick, y_quick, verbose=False)
 
         # Get feature importance
         importance = quick_model.get_feature_importance()
-        importance_df = pd.DataFrame({
-            'feature': X_quick.columns,
-            'importance': importance
-        }).sort_values('importance', ascending=False)
+        importance_df = pd.DataFrame(
+            {"feature": X_quick.columns, "importance": importance}
+        ).sort_values("importance", ascending=False)
 
         # Assign categories to each feature
-        importance_df['categories'] = importance_df['feature'].apply(
+        importance_df["categories"] = importance_df["feature"].apply(
             lambda f: self._get_feature_categories(f, feature_df.columns)
         )
 
         # Assign market relevance score
         def get_market_score(categories):
-            if 'other' in categories:
+            if "other" in categories:
                 return 0.5  # Unknown features get medium score
             # Higher score for more relevant categories
             scores = []
@@ -170,20 +229,26 @@ class StockTradingModel:
                     scores.append(0.3)
             return max(scores) if scores else 0.5
 
-        importance_df['market_score'] = importance_df['categories'].apply(get_market_score)
-        importance_df['combined_score'] = importance_df['importance'] * importance_df['market_score']
+        importance_df["market_score"] = importance_df["categories"].apply(
+            get_market_score
+        )
+        importance_df["combined_score"] = (
+            importance_df["importance"] * importance_df["market_score"]
+        )
 
         # Sort by combined score
-        importance_df = importance_df.sort_values('combined_score', ascending=False)
+        importance_df = importance_df.sort_values("combined_score", ascending=False)
 
         # Select features with diversity across categories
         selected = []
         category_count = {cat: 0 for cat in priority}
-        max_per_category = self.max_features // len(priority) + 5  # Allow some imbalance
+        max_per_category = (
+            self.max_features // len(priority) + 5
+        )  # Allow some imbalance
 
         for _, row in importance_df.iterrows():
-            feature = row['feature']
-            cats = row['categories']
+            feature = row["feature"]
+            cats = row["categories"]
 
             # Check if we should include this feature
             # Prefer features from under-represented categories
@@ -206,33 +271,41 @@ class StockTradingModel:
         # Remove features with low variance (near-constant)
         variances = feature_df.var()
         low_var_cols = variances[variances < 0.0001].index.tolist()
-        feature_df = feature_df.drop(columns=low_var_cols, errors='ignore')
+        feature_df = feature_df.drop(columns=low_var_cols, errors="ignore")
 
         # Remove features highly correlated with each other
         if len(feature_df.columns) > 1:
             corr_matrix = feature_df.corr().abs()
-            upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-            to_drop = [column for column in upper_tri.columns if any(upper_tri[column] > 0.95)]
-            feature_df = feature_df.drop(columns=to_drop, errors='ignore')
+            upper_tri = corr_matrix.where(
+                np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)
+            )
+            to_drop = [
+                column for column in upper_tri.columns if any(upper_tri[column] > 0.95)
+            ]
+            feature_df = feature_df.drop(columns=to_drop, errors="ignore")
 
         return feature_df.columns.tolist()
 
-    def _prepare_features(self, df: pd.DataFrame, use_selection: bool = True) -> pd.DataFrame:
+    def _prepare_features(
+        self, df: pd.DataFrame, use_selection: bool = True
+    ) -> pd.DataFrame:
         """Prepare features for modeling."""
         # Drop non-feature columns
-        drop_cols = ['date', 'stock_code', 'sector', 'industry']
+        drop_cols = ["date", "stock_code", "sector", "industry"]
         drop_cols = [c for c in drop_cols if c in df.columns]
 
-        feature_df = df.drop(columns=drop_cols, errors='ignore')
+        feature_df = df.drop(columns=drop_cols, errors="ignore")
 
         # Remove any remaining object or string columns
         for col in feature_df.columns:
-            if feature_df[col].dtype == 'object' or feature_df[col].dtype == 'str':
+            if feature_df[col].dtype == "object" or feature_df[col].dtype == "str":
                 feature_df = feature_df.drop(columns=[col])
 
         # Apply feature selection if trained
         if use_selection and self.selected_features is not None:
-            available_features = [f for f in self.selected_features if f in feature_df.columns]
+            available_features = [
+                f for f in self.selected_features if f in feature_df.columns
+            ]
             if len(available_features) > 0:
                 feature_df = feature_df[available_features]
 
@@ -251,7 +324,7 @@ class StockTradingModel:
         use_composite: bool = True,
         trend_weight: float = 0.3,
         momentum_weight: float = 0.3,
-        market_weight: float = 0.2
+        market_weight: float = 0.2,
     ) -> pd.Series:
         """Create labels for training with multi-dimensional composite scoring.
 
@@ -266,7 +339,7 @@ class StockTradingModel:
         - Momentum confirmation: RSI, MACD direction
         - Market environment: Market index performance
         """
-        future_returns = df['close'].shift(-forward_days) / df['close'] - 1
+        future_returns = df["close"].shift(-forward_days) / df["close"] - 1
 
         if not use_composite:
             # Original simple threshold method
@@ -284,38 +357,38 @@ class StockTradingModel:
 
         # 2. Trend score (MA arrangement) - use float
         trend_score = pd.Series(0.0, index=df.index)
-        if 'ma_bullish_arrange' in df.columns and 'ma_bearish_arrange' in df.columns:
-            trend_score[df['ma_bullish_arrange'] == 1] = 1.0
-            trend_score[df['ma_bearish_arrange'] == 1] = -1.0
+        if "ma_bullish_arrange" in df.columns and "ma_bearish_arrange" in df.columns:
+            trend_score[df["ma_bullish_arrange"] == 1] = 1.0
+            trend_score[df["ma_bearish_arrange"] == 1] = -1.0
 
         # 3. Momentum score (RSI, MACD)
         momentum_score = pd.Series(0.0, index=df.index)
-        if 'rsi' in df.columns:
+        if "rsi" in df.columns:
             # RSI > 60 is bullish, < 40 is bearish
-            momentum_score[df['rsi'] > 60] += 0.5
-            momentum_score[df['rsi'] < 40] -= 0.5
-        if 'macd_hist' in df.columns:
+            momentum_score[df["rsi"] > 60] += 0.5
+            momentum_score[df["rsi"] < 40] -= 0.5
+        if "macd_hist" in df.columns:
             # MACD histogram positive is bullish
-            momentum_score[df['macd_hist'] > 0] += 0.5
-            momentum_score[df['macd_hist'] < 0] -= 0.5
+            momentum_score[df["macd_hist"] > 0] += 0.5
+            momentum_score[df["macd_hist"] < 0] -= 0.5
 
         # Normalize momentum to -1, 0, 1
         momentum_score = momentum_score.clip(-1.0, 1.0)
 
         # 4. Market score (if available)
         market_score = pd.Series(0.0, index=df.index)
-        if 'index_returns' in df.columns:
-            market_score[df['index_returns'] > 0.01] = 0.5
-            market_score[df['index_returns'] < -0.01] = -0.5
+        if "index_returns" in df.columns:
+            market_score[df["index_returns"] > 0.01] = 0.5
+            market_score[df["index_returns"] < -0.01] = -0.5
 
         # ========== Combine into composite signal ==========
         # Weighted combination
         return_weight = 1.0 - trend_weight - momentum_weight - market_weight
         composite = (
-            return_score * return_weight +
-            trend_score * trend_weight +
-            momentum_score * momentum_weight +
-            market_score * market_weight
+            return_score * return_weight
+            + trend_score * trend_weight
+            + momentum_score * momentum_weight
+            + market_score * market_weight
         )
 
         # ========== Create final labels ==========
@@ -323,14 +396,18 @@ class StockTradingModel:
         # Sell: composite score <= sell_threshold AND future return is negative
         # Hold: everything else
         #
-        # Thresholds lowered to 0.2/0.3 for more signals (while still requiring confirmation)
+        # Thresholds adjusted for more balanced label distribution
 
         labels = pd.Series(0, index=df.index)
-        buy_threshold = 0.2  # Lowered from 0.5
-        sell_threshold = -0.2  # Lowered from -0.5
+        buy_threshold = 0.1  # Lowered from 0.2 for more buy signals
+        sell_threshold = -0.1  # Lowered from -0.2 for more sell signals
 
-        buy_condition = (composite >= buy_threshold) & (future_returns > threshold * 0.5)
-        sell_condition = (composite <= sell_threshold) & (future_returns < -threshold * 0.5)
+        buy_condition = (composite >= buy_threshold) & (
+            future_returns > threshold * 0.3
+        )
+        sell_condition = (composite <= sell_threshold) & (
+            future_returns < -threshold * 0.3
+        )
 
         labels[buy_condition] = 1
         labels[sell_condition] = -1
@@ -346,7 +423,7 @@ class StockTradingModel:
         use_composite_labels: bool = True,
         trend_weight: float = 0.3,
         momentum_weight: float = 0.3,
-        market_weight: float = 0.2
+        market_weight: float = 0.2,
     ) -> Dict[str, Any]:
         """Train the model.
 
@@ -365,11 +442,13 @@ class StockTradingModel:
 
         # Create labels with composite scoring
         labels = self._create_labels(
-            df, forward_days, threshold,
+            df,
+            forward_days,
+            threshold,
             use_composite=use_composite_labels,
             trend_weight=trend_weight,
             momentum_weight=momentum_weight,
-            market_weight=market_weight
+            market_weight=market_weight,
         )
 
         # Select features before preparing
@@ -417,11 +496,13 @@ class StockTradingModel:
         eval_labels_converted = None
         if eval_df is not None and not eval_df.empty:
             eval_labels = self._create_labels(
-                eval_df, forward_days, threshold,
+                eval_df,
+                forward_days,
+                threshold,
                 use_composite=use_composite_labels,
                 trend_weight=trend_weight,
                 momentum_weight=momentum_weight,
-                market_weight=market_weight
+                market_weight=market_weight,
             )
             eval_X = self._prepare_features(eval_df, use_selection=True)
             eval_valid_idx = ~eval_labels.isna()
@@ -445,16 +526,17 @@ class StockTradingModel:
                 l2_leaf_reg=self.l2_leaf_reg,
                 random_seed=model_seed,
                 verbose=False,
-                loss_function='MultiClass',
-                class_weights=class_weights
+                loss_function="MultiClass",
+                class_weights=class_weights,
             )
 
             if eval_data is not None:
                 model.fit(
-                    train_data, train_labels,
+                    train_data,
+                    train_labels,
                     eval_set=(eval_data, eval_labels_converted),
                     early_stopping_rounds=50,
-                    verbose=False
+                    verbose=False,
                 )
             else:
                 model.fit(train_data, train_labels, verbose=False)
@@ -469,14 +551,14 @@ class StockTradingModel:
         train_accuracy = (train_pred.flatten() == train_labels.values).mean()
 
         return {
-            'train_accuracy': train_accuracy,
-            'train_samples': len(train_data),
-            'feature_count': len(self.feature_names),
-            'label_distribution': {
-                'buy': int((train_labels == 2).sum()),
-                'hold': int((train_labels == 1).sum()),
-                'sell': int((train_labels == 0).sum())
-            }
+            "train_accuracy": train_accuracy,
+            "train_samples": len(train_data),
+            "feature_count": len(self.feature_names),
+            "label_distribution": {
+                "buy": int((train_labels == 2).sum()),
+                "hold": int((train_labels == 1).sum()),
+                "sell": int((train_labels == 0).sum()),
+            },
         }
 
     def predict(self, df: pd.DataFrame) -> Tuple[int, float]:
@@ -530,15 +612,15 @@ class StockTradingModel:
         # Handle case where only 2 classes were learned
         if len(avg_probabilities) == 2:
             return {
-                'sell_probability': float(avg_probabilities[0]),
-                'hold_probability': 0.0,
-                'buy_probability': float(avg_probabilities[1])
+                "sell_probability": float(avg_probabilities[0]),
+                "hold_probability": 0.0,
+                "buy_probability": float(avg_probabilities[1]),
             }
         else:
             return {
-                'sell_probability': float(avg_probabilities[0]),
-                'hold_probability': float(avg_probabilities[1]),
-                'buy_probability': float(avg_probabilities[2])
+                "sell_probability": float(avg_probabilities[0]),
+                "hold_probability": float(avg_probabilities[1]),
+                "buy_probability": float(avg_probabilities[2]),
             }
 
     def get_feature_importance(self) -> pd.DataFrame:
@@ -554,27 +636,26 @@ class StockTradingModel:
 
         avg_importance = np.mean(all_importance, axis=0)
 
-        return pd.DataFrame({
-            'feature': self.feature_names,
-            'importance': avg_importance
-        }).sort_values('importance', ascending=False)
+        return pd.DataFrame(
+            {"feature": self.feature_names, "importance": avg_importance}
+        ).sort_values("importance", ascending=False)
 
     def save(self, path: str) -> None:
         """Save ensemble model to file."""
         model_data = {
-            'models': self.models,
-            'feature_names': self.feature_names,
-            'config': self.config
+            "models": self.models,
+            "feature_names": self.feature_names,
+            "config": self.config,
         }
         joblib.dump(model_data, path)
 
     def load(self, path: str) -> None:
         """Load ensemble model from file."""
         model_data = joblib.load(path)
-        self.models = model_data['models']
+        self.models = model_data["models"]
         self.model = self.models[0] if self.models else None
-        self.feature_names = model_data['feature_names']
-        self.config = model_data.get('config', self.config)
+        self.feature_names = model_data["feature_names"]
+        self.config = model_data.get("config", self.config)
 
 
 # Global instance
