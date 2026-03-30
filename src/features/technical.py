@@ -514,6 +514,9 @@ class TechnicalFeatures(BaseFeatureExtractor):
         df['expanding_drawdown'] = drawdown
 
         # ========== Cross-asset Features (跨资产特征) ==========
+        # Defragment before bulk inserts
+        df = df.copy()
+
         # Price relative to VWAP
         df['price_vs_vwap'] = (df['close'] > df['vwap']).astype(int)
 
@@ -524,8 +527,5 @@ class TechnicalFeatures(BaseFeatureExtractor):
         # ========== Fill NaN values ==========
         # Fill NaN values with forward fill then backward fill for remaining
         df = df.ffill().bfill()
-
-        # Defragment DataFrame to avoid performance warnings
-        df = df.copy()
 
         return df
