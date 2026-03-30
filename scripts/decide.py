@@ -68,29 +68,107 @@ def print_backtest_comparison(results_df: pd.DataFrame) -> None:
 
 
 def get_strategy_decision(signals: pd.Series) -> tuple:
-    """Get the final decision from signals series.
+    """Get the final decision from signals series with conviction analysis.
 
     Returns:
         tuple: (action_str, confidence)
             action_str: 'BUY', 'HOLD', or 'SELL'
-            confidence: 1.0 if clear signal, 0.5 if ambiguous
+            confidence: 0.0-1.0 based on signal conviction
     """
     if signals.empty:
         return 'HOLD', 0.0
 
     last_signal = signals.iloc[-1]
+
+    # Calculate conviction based on recent signals
+    recent = signals.iloc[-5:]
+    recent_sum = recent.sum()
+
     if last_signal == 1:
-        return 'BUY', 1.0
+        # BUY signal - check conviction
+        conviction = 0.6 + 0.1 * min(abs(recent_sum), 3)  # 0.6-0.9 based on recent history
+        return 'BUY', min(conviction, 1.0)
     elif last_signal == -1:
-        return 'SELL', 1.0
+        # SELL signal - higher conviction for sell
+        conviction = 0.7 + 0.1 * min(abs(recent_sum), 3)  # 0.7-1.0
+        return 'SELL', min(conviction, 1.0)
     else:
-        # Check recent signals for conviction
-        recent = signals.iloc[-5:]
-        if recent.sum() > 0:
-            return 'HOLD', 0.5
-        elif recent.sum() < 0:
-            return 'HOLD', 0.5
-        return 'HOLD', 0.0
+        # HOLD - check if recent signals show momentum
+        if recent_sum > 2:
+            return 'HOLD', 0.4  # Slightly bullish momentum
+        elif recent_sum < -2:
+            return 'HOLD', 0.4  # Slightly bearish momentum
+        return 'HOLD', 0.2
+
+
+def _parse_return(return_str: str) -> float:
+    """Parse return string like '12.34%' to float 0.1234."""
+    if return_str in ('N/A', 'ERROR', None):
+        return None
+    try:
+        ret_str = return_str.replace('%', '')
+        return float(ret_str) / 100 if '%' in return_str else float(ret_str)
+    except:
+        return None
+
+
+def _parse_sharpe(sharpe_str: str) -> float:
+    """Parse Sharpe string to float."""
+    if sharpe_str in ('N/A', 'ERROR', None):
+        return 0.0
+    try:
+        return float(sharpe_str)
+    except:
+        return 0.0
+
+
+def _calculate_strategy_score(
+    return_val: float,
+    sharpe: float,
+    win_rate: str,
+    max_drawdown: str,
+    is_ml: bool
+) -> float:
+    """Calculate comprehensive strategy score with risk adjustment.
+
+    Score = return * 0.4 + sharpe * 0.3 + win_rate * 0.2 - drawdown_penalty * 0.1
+    """
+    if return_val is None:
+        return -999.0
+
+    # Parse win rate and max drawdown
+    try:
+        wr_str = win_rate.replace('%', '') if isinstance(win_rate, str) else '0'
+        win_rate_val = float(wr_str) / 100 if '%' in win_rate else float(wr_str)
+    except:
+        win_rate_val = 0.0
+
+    try:
+        dd_str = max_drawdown.replace('%', '') if isinstance(max_drawdown, str) else '0'
+        drawdown_val = float(dd_str) / 100 if '%' in max_drawdown else float(dd_str)
+    except:
+        drawdown_val = 0.0
+
+    # Risk-adjusted return: avoid division by very small drawdown
+    if drawdown_val < 0.01:
+        drawdown_val = 0.01
+
+    # Calculate score components
+    return_component = return_val * 10  # Scale to comparable range
+    sharpe_component = sharpe * 5       # Sharpe is usually 0-3
+    win_rate_component = win_rate_val * 10  # Win rate 0-1 -> 0-10
+    drawdown_penalty = drawdown_val * 5   # Larger drawdown = larger penalty
+
+    score = (return_component * 0.4 +
+             sharpe_component * 0.3 +
+             win_rate_component * 0.2 -
+             drawdown_penalty * 0.1)
+
+    # Prefer ML strategies slightly when scores are close
+    if is_ml:
+        score *= 1.05
+
+    return score
 
 
 def print_all_strategy_decisions(
@@ -103,12 +181,12 @@ def print_all_strategy_decisions(
 ) -> tuple:
     """Print decisions for all strategies and return the best one.
 
-    Returns:
-        tuple: (best_strategy_name, best_action, best_confidence)
+    Uses multi-indicator scoring and consensus mechanism.
     """
     print_section(" ALL STRATEGY DECISIONS")
 
     decisions = {}
+    action_counts = {'BUY': 0, 'HOLD': 0, 'SELL': 0}  # For consensus
 
     for strategy in strategies:
         try:
@@ -121,68 +199,88 @@ def print_all_strategy_decisions(
                 signals = strategy.generate_signals(backtest_df)
 
             action, confidence = get_strategy_decision(signals)
+            is_ml = isinstance(strategy, (MLStrategy, HybridStrategy, RollingMLStrategy, RollingHybridStrategy))
 
             # Find this strategy's backtest result
             result_row = results_df[results_df['Strategy'] == strategy.name]
             if not result_row.empty:
                 total_return = result_row['Total Return'].values[0]
-                sharpe = result_row['Sharpe Ratio'].values[0]
+                sharpe = _parse_sharpe(result_row['Sharpe Ratio'].values[0])
+                win_rate = result_row['Win Rate'].values[0]
+                max_drawdown = result_row['Max Drawdown'].values[0]
             else:
                 total_return = 'N/A'
-                sharpe = 'N/A'
+                sharpe = 0.0
+                win_rate = '0%'
+                max_drawdown = '0%'
+
+            # Calculate comprehensive score
+            return_val = _parse_return(total_return)
+            score = _calculate_strategy_score(
+                return_val, sharpe, win_rate, max_drawdown, is_ml
+            )
 
             decisions[strategy.name] = {
                 'action': action,
                 'confidence': confidence,
                 'return': total_return,
-                'sharpe': sharpe
+                'sharpe': f"{sharpe:.2f}",
+                'win_rate': win_rate,
+                'max_drawdown': max_drawdown,
+                'score': score,
+                'is_ml': is_ml
             }
+
+            # Count actions for consensus
+            if action != 'ERROR':
+                action_counts[action] = action_counts.get(action, 0) + 1
 
             print(f"\n  {strategy.name}:")
             print(f"    Decision  : {action}")
             print(f"    Confidence: {confidence:.2f}")
-            print(f"    Return     : {total_return}")
-            print(f"    Sharpe     : {sharpe}")
+            print(f"    Return    : {total_return}")
+            print(f"    Sharpe    : {sharpe:.2f}")
+            print(f"    Score     : {score:.3f}")
 
         except Exception as e:
             decisions[strategy.name] = {
                 'action': 'ERROR',
                 'confidence': 0.0,
                 'return': 'N/A',
-                'sharpe': 'N/A'
+                'sharpe': 'N/A',
+                'score': -999.0,
+                'is_ml': False
             }
             print(f"\n  {strategy.name}: ERROR - {e}")
 
-    # Find best strategy based on return (parse percentage string)
-    # If returns are equal, prefer ML-based strategies
+    # Find best strategy based on comprehensive score
     best_name = None
-    best_return = -float('inf')
-    best_is_ml = False
+    best_score = -float('inf')
+    best_action = None
+    best_confidence = 0.0
 
     for name, data in decisions.items():
-        if data['return'] == 'N/A' or data['return'] == 'ERROR':
-            continue
-        try:
-            # Parse percentage string like "12.34%"
-            ret_str = data['return'].replace('%', '')
-            ret_val = float(ret_str) / 100 if '%' in data['return'] else float(ret_str)
-            # Check if this is an ML-based strategy
-            is_ml = 'ML' in name or 'Hybrid' in name
-
-            # Choose based on: higher return first, then ML preference
-            if ret_val > best_return:
-                best_return = ret_val
-                best_name = name
-                best_is_ml = is_ml
-            elif ret_val == best_return and is_ml and not best_is_ml:
-                # Equal return, prefer ML strategy
-                best_return = ret_val
-                best_name = name
-                best_is_ml = is_ml
-        except:
+        if data['score'] == -999.0:  # Skip ERROR
             continue
 
-    return decisions, best_name
+        score = data['score']
+
+        # Consensus bonus: if >= 3 strategies agree, boost their scores
+        consensus = action_counts.get(data['action'], 0)
+        if consensus >= 3:
+            score *= 1.2  # 20% boost for consensus
+
+        if score > best_score:
+            best_score = score
+            best_name = name
+            best_action = data['action']
+            best_confidence = data['confidence']
+
+    # Apply consensus bonus to confidence
+    if best_action and action_counts.get(best_action, 0) >= 3:
+        best_confidence = min(best_confidence * 1.3, 1.0)
+
+    return decisions, best_name, best_action, best_confidence
 
 
 def print_feature_importance(model: StockTradingModel, top_n: int = 10) -> None:
@@ -341,7 +439,7 @@ def main():
         print_backtest_comparison(results_df)
 
         # Print all strategy decisions and find the best one
-        decisions, best_strategy_name = print_all_strategy_decisions(
+        decisions, best_strategy_name, best_action, best_confidence = print_all_strategy_decisions(
             strategies, results_df, backtest_df, features_df, model, min_samples
         )
 
@@ -350,13 +448,14 @@ def main():
         if best_strategy_name and best_strategy_name in decisions:
             best_decision = decisions[best_strategy_name]
             prediction_action_map = {'BUY': 1, 'HOLD': 0, 'SELL': -1}
-            prediction_action = prediction_action_map.get(best_decision['action'], 0)
-            prediction_confidence = best_decision['confidence']
+            prediction_action = prediction_action_map.get(best_action, 0)
+            prediction_confidence = best_confidence
             print_section(" FINAL RECOMMENDATION (BEST PERFORMING STRATEGY)")
-            print(f"\n  Best Strategy : {best_strategy_name}")
-            print(f"  Action        : {best_decision['action']}")
-            print(f"  Confidence     : {best_decision['confidence']:.2f}")
+            print(f"\n  Best Strategy  : {best_strategy_name}")
+            print(f"  Action        : {best_action}")
+            print(f"  Confidence    : {best_confidence:.2f}")
             print(f"  Backtest Ret  : {best_decision['return']}")
+            print(f"  Strategy Score: {best_decision['score']:.3f}")
         else:
             print_decision(prediction_action, prediction_confidence, prediction_proba)
 
