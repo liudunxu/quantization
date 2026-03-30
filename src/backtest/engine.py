@@ -258,10 +258,19 @@ class HybridStrategy(Strategy):
 class BacktestEngine:
     """Backtesting engine."""
 
-    def __init__(self, initial_cash: float = 100000, commission: float = 0.001, slippage: float = 0.001):
+    def __init__(
+        self,
+        initial_cash: float = 100000,
+        commission: float = 0.001,
+        slippage: float = 0.001,
+        stop_loss: float = 0.0,  # Stop loss threshold (e.g., 0.05 = 5% loss)
+        take_profit: float = 0.0  # Take profit threshold (e.g., 0.10 = 10% gain)
+    ):
         self.initial_cash = initial_cash
         self.commission = commission
         self.slippage = slippage
+        self.stop_loss = stop_loss
+        self.take_profit = take_profit
 
     def run(
         self,
@@ -293,6 +302,7 @@ class BacktestEngine:
         cash = self.initial_cash
         position = 0  # 0 = no stock, 1 = long
         shares = 0
+        entry_price = 0.0  # Track entry price for stop loss
         trades = []
         equity = [self.initial_cash]
         current_drawdown = 0
@@ -310,6 +320,7 @@ class BacktestEngine:
             comm = cost * self.commission
             cash = self.initial_cash - cost - comm
             position = 1
+            entry_price = first_price
             trades.append(Trade(
                 date=dates[0] if hasattr(dates[0], 'date') else pd.Timestamp(dates[0]),
                 action='buy',
@@ -343,6 +354,7 @@ class BacktestEngine:
                 comm = cost * self.commission
                 cash = cash - cost - comm
                 position = 1
+                entry_price = current_price
                 trades.append(Trade(
                     date=dates[i] if hasattr(dates[i], 'date') else pd.Timestamp(dates[i]),
                     action='buy',
@@ -364,6 +376,41 @@ class BacktestEngine:
                     quantity=shares,
                     commission=comm
                 ))
+                entry_price = 0.0
+
+            # Check stop loss and take profit when in position
+            if position == 1 and entry_price > 0:
+                price_change = (current_price - entry_price) / entry_price
+
+                # Stop loss triggered
+                if self.stop_loss > 0 and price_change <= -self.stop_loss:
+                    proceeds = shares * current_price
+                    comm = proceeds * self.commission
+                    cash = cash + proceeds - comm
+                    trades.append(Trade(
+                        date=dates[i] if hasattr(dates[i], 'date') else pd.Timestamp(dates[i]),
+                        action='sell',  # Stop loss sell
+                        price=current_price,
+                        quantity=shares,
+                        commission=comm
+                    ))
+                    position = 0
+                    entry_price = 0.0
+
+                # Take profit triggered
+                elif self.take_profit > 0 and price_change >= self.take_profit:
+                    proceeds = shares * current_price
+                    comm = proceeds * self.commission
+                    cash = cash + proceeds - comm
+                    trades.append(Trade(
+                        date=dates[i] if hasattr(dates[i], 'date') else pd.Timestamp(dates[i]),
+                        action='sell',  # Take profit sell
+                        price=current_price,
+                        quantity=shares,
+                        commission=comm
+                    ))
+                    position = 0
+                    entry_price = 0.0
 
         # Final equity
         final_price = prices[-1]

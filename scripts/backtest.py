@@ -132,7 +132,9 @@ def main():
     engine = BacktestEngine(
         initial_cash=args.initial_cash,
         commission=config.get('backtest.commission', 0.001),
-        slippage=config.get('backtest.slippage', 0.001)
+        slippage=config.get('backtest.slippage', 0.001),
+        stop_loss=0.05,  # 5% stop loss
+        take_profit=0.15  # 15% take profit
     )
 
     strategies = [
