@@ -155,6 +155,106 @@ class MLStrategy(Strategy):
         return signals
 
 
+class HybridStrategy(Strategy):
+    """Hybrid strategy combining ML and HighSellLowBuy.
+
+    Only trades when ML and simple strategy agree, otherwise defaults to simple.
+    This provides more robust signals by requiring confirmation.
+    """
+
+    def __init__(
+        self,
+        model,
+        lookback: int = 20,
+        threshold: float = 0.1,
+        min_samples: int = 20,
+        ml_confidence_threshold: float = 0.50,
+        bear_market_threshold: float = 0.005,
+        require_bull_market_for_buy: bool = True
+    ):
+        """Initialize hybrid strategy.
+
+        Args:
+            model: Trained ML model
+            lookback: Lookback period for HighSellLowBuy
+            threshold: Threshold for HighSellLowBuy
+            min_samples: Min samples before ML generates signals
+            ml_confidence_threshold: Min confidence for ML signal
+            bear_market_threshold: Market return threshold for bull/bear
+            require_bull_market_for_buy: Only buy in bull market
+        """
+        super().__init__(f"Hybrid Strategy (ML+HSSLB)")
+        self.model = model
+        self.min_samples = min_samples
+        self.ml_confidence_threshold = ml_confidence_threshold
+        self.bear_market_threshold = bear_market_threshold
+        self.require_bull_market_for_buy = require_bull_market_for_buy
+        # Simple strategy for fallback
+        self.simple_strategy = HighSellLowBuyStrategy(lookback=lookback, threshold=threshold)
+
+    def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        signals = pd.Series(0, index=df.index)
+
+        if len(df) < self.min_samples:
+            return signals
+
+        # Get simple strategy signals
+        simple_signals = self.simple_strategy.generate_signals(df)
+
+        # Get market returns for regime detection
+        market_returns = None
+        if 'index_returns' in df.columns:
+            market_returns = df['index_returns'].values
+
+        for i in range(self.min_samples, len(df)):
+            try:
+                # Get ML prediction
+                pred, confidence = self.model.predict(df.iloc[:i+1])
+                ml_signal = pred
+
+                # Check market regime
+                is_bear_market = False
+                if market_returns is not None and i >= 1:
+                    recent_market_return = market_returns[i-1] if i > 0 else 0
+                    if recent_market_return < self.bear_market_threshold:
+                        is_bear_market = True
+
+                simple_signal = simple_signals.iloc[i]
+
+                # Determine final signal
+                if confidence >= self.ml_confidence_threshold:
+                    # ML is confident
+                    if ml_signal == simple_signal:
+                        # They agree - use the signal
+                        final_signal = ml_signal
+                    else:
+                        # They disagree - use simple strategy (more conservative)
+                        final_signal = simple_signal
+
+                    # Apply market filter for buys
+                    if is_bear_market and self.require_bull_market_for_buy:
+                        if final_signal == 1:
+                            final_signal = 0  # No buy in bear market
+
+                    signals.iloc[i] = final_signal
+                else:
+                    # ML not confident - use simple strategy
+                    # But apply market filter
+                    if is_bear_market and self.require_bull_market_for_buy:
+                        if simple_signal == 1:
+                            signals.iloc[i] = 0
+                        else:
+                            signals.iloc[i] = simple_signal
+                    else:
+                        signals.iloc[i] = simple_signal
+
+            except Exception:
+                # Fall back to simple on error
+                signals.iloc[i] = simple_signals.iloc[i]
+
+        return signals
+
+
 class BacktestEngine:
     """Backtesting engine."""
 

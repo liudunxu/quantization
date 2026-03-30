@@ -22,6 +22,7 @@ from src.backtest import (
     BuyAndHoldStrategy,
     HighSellLowBuyStrategy,
     MLStrategy,
+    HybridStrategy,
     BacktestResult
 )
 
@@ -143,15 +144,24 @@ def main():
             name="ML Strategy (CatBoost)",
             min_samples=min_samples,
             confidence_threshold=0.55,
-            bear_market_threshold=0.005,  # Market return >0.5% is bullish
+            bear_market_threshold=0.005,
+            require_bull_market_for_buy=True
+        ),
+        HybridStrategy(
+            model,
+            lookback=10,
+            threshold=0.10,
+            min_samples=min_samples,
+            ml_confidence_threshold=0.50,
+            bear_market_threshold=0.005,
             require_bull_market_for_buy=True
         )
     ]
 
     results = []
     for strategy in strategies:
-        # For MLStrategy, use full history to generate signals
-        if isinstance(strategy, MLStrategy):
+        # For ML-based strategies, use full history to generate signals
+        if isinstance(strategy, (MLStrategy, HybridStrategy)):
             signals = strategy.generate_signals(features_df)
             signals = signals.iloc[-len(backtest_df):]
             result = engine.run(backtest_df, strategy, precomputed_signals=signals)

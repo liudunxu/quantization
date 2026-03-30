@@ -8,6 +8,7 @@ from .engine import (
     BuyAndHoldStrategy,
     HighSellLowBuyStrategy,
     MLStrategy,
+    HybridStrategy,
     run_backtest
 )
 
@@ -19,5 +20,6 @@ __all__ = [
     'BuyAndHoldStrategy',
     'HighSellLowBuyStrategy',
     'MLStrategy',
+    'HybridStrategy',
     'run_backtest'
 ]
