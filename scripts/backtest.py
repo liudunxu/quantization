@@ -98,14 +98,27 @@ def main():
 
     # Get aggressive training params from config
     model_config = config.get_section('model')
-    forward_days = model_config.get('training', {}).get('forward_days', 2)
-    threshold = model_config.get('training', {}).get('threshold', 0.005)
+    training_config = model_config.get('training', {})
+    forward_days = training_config.get('forward_days', 5)
+    threshold = training_config.get('threshold', 0.01)
     min_samples = model_config.get('strategy', {}).get('min_samples', 20)
     confidence_threshold = model_config.get('strategy', {}).get('confidence_threshold', 0.25)
 
+    # Composite label parameters
+    use_composite_labels = training_config.get('use_composite_labels', True)
+    trend_weight = training_config.get('trend_weight', 0.30)
+    momentum_weight = training_config.get('momentum_weight', 0.30)
+    market_weight = training_config.get('market_weight', 0.20)
+
     try:
-        model.train(train_df, forward_days=forward_days, threshold=threshold)
-        print(f"  Model trained successfully (forward_days={forward_days}, threshold={threshold:.3f})")
+        model.train(
+            train_df, forward_days=forward_days, threshold=threshold,
+            use_composite_labels=use_composite_labels,
+            trend_weight=trend_weight,
+            momentum_weight=momentum_weight,
+            market_weight=market_weight
+        )
+        print(f"  Model trained (forward_days={forward_days}, threshold={threshold:.3f})")
     except Exception as e:
         print(f"  Error training model: {e}")
         sys.exit(1)

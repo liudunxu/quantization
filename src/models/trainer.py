@@ -80,19 +80,92 @@ class StockTradingModel:
 
         return feature_df
 
-    def _create_labels(self, df: pd.DataFrame, forward_days: int = 5, threshold: float = 0.02) -> pd.Series:
-        """Create labels for training.
+    def _create_labels(
+        self,
+        df: pd.DataFrame,
+        forward_days: int = 5,
+        threshold: float = 0.02,
+        use_composite: bool = True,
+        trend_weight: float = 0.3,
+        momentum_weight: float = 0.3,
+        market_weight: float = 0.2
+    ) -> pd.Series:
+        """Create labels for training with multi-dimensional composite scoring.
 
         Label meanings:
-        - 1: Buy (price will go up more than threshold)
-        - 0: Hold
-        - -1: Sell (price will go down more than threshold)
+        - 1: Buy (strong upward signal)
+        - 0: Hold (neutral/inconclusive)
+        - -1: Sell (strong downward signal)
+
+        Composite scoring considers:
+        - Future returns: Whether price actually went up/down
+        - Trend alignment: MA arrangement (bullish/bearish)
+        - Momentum confirmation: RSI, MACD direction
+        - Market environment: Market index performance
         """
         future_returns = df['close'].shift(-forward_days) / df['close'] - 1
 
+        if not use_composite:
+            # Original simple threshold method
+            labels = pd.Series(0, index=df.index)
+            labels[future_returns > threshold] = 1
+            labels[future_returns < -threshold] = -1
+            return labels
+
+        # ========== Calculate component scores ==========
+
+        # 1. Future return score (required condition) - use float for mixing
+        return_score = pd.Series(0.0, index=df.index)
+        return_score[future_returns > threshold] = 1.0
+        return_score[future_returns < -threshold] = -1.0
+
+        # 2. Trend score (MA arrangement) - use float
+        trend_score = pd.Series(0.0, index=df.index)
+        if 'ma_bullish_arrange' in df.columns and 'ma_bearish_arrange' in df.columns:
+            trend_score[df['ma_bullish_arrange'] == 1] = 1.0
+            trend_score[df['ma_bearish_arrange'] == 1] = -1.0
+
+        # 3. Momentum score (RSI, MACD)
+        momentum_score = pd.Series(0.0, index=df.index)
+        if 'rsi' in df.columns:
+            # RSI > 60 is bullish, < 40 is bearish
+            momentum_score[df['rsi'] > 60] += 0.5
+            momentum_score[df['rsi'] < 40] -= 0.5
+        if 'macd_hist' in df.columns:
+            # MACD histogram positive is bullish
+            momentum_score[df['macd_hist'] > 0] += 0.5
+            momentum_score[df['macd_hist'] < 0] -= 0.5
+
+        # Normalize momentum to -1, 0, 1
+        momentum_score = momentum_score.clip(-1.0, 1.0)
+
+        # 4. Market score (if available)
+        market_score = pd.Series(0.0, index=df.index)
+        if 'index_returns' in df.columns:
+            market_score[df['index_returns'] > 0.01] = 0.5
+            market_score[df['index_returns'] < -0.01] = -0.5
+
+        # ========== Combine into composite signal ==========
+        # Weighted combination
+        return_weight = 1.0 - trend_weight - momentum_weight - market_weight
+        composite = (
+            return_score * return_weight +
+            trend_score * trend_weight +
+            momentum_score * momentum_weight +
+            market_score * market_weight
+        )
+
+        # ========== Create final labels ==========
+        # Buy: composite score >= 0.5 AND future return is positive
+        # Sell: composite score <= -0.5 AND future return is negative
+        # Hold: everything else
+
         labels = pd.Series(0, index=df.index)
-        labels[future_returns > threshold] = 1
-        labels[future_returns < -threshold] = -1
+        buy_condition = (composite >= 0.5) & (future_returns > threshold * 0.5)
+        sell_condition = (composite <= -0.5) & (future_returns < -threshold * 0.5)
+
+        labels[buy_condition] = 1
+        labels[sell_condition] = -1
 
         return labels
 
@@ -101,14 +174,35 @@ class StockTradingModel:
         df: pd.DataFrame,
         forward_days: int = 5,
         threshold: float = 0.02,
-        eval_df: Optional[pd.DataFrame] = None
+        eval_df: Optional[pd.DataFrame] = None,
+        use_composite_labels: bool = True,
+        trend_weight: float = 0.3,
+        momentum_weight: float = 0.3,
+        market_weight: float = 0.2
     ) -> Dict[str, Any]:
-        """Train the model."""
+        """Train the model.
+
+        Args:
+            df: Training data with features
+            forward_days: Days ahead to predict
+            threshold: Return threshold for labeling
+            eval_df: Optional evaluation data
+            use_composite_labels: Use multi-dimensional composite labels
+            trend_weight: Weight for trend alignment in composite labels
+            momentum_weight: Weight for momentum in composite labels
+            market_weight: Weight for market environment in composite labels
+        """
         if df.empty or len(df) < 50:
             raise ValueError("Insufficient data for training")
 
-        # Create labels first
-        labels = self._create_labels(df, forward_days, threshold)
+        # Create labels with composite scoring
+        labels = self._create_labels(
+            df, forward_days, threshold,
+            use_composite=use_composite_labels,
+            trend_weight=trend_weight,
+            momentum_weight=momentum_weight,
+            market_weight=market_weight
+        )
 
         # Select features before preparing
         self.selected_features = self._select_features(df, labels)
@@ -145,7 +239,13 @@ class StockTradingModel:
         train_labels = labels  # Already converted to 0,1,2
 
         if eval_df is not None and not eval_df.empty:
-            eval_labels = self._create_labels(eval_df, forward_days, threshold)
+            eval_labels = self._create_labels(
+                eval_df, forward_days, threshold,
+                use_composite=use_composite_labels,
+                trend_weight=trend_weight,
+                momentum_weight=momentum_weight,
+                market_weight=market_weight
+            )
             eval_X = self._prepare_features(eval_df, use_selection=True)
             eval_valid_idx = ~eval_labels.isna()
             eval_X_valid = eval_X[eval_valid_idx]

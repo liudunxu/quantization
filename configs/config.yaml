@@ -65,6 +65,11 @@ model:
   training:
     forward_days: 5       # Longer prediction horizon for stability
     threshold: 0.01       # 1% threshold - reduces noise signals
+    # Composite label parameters (multi-dimensional labeling)
+    use_composite_labels: true
+    trend_weight: 0.30    # Weight for MA trend alignment
+    momentum_weight: 0.30 # Weight for RSI/MACD momentum
+    market_weight: 0.20   # Weight for market index performance
   strategy:
     min_samples: 30       # More samples before starting predictions
     confidence_threshold: 0.30  # Balanced confidence threshold
