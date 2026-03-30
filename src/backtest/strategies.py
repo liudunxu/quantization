@@ -31,38 +31,38 @@ from .rule_strategies import (
 MARKET_PARAMS = {
     "a_share": {
         # A股市场：政策影响大、风格切换快、波动性高
-        "highsell_lookback": 10,  # 更短产生更多信号
-        "highsell_threshold": 0.08,  # 更低threshold产生更多信号
-        "ml_confidence_threshold": 0.35,  # 较低置信度产生更多信号
-        "rolling_train_window": 90,  # 更短的训练窗口
-        "rolling_retrain_interval": 10,  # 更频繁的retrain
-        "bear_market_threshold": -0.01,  # 放宽熊市定义
+        "highsell_lookback": 8,  # 更短产生更多信号
+        "highsell_threshold": 0.06,  # 更低threshold产生更多信号
+        "ml_confidence_threshold": 0.30,  # 较低置信度产生更多信号
+        "rolling_train_window": 60,  # 更短的训练窗口
+        "rolling_retrain_interval": 8,  # 更频繁的retrain
+        "bear_market_threshold": -0.012,  # 放宽熊市定义
     },
     "hk": {
         # 港股市场：受A股和美股双重影响
         "highsell_lookback": 10,  # 较短产生更多信号
-        "highsell_threshold": 0.08,  # 较低threshold产生更多信号
-        "ml_confidence_threshold": 0.35,  # 较低置信度产生更多信号
-        "rolling_train_window": 90,  # 较短训练窗口
+        "highsell_threshold": 0.07,  # 较低threshold产生更多信号
+        "ml_confidence_threshold": 0.32,  # 较低置信度产生更多信号
+        "rolling_train_window": 80,  # 较短训练窗口
         "rolling_retrain_interval": 10,  # 更频繁的retrain
         "bear_market_threshold": -0.008,
     },
     "us": {
         # 美股市场：趋势性强、波动相对平稳
-        "highsell_lookback": 10,  # 较短lookback产生更多信号
-        "highsell_threshold": 0.08,  # 较低threshold产生更多信号
-        "ml_confidence_threshold": 0.35,  # 较低置信度产生更多信号
-        "rolling_train_window": 90,  # 较短训练窗口
-        "rolling_retrain_interval": 10,  # 更频繁的retrain
+        "highsell_lookback": 12,  # 较长lookback更稳定
+        "highsell_threshold": 0.09,  # 较高threshold减少噪音
+        "ml_confidence_threshold": 0.35,  # 较高置信度
+        "rolling_train_window": 100,  # 较长训练窗口
+        "rolling_retrain_interval": 12,  # 较少retrain
         "bear_market_threshold": -0.005,
     },
     "default": {
         # 默认参数
-        "highsell_lookback": 15,
-        "highsell_threshold": 0.10,
-        "ml_confidence_threshold": 0.40,
-        "rolling_train_window": 120,
-        "rolling_retrain_interval": 15,
+        "highsell_lookback": 10,
+        "highsell_threshold": 0.08,
+        "ml_confidence_threshold": 0.35,
+        "rolling_train_window": 90,
+        "rolling_retrain_interval": 10,
         "bear_market_threshold": -0.008,
     },
 }

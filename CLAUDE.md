@@ -16,6 +16,7 @@ This project implements a machine learning-based stock trading decision system t
 ├── configs/           # Configuration files (config.yaml)
 ├── cache/             # Feature cache (parquet, never expires)
 ├── data/              # Raw data storage
+├── logs/              # Log files
 ├── models/            # Trained model files
 ├── src/
 │   ├── data_providers/ # Multi-provider data fetching (yfinance, akshare, tushare)
@@ -50,6 +51,7 @@ Multi-provider data fetching with automatic fallback:
 - Auto class balancing, early stopping
 - Feature importance analysis
 - Composite label generation (combining returns, trend, momentum, market)
+- Ensemble learning with bagging for diversity
 
 #### 4. Backtest (`src/backtest/`)
 - Multiple strategies: ML Strategy, Buy & Hold, High Sell Low Buy, and more
@@ -68,15 +70,39 @@ The system uses ATR-based position sizing:
 - **ATR multiplier**: 1.2 (stop loss distance)
 - **Minimum lot**: 50 shares for expensive stocks (>$100), 100 shares otherwise
 - **Maximum lots per trade**: 3 lots (300 shares)
+- **Initial position**: Uses 50% of capital to leave room for adding positions
 
 Position formula: `shares = risk_amount / (ATR * atr_multiplier / price)`
 
 ## Market Filtering
 
 - Uses 3-day average market return to determine regime (smoother than single day)
-- Bear market threshold varies by market (A-shares: -1%, US: -0.5%)
+- Bear market threshold varies by market (A-shares: -1.2%, HK: -0.8%, US: -0.5%)
 - High confidence buy signals (≥0.7) allowed even in bear market
 - All strategies use consistent initial position sizing
+
+## Market-Specific Parameters
+
+### A-Share (A股)
+- **High Sell Low Buy**: lookback=8, threshold=0.06
+- **ML Confidence**: 0.30
+- **Rolling Window**: 60 days
+- **Retrain Interval**: 8 days
+- **Bear Market Threshold**: -1.2%
+
+### HK Stock (港股)
+- **High Sell Low Buy**: lookback=10, threshold=0.07
+- **ML Confidence**: 0.32
+- **Rolling Window**: 80 days
+- **Retrain Interval**: 10 days
+- **Bear Market Threshold**: -0.8%
+
+### US Stock (美股)
+- **High Sell Low Buy**: lookback=12, threshold=0.09
+- **ML Confidence**: 0.35
+- **Rolling Window**: 100 days
+- **Retrain Interval**: 12 days
+- **Bear Market Threshold**: -0.5%
 
 ## Feature Caching
 
@@ -139,8 +165,23 @@ python scripts/backtest.py --stock 000001.SZ --days 30 --train-days 365
 python scripts/backtest.py --stock 603986.SH --days 30 --output results.csv
 ```
 
+### Run Tests
+```bash
+python -m pytest tests/ -v
+```
+
 ## Configuration
 See `configs/config.yaml` for model parameters and feature settings.
 
 ## Dependencies
 See `requirements.txt`
+
+## TODOs
+- [ ] Add sentiment analysis features
+- [ ] Implement real-time trading signals
+- [ ] Add portfolio optimization
+- [ ] Implement risk management module
+- [ ] Add backtest visualization
+- [ ] Support more data providers (e.g., EastMoney, Wind)
+- [ ] Add automated model retraining
+- [ ] Implement cross-validation for model selection

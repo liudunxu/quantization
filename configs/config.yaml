@@ -62,18 +62,58 @@ model:
     l2_leaf_reg: 5        # Increased for more regularization
     random_seed: 42
     n_estimators: 3       # Number of models in ensemble for bagging
-  # Trading parameters - balanced for HK stocks
+  
+  # Market-specific model parameters
+  a_share:
+    iterations: 250
+    depth: 4
+    learning_rate: 0.03
+    l2_leaf_reg: 3
+    forward_days: 3       # Shorter prediction for A-share
+    threshold: 0.008      # Lower threshold for more signals
+    min_samples: 25
+    confidence_threshold: 0.30
+    trend_weight: 0.25
+    momentum_weight: 0.35
+    market_weight: 0.25
+  
+  hk:
+    iterations: 300
+    depth: 5
+    learning_rate: 0.025
+    l2_leaf_reg: 4
+    forward_days: 5
+    threshold: 0.01
+    min_samples: 30
+    confidence_threshold: 0.35
+    trend_weight: 0.30
+    momentum_weight: 0.30
+    market_weight: 0.20
+  
+  us:
+    iterations: 350
+    depth: 5
+    learning_rate: 0.02
+    l2_leaf_reg: 5
+    forward_days: 5
+    threshold: 0.012      # Higher threshold for US
+    min_samples: 35
+    confidence_threshold: 0.35
+    trend_weight: 0.35    # Higher trend weight for US
+    momentum_weight: 0.25
+    market_weight: 0.20
+  
   training:
-    forward_days: 5       # Longer prediction horizon for stability
-    threshold: 0.01       # 1% threshold - reduces noise signals
-    # Composite label parameters (multi-dimensional labeling)
+    forward_days: 5
+    threshold: 0.01
     use_composite_labels: true
-    trend_weight: 0.30    # Weight for MA trend alignment
-    momentum_weight: 0.30 # Weight for RSI/MACD momentum
-    market_weight: 0.20   # Weight for market index performance
+    trend_weight: 0.30
+    momentum_weight: 0.30
+    market_weight: 0.20
+  
   strategy:
-    min_samples: 30       # More samples before starting predictions
-    confidence_threshold: 0.30  # Balanced confidence threshold
+    min_samples: 30
+    confidence_threshold: 0.30
 
 backtest:
   initial_cash: 100000
