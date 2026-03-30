@@ -31,39 +31,39 @@ from .rule_strategies import (
 MARKET_PARAMS = {
     'a_share': {
         # A股市场：政策影响大、风格切换快、波动性高
-        'highsell_lookback': 15,      # 更短的lookback适应快速变化
-        'highsell_threshold': 0.12,   # 较低threshold产生更多信号
-        'ml_confidence_threshold': 0.45,  # 较低置信度，适应快速变化
-        'rolling_train_window': 120,   # 更短的训练窗口
-        'rolling_retrain_interval': 15,  # 更频繁的retrain
-        'bear_market_threshold': -0.008,  # 更严格的熊市定义
+        'highsell_lookback': 10,      # 更短产生更多信号
+        'highsell_threshold': 0.08,    # 更低threshold产生更多信号
+        'ml_confidence_threshold': 0.35,  # 较低置信度产生更多信号
+        'rolling_train_window': 90,    # 更短的训练窗口
+        'rolling_retrain_interval': 10,  # 更频繁的retrain
+        'bear_market_threshold': -0.01, # 放宽熊市定义
     },
     'hk': {
         # 港股市场：受A股和美股双重影响
-        'highsell_lookback': 20,
-        'highsell_threshold': 0.15,
-        'ml_confidence_threshold': 0.50,
-        'rolling_train_window': 180,
-        'rolling_retrain_interval': 20,
-        'bear_market_threshold': -0.005,
+        'highsell_lookback': 15,
+        'highsell_threshold': 0.10,
+        'ml_confidence_threshold': 0.40,
+        'rolling_train_window': 120,
+        'rolling_retrain_interval': 15,
+        'bear_market_threshold': -0.008,
     },
     'us': {
         # 美股市场：趋势性强、波动相对平稳
-        'highsell_lookback': 25,       # 更长的lookback捕捉长期趋势
-        'highsell_threshold': 0.18,    # 较高threshold减少交易频率
-        'ml_confidence_threshold': 0.55,  # 较高置信度
-        'rolling_train_window': 240,   # 更长的训练窗口
-        'rolling_retrain_interval': 30,  # 较少的retrain
-        'bear_market_threshold': -0.003,  # 较宽松的熊市定义
+        'highsell_lookback': 20,       # 中等lookback
+        'highsell_threshold': 0.12,     # 适度threshold
+        'ml_confidence_threshold': 0.45,  # 适中置信度
+        'rolling_train_window': 180,   # 中等训练窗口
+        'rolling_retrain_interval': 20,  # 适度retrain频率
+        'bear_market_threshold': -0.005,
     },
     'default': {
         # 默认参数
-        'highsell_lookback': 20,
-        'highsell_threshold': 0.15,
-        'ml_confidence_threshold': 0.50,
-        'rolling_train_window': 180,
-        'rolling_retrain_interval': 20,
-        'bear_market_threshold': -0.005,
+        'highsell_lookback': 15,
+        'highsell_threshold': 0.10,
+        'ml_confidence_threshold': 0.40,
+        'rolling_train_window': 120,
+        'rolling_retrain_interval': 15,
+        'bear_market_threshold': -0.008,
     }
 }
 
@@ -200,13 +200,13 @@ def get_market_strategies(
         ),
 
         # Rule-based strategies from strategy references
-        MAGoldenCrossStrategy(fast_ma=5, slow_ma=10),
+        MAGoldenCrossStrategy(fast_ma=5, slow_ma=10, volume_ratio=1.0),  # 降低量能确认阈值
         BullTrendStrategy(ma5_period=5, ma10_period=10, ma20_period=20),
-        ShrinkPullbackStrategy(lookback=5, ma_period=5),
-        BottomVolumeStrategy(drop_threshold=0.15, volume_multiplier=3.0),
-        BoxOscillationStrategy(lookback=60),
-        VolumeBreakoutStrategy(lookback=20, volume_multiplier=2.0),
-        MACDDivergenceStrategy(lookback=20),
+        ShrinkPullbackStrategy(lookback=5, ma_period=5, volume_shrink=0.8),  # 放宽缩量要求
+        BottomVolumeStrategy(drop_threshold=0.10, volume_multiplier=2.0),  # 降低跌幅和量能要求
+        BoxOscillationStrategy(lookback=40, support_margin=0.03, resistance_margin=0.03),  # 更宽的支撑阻力
+        VolumeBreakoutStrategy(lookback=15, volume_multiplier=1.5),  # 更短周期、更低量能
+        MACDDivergenceStrategy(lookback=15),  # 更短周期
 
         # === ML-based strategies ===
         # Pure ML strategy
