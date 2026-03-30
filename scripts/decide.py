@@ -24,6 +24,7 @@ from src.backtest import (
     BuyAndHoldStrategy,
     HighSellLowBuyStrategy,
     MLStrategy,
+    HybridStrategy,
     run_backtest
 )
 
@@ -202,7 +203,16 @@ def main():
                 name="ML Strategy",
                 min_samples=min_samples,
                 confidence_threshold=0.50,
-                bear_market_threshold=-0.002,
+                bear_market_threshold=0.005,
+                require_bull_market_for_buy=True
+            ),
+            HybridStrategy(
+                model,
+                lookback=10,
+                threshold=0.10,
+                min_samples=min_samples,
+                ml_confidence_threshold=0.50,
+                bear_market_threshold=0.005,
                 require_bull_market_for_buy=True
             )
         ]
