@@ -626,6 +626,30 @@ RollingHybridStrategy(
 - RollingML: 0 trades (极度保守,只持有现金)
 - RollingHybrid: 有交易 (因为Simple策略提供备份信号)
 
+### 15.9 资金流特征 (Money Flow Features)
+新增资金流特征用于A股:
+
+```python
+# 主力资金流向
+main_net_flow              # 主力净流入 (亿元)
+main_net_flow_ratio        # 主力净流入占比
+main_net_flow_momentum_3d   # 3日资金流动量
+main_net_flow_ratio_ma5     # 5日资金流均线
+main_net_flow_volatility    # 资金流波动率
+
+# 分级资金流
+super_large_net_flow       # 超大单净流入
+large_net_flow             # 大单净流入
+medium_net_flow            # 中单净流入
+small_net_flow             # 小单净流入 (散户)
+
+# 衍生指标
+institutional_ratio         # 机构比例 (主力+超大单占比)
+```
+
+**数据来源**: 东方财富 (via akshare `stock_individual_fund_flow`)
+**适用市场**: A股 (SH/SZ), 不适用港股
+
 ---
 
 ## 16. 已接入代码位置汇总
@@ -636,8 +660,9 @@ RollingHybridStrategy(
 | 基本面 | `src/features/fundamental.py` | ~30个 |
 | 市场数据 | `src/features/market.py` | ~25个 |
 | 行业板块 | `src/features/industry.py` | ~8个 |
+| 资金流向 | `src/features/money_flow.py` | ~15个 |
 | 特征组合 | `src/features/combinator.py` | ~10个 (组合特征) |
-| **合计** | | **~253个** |
+| **合计** | | **~268个** |
 
 ---
 

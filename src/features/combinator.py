@@ -8,6 +8,7 @@ from .technical import TechnicalFeatures
 from .fundamental import FundamentalFeatures
 from .market import MarketFeatures
 from .industry import IndustryFeatures
+from .money_flow import MoneyFlowFeatures
 
 
 class FeatureCombinator:
@@ -19,7 +20,8 @@ class FeatureCombinator:
             'technical': TechnicalFeatures(cache),
             'fundamental': FundamentalFeatures(cache),
             'market': MarketFeatures(cache),
-            'industry': IndustryFeatures(cache)
+            'industry': IndustryFeatures(cache),
+            'money_flow': MoneyFlowFeatures(cache)
         }
 
     def get_combined_features(
@@ -59,6 +61,14 @@ class FeatureCombinator:
         if not industry_df.empty:
             features['industry'] = industry_df
 
+        # Money flow features (time series) - A-share only
+        if not stock_code.endswith('.HK'):
+            mf_df = self.extractors['money_flow'].get_or_extract(
+                stock_code, force_refresh=force_refresh, days=days
+            )
+            if not mf_df.empty:
+                features['money_flow'] = mf_df
+
         if not features:
             return pd.DataFrame()
 
@@ -83,6 +93,16 @@ class FeatureCombinator:
                 on='date',
                 how='left',
                 suffixes=('', '_industry')
+            )
+
+        # Merge money flow features
+        if 'money_flow' in features and not features['money_flow'].empty:
+            mf_cols = [c for c in features['money_flow'].columns if c not in ['stock_code', 'date']]
+            combined = combined.merge(
+                features['money_flow'][['date'] + mf_cols],
+                on='date',
+                how='left',
+                suffixes=('', '_mf')
             )
 
         # Merge fundamental features (broadcast to all rows)
