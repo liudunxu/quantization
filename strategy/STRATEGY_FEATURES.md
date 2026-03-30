@@ -569,6 +569,23 @@ bear_market_threshold=0.005  # 大盘收益 > 0.5% 才算看涨
 require_bull_market_for_buy=True  # 看跌市场只允许卖出
 ```
 
+### 15.6 混合策略 (Hybrid Strategy)
+结合ML和HighSellLowBuy的混合策略:
+- **信号一致时**: 使用ML信号 (需要置信度 > 阈值)
+- **信号不一致时**: 退回到简单策略 (更保守)
+- **市场过滤**: 看跌市场禁止买入
+
+```python
+class HybridStrategy(Strategy):
+    def __init__(self, model, lookback=10, threshold=0.10,
+                 ml_confidence_threshold=0.50, bear_market_threshold=0.005):
+        ...
+```
+
+**适用场景**:
+- 港股等熊市环境: 混合策略优于纯ML
+- A股等牛市环境: 纯ML策略表现更好
+
 ---
 
 ## 16. 已接入代码位置汇总
