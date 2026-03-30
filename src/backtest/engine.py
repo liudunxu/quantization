@@ -521,21 +521,136 @@ class RollingHybridStrategy(Strategy):
 
 
 class BacktestEngine:
-    """Backtesting engine."""
+    """Backtesting engine with dynamic position sizing."""
 
     def __init__(
         self,
         initial_cash: float = 100000,
         commission: float = 0.001,
         slippage: float = 0.001,
-        stop_loss: float = 0.0,  # Stop loss threshold (e.g., 0.05 = 5% loss)
-        take_profit: float = 0.0  # Take profit threshold (e.g., 0.10 = 10% gain)
+        stop_loss: float = 0.0,
+        take_profit: float = 0.0,
+        max_lots_per_trade: int = 5,  # Max 5 lots (500 shares) per trade
+        lot_size: int = 100  # 1 lot = 100 shares
     ):
         self.initial_cash = initial_cash
         self.commission = commission
         self.slippage = slippage
         self.stop_loss = stop_loss
         self.take_profit = take_profit
+        self.max_lots_per_trade = max_lots_per_trade
+        self.lot_size = lot_size
+        self.max_shares_per_trade = max_lots_per_trade * lot_size
+
+    def _calculate_position_size(
+        self,
+        signal: int,
+        cash: float,
+        current_price: float,
+        prev_price: float,
+        position: int,
+        entry_price: float,
+        avg_cost: float
+    ) -> int:
+        """Calculate dynamic position size based on price movement.
+
+        Position sizing rules:
+        - Buy more when price drops significantly (mean reversion)
+        - Buy less when price rises (avoid chasing)
+        - Sell more when price rises significantly (take profit)
+        - Sell less when price drops (hold to avoid realized loss)
+
+        Args:
+            signal: Trading signal (1=buy, 0=hold, -1=sell)
+            cash: Available cash
+            current_price: Current price
+            prev_price: Previous day's close
+            position: Current position (0 or 1)
+            entry_price: Entry price for current position
+            avg_cost: Average cost basis
+
+        Returns:
+            Number of shares to trade
+        """
+        if signal == 0:
+            return 0
+
+        max_shares = self.max_shares_per_trade
+
+        # Calculate price change from previous day
+        if prev_price > 0:
+            daily_change = (current_price - prev_price) / prev_price
+        else:
+            daily_change = 0
+
+        # Calculate position change from entry
+        if entry_price > 0:
+            position_change = (current_price - entry_price) / entry_price
+        else:
+            position_change = 0
+
+        # Calculate how many shares we can afford
+        affordable_shares = int(cash / (current_price * (1 + self.commission)))
+
+        if signal == 1 and position == 0:
+            # Buy signal - calculate dynamic size
+
+            # Base size on cash (use up to 50% of cash if needed)
+            base_shares = int(cash * 0.5 / current_price)
+
+            # Adjust based on price movement (mean reversion)
+            if daily_change < -0.03:  # Dropped > 3%
+                # Price dropped a lot - buy more (up to 100% of max)
+                multiplier = 1.5
+            elif daily_change < -0.01:  # Dropped > 1%
+                multiplier = 1.2
+            elif daily_change > 0.03:  # Rose > 3%
+                # Price rose a lot - buy less (avoid chasing)
+                multiplier = 0.5
+            elif daily_change > 0.01:  # Rose > 1%
+                multiplier = 0.8
+            else:
+                multiplier = 1.0
+
+            target_shares = int(min(max_shares, affordable_shares, base_shares) * multiplier)
+            return max(100, target_shares)  # At least 1 lot
+
+        elif signal == -1 and position == 1:
+            # Sell signal - calculate dynamic size
+
+            # Calculate current profit/loss
+            if avg_cost > 0:
+                unrealized_pnl = (current_price - avg_cost) / avg_cost
+            else:
+                unrealized_pnl = 0
+
+            # Base sell on position size
+            base_shares = max_shares
+
+            # Adjust based on unrealized P&L (mean reversion)
+            if unrealized_pnl > 0.10:  # Profit > 10%
+                # Good profit - sell more (take profit)
+                multiplier = 1.5
+            elif unrealized_pnl > 0.05:  # Profit > 5%
+                multiplier = 1.2
+            elif unrealized_pnl < -0.05:  # Loss > 5%
+                # Large loss - sell less, let it recover
+                multiplier = 0.3
+            elif unrealized_pnl < -0.02:  # Loss > 2%
+                multiplier = 0.6
+            else:
+                multiplier = 1.0
+
+            # Also consider daily movement
+            if daily_change > 0.03:  # Rising - good to sell
+                multiplier *= 1.3
+            elif daily_change < -0.03:  # Falling - don't sell
+                multiplier *= 0.5
+
+            target_shares = int(min(max_shares, int(avg_cost * max_shares / current_price)) * multiplier)
+            return max(100, target_shares)  # At least 1 lot
+
+        return 0
 
     def run(
         self,
@@ -567,6 +682,7 @@ class BacktestEngine:
         cash = self.initial_cash
         position = 0  # 0 = no stock, 1 = long
         shares = 0
+        avg_cost = 0.0  # Average cost basis for position
         entry_price = 0.0  # Track entry price for stop loss
         trades = []
         equity = [self.initial_cash]
@@ -580,12 +696,22 @@ class BacktestEngine:
         # Handle initial buy signal at index 0
         if signals.iloc[0] == 1 and position == 0:
             first_price = prices[0] * (1 - self.slippage)
-            shares = int(self.initial_cash / first_price)
+            shares = self._calculate_position_size(
+                signal=1,
+                cash=self.initial_cash,
+                current_price=first_price,
+                prev_price=first_price,
+                position=0,
+                entry_price=first_price,
+                avg_cost=first_price
+            )
+            shares = min(shares, int(self.initial_cash / first_price))  # Can't exceed cash
             cost = shares * first_price
             comm = cost * self.commission
             cash = self.initial_cash - cost - comm
             position = 1
             entry_price = first_price
+            avg_cost = first_price
             trades.append(Trade(
                 date=dates[0] if hasattr(dates[0], 'date') else pd.Timestamp(dates[0]),
                 action='buy',
@@ -596,7 +722,7 @@ class BacktestEngine:
 
         for i in range(1, len(prices)):
             current_price = prices[i] * (1 + self.slippage if position == 1 else 1 - self.slippage)
-            prev_price = prices[i-1]
+            prev_price = prices[i]
 
             # Calculate equity
             if position == 1:
@@ -611,29 +737,89 @@ class BacktestEngine:
             current_drawdown = (peak_equity - equity_value) / peak_equity
             max_drawdown = max(max_drawdown, current_drawdown)
 
-            # Execute signals
-            if signals.iloc[i] == 1 and position == 0:
-                # Buy
-                shares = int(cash / current_price)
-                cost = shares * current_price
-                comm = cost * self.commission
-                cash = cash - cost - comm
-                position = 1
-                entry_price = current_price
-                trades.append(Trade(
-                    date=dates[i] if hasattr(dates[i], 'date') else pd.Timestamp(dates[i]),
-                    action='buy',
-                    price=current_price,
-                    quantity=shares,
-                    commission=comm
-                ))
+            # Check stop loss and take profit first (these override signals)
+            stop_loss_triggered = False
+            take_profit_triggered = False
 
-            elif signals.iloc[i] == -1 and position == 1:
-                # Sell
+            if position == 1 and entry_price > 0:
+                price_change = (current_price - entry_price) / entry_price
+
+                if self.stop_loss > 0 and price_change <= -self.stop_loss:
+                    stop_loss_triggered = True
+                elif self.take_profit > 0 and price_change >= self.take_profit:
+                    take_profit_triggered = True
+
+            # Execute signals (only if not stopped out or took profit)
+            if not stop_loss_triggered and not take_profit_triggered:
+                if signals.iloc[i] == 1 and position == 0:
+                    # Buy with dynamic sizing
+                    prev_day_price = prices[i-1]
+                    target_shares = self._calculate_position_size(
+                        signal=1,
+                        cash=cash,
+                        current_price=current_price,
+                        prev_price=prev_day_price,
+                        position=position,
+                        entry_price=current_price,
+                        avg_cost=current_price
+                    )
+                    # Can't buy more than cash allows
+                    max_affordable = int(cash / (current_price * (1 + self.commission)))
+                    shares_to_buy = min(target_shares, max_affordable, self.max_shares_per_trade)
+
+                    if shares_to_buy >= 100:  # At least 1 lot
+                        cost = shares_to_buy * current_price
+                        comm = cost * self.commission
+                        cash = cash - cost - comm
+                        shares += shares_to_buy
+                        position = 1
+                        entry_price = current_price
+                        avg_cost = (shares * avg_cost + shares_to_buy * current_price) / (shares + shares_to_buy) if shares > 0 else current_price
+                        trades.append(Trade(
+                            date=dates[i] if hasattr(dates[i], 'date') else pd.Timestamp(dates[i]),
+                            action='buy',
+                            price=current_price,
+                            quantity=shares_to_buy,
+                            commission=comm
+                        ))
+
+                elif signals.iloc[i] == -1 and position == 1:
+                    # Sell with dynamic sizing
+                    prev_day_price = prices[i-1]
+                    target_shares = self._calculate_position_size(
+                        signal=-1,
+                        cash=cash,
+                        current_price=current_price,
+                        prev_price=prev_day_price,
+                        position=position,
+                        entry_price=entry_price,
+                        avg_cost=avg_cost
+                    )
+                    shares_to_sell = min(target_shares, shares, self.max_shares_per_trade)
+
+                    if shares_to_sell >= 100:  # At least 1 lot
+                        proceeds = shares_to_sell * current_price
+                        comm = proceeds * self.commission
+                        cash = cash + proceeds - comm
+                        shares -= shares_to_sell
+                        trades.append(Trade(
+                            date=dates[i] if hasattr(dates[i], 'date') else pd.Timestamp(dates[i]),
+                            action='sell',
+                            price=current_price,
+                            quantity=shares_to_sell,
+                            commission=comm
+                        ))
+
+                        if shares == 0:
+                            position = 0
+                            entry_price = 0.0
+                            avg_cost = 0.0
+
+            # Execute stop loss if triggered
+            if stop_loss_triggered and position == 1:
                 proceeds = shares * current_price
                 comm = proceeds * self.commission
                 cash = cash + proceeds - comm
-                position = 0
                 trades.append(Trade(
                     date=dates[i] if hasattr(dates[i], 'date') else pd.Timestamp(dates[i]),
                     action='sell',
@@ -641,41 +827,27 @@ class BacktestEngine:
                     quantity=shares,
                     commission=comm
                 ))
+                position = 0
                 entry_price = 0.0
+                avg_cost = 0.0
+                shares = 0
 
-            # Check stop loss and take profit when in position
-            if position == 1 and entry_price > 0:
-                price_change = (current_price - entry_price) / entry_price
-
-                # Stop loss triggered
-                if self.stop_loss > 0 and price_change <= -self.stop_loss:
-                    proceeds = shares * current_price
-                    comm = proceeds * self.commission
-                    cash = cash + proceeds - comm
-                    trades.append(Trade(
-                        date=dates[i] if hasattr(dates[i], 'date') else pd.Timestamp(dates[i]),
-                        action='sell',  # Stop loss sell
-                        price=current_price,
-                        quantity=shares,
-                        commission=comm
-                    ))
-                    position = 0
-                    entry_price = 0.0
-
-                # Take profit triggered
-                elif self.take_profit > 0 and price_change >= self.take_profit:
-                    proceeds = shares * current_price
-                    comm = proceeds * self.commission
-                    cash = cash + proceeds - comm
-                    trades.append(Trade(
-                        date=dates[i] if hasattr(dates[i], 'date') else pd.Timestamp(dates[i]),
-                        action='sell',  # Take profit sell
-                        price=current_price,
-                        quantity=shares,
-                        commission=comm
-                    ))
-                    position = 0
-                    entry_price = 0.0
+            # Execute take profit if triggered
+            elif take_profit_triggered and position == 1:
+                proceeds = shares * current_price
+                comm = proceeds * self.commission
+                cash = cash + proceeds - comm
+                trades.append(Trade(
+                    date=dates[i] if hasattr(dates[i], 'date') else pd.Timestamp(dates[i]),
+                    action='sell',
+                    price=current_price,
+                    quantity=shares,
+                    commission=comm
+                ))
+                position = 0
+                entry_price = 0.0
+                avg_cost = 0.0
+                shares = 0
 
         # Final equity
         final_price = prices[-1]
@@ -691,10 +863,18 @@ class BacktestEngine:
         else:
             sharpe = 0
 
-        # Win rate
-        winning_trades = sum(1 for t in trades if t.action == 'sell' and len(trades) > 0)
-        total_exit_trades = sum(1 for t in trades if t.action == 'sell')
-        win_rate = winning_trades / total_exit_trades if total_exit_trades > 0 else 0
+        # Win rate (based on sell trades)
+        sell_trades = [t for t in trades if t.action == 'sell']
+        winning_trades = 0
+        for t in sell_trades:
+            # Find corresponding buy trade before this sell
+            buy_trades = [bt for bt in trades if bt.action == 'buy' and bt.date < t.date]
+            if buy_trades:
+                last_buy = buy_trades[-1]
+                if t.price > last_buy.price:  # Sold higher than bought
+                    winning_trades += 1
+
+        win_rate = winning_trades / len(sell_trades) if sell_trades else 0
 
         # Total returns
         total_return = (final_equity - self.initial_cash) / self.initial_cash
