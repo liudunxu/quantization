@@ -349,7 +349,7 @@ def print_all_strategy_decisions(
     if best_action and action_counts.get(best_action, 0) >= 3:
         best_confidence = min(best_confidence * 1.3, 1.0)
 
-    return decisions, best_name, best_action, best_confidence
+    return decisions, best_name, best_action, best_confidence, action_counts
 
 
 def print_feature_importance(model: StockTradingModel, top_n: int = 10) -> None:
@@ -508,45 +508,49 @@ def main():
         print_backtest_comparison(results_df)
 
         # Print all strategy decisions and find the best one
-        decisions, best_strategy_name, best_action, best_confidence = print_all_strategy_decisions(
+        decisions, best_strategy_name, best_action, best_confidence, action_counts = print_all_strategy_decisions(
             strategies, results_df, backtest_df, features_df, model, min_samples
         )
 
-        # Trading decision (moved to end)
-        # Use best performing strategy's decision instead of raw model prediction
-        if best_strategy_name and best_strategy_name in decisions:
-            best_decision = decisions[best_strategy_name]
-            prediction_action_map = {'BUY': 1, 'HOLD': 0, 'SELL': -1}
-            prediction_action = prediction_action_map.get(best_action, 0)
-            prediction_confidence = best_confidence
+        # Determine final action by majority vote
+        final_action = max(action_counts, key=action_counts.get) if action_counts else 'HOLD'
+        final_confidence = best_confidence
+        final_strategy = best_strategy_name
 
-            # Calculate suggested lots
+        # Trading decision (moved to end)
+        if final_action != 'HOLD':
             current_price = backtest_df['close'].iloc[-1]
             atr_value = backtest_df['atr'].iloc[-1] if 'atr' in backtest_df.columns else current_price * 0.02
             initial_cash = config.get('backtest.initial_cash', 100000)
             suggested = calculate_suggested_lots(
-                action=best_action,
+                action=final_action,
                 price=current_price,
                 atr=atr_value,
                 cash=initial_cash
             )
 
-            print_section(" FINAL RECOMMENDATION (BEST PERFORMING STRATEGY)")
-            print(f"\n  Best Strategy  : {best_strategy_name}")
-            print(f"  Action       : {best_action}")
-            print(f"  Confidence    : {best_confidence:.2f}")
-            print(f"  Backtest Ret : {best_decision['return']}")
-            print(f"  Strategy Score: {best_decision['score']:.3f}")
-
-            if best_action != 'HOLD':
-                print(f"\n  === Suggested Position ===")
-                print(f"  Lots          : {suggested['lots']:.0f} 手")
-                print(f"  Shares        : {suggested['shares']} 股")
-                print(f"  Est. Cost     : ¥{suggested['estimated_cost']:,.2f}")
-                print(f"  Stop Loss    : ¥{suggested['stop_loss']:.2f} (-{((current_price - suggested['stop_loss']) / current_price * 100):.1f}%)")
-                print(f"  Take Profit   : ¥{suggested['take_profit']:.2f} (+{((suggested['take_profit'] - current_price) / current_price * 100):.1f}%)")
+            print_section(" FINAL RECOMMENDATION (MAJORITY VOTE)")
+            print(f"\n  === Strategy Votes ===")
+            print(f"  BUY  : {action_counts.get('BUY', 0)} votes")
+            print(f"  HOLD : {action_counts.get('HOLD', 0)} votes")
+            print(f"  SELL : {action_counts.get('SELL', 0)} votes")
+            print(f"\n  Final Action: {final_action} (majority)")
+            print(f"\n  Best Strategy ({best_strategy_name}):")
+            print(f"    Score     : {decisions[best_strategy_name]['score']:.3f}")
+            print(f"    Return    : {decisions[best_strategy_name]['return']}")
+            print(f"\n  === Suggested Position ===")
+            print(f"  Lots          : {suggested['lots']:.0f} 手")
+            print(f"  Shares        : {suggested['shares']} 股")
+            print(f"  Est. Cost     : ¥{suggested['estimated_cost']:,.2f}")
+            print(f"  Stop Loss    : ¥{suggested['stop_loss']:.2f} (-{((current_price - suggested['stop_loss']) / current_price * 100):.1f}%)")
+            print(f"  Take Profit   : ¥{suggested['take_profit']:.2f} (+{((suggested['take_profit'] - current_price) / current_price * 100):.1f}%)")
         else:
-            print_decision(prediction_action, prediction_confidence, prediction_proba)
+            print_section(" FINAL RECOMMENDATION")
+            print(f"\n  Action       : HOLD (no clear consensus)")
+            print(f"\n  === Strategy Votes ===")
+            print(f"  BUY  : {action_counts.get('BUY', 0)} votes")
+            print(f"  HOLD : {action_counts.get('HOLD', 0)} votes")
+            print(f"  SELL : {action_counts.get('SELL', 0)} votes")
 
     print("\n" + "="*60)
     print(" Decision process completed!")
