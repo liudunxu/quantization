@@ -152,8 +152,10 @@ def print_all_strategy_decisions(
             print(f"\n  {strategy.name}: ERROR - {e}")
 
     # Find best strategy based on return (parse percentage string)
+    # If returns are equal, prefer ML-based strategies
     best_name = None
     best_return = -float('inf')
+    best_is_ml = False
 
     for name, data in decisions.items():
         if data['return'] == 'N/A' or data['return'] == 'ERROR':
@@ -162,9 +164,19 @@ def print_all_strategy_decisions(
             # Parse percentage string like "12.34%"
             ret_str = data['return'].replace('%', '')
             ret_val = float(ret_str) / 100 if '%' in data['return'] else float(ret_str)
+            # Check if this is an ML-based strategy
+            is_ml = 'ML' in name or 'Hybrid' in name
+
+            # Choose based on: higher return first, then ML preference
             if ret_val > best_return:
                 best_return = ret_val
                 best_name = name
+                best_is_ml = is_ml
+            elif ret_val == best_return and is_ml and not best_is_ml:
+                # Equal return, prefer ML strategy
+                best_return = ret_val
+                best_name = name
+                best_is_ml = is_ml
         except:
             continue
 
