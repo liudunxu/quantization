@@ -19,7 +19,9 @@ class StockTradingModel:
         self.learning_rate = self.config.get('learning_rate', 0.03)
         self.l2_leaf_reg = self.config.get('l2_leaf_reg', 3)
         self.random_seed = self.config.get('random_seed', 42)
+        self.n_estimators = self.config.get('n_estimators', 3)  # Number of models in ensemble
         self.model: Optional[CatBoostClassifier] = None
+        self.models: List[CatBoostClassifier] = []  # Ensemble of models
         self.feature_names: Optional[List[str]] = None
         self.selected_features: Optional[List[str]] = None
         self.max_features: int = 80  # Maximum features to use
@@ -290,21 +292,12 @@ class StockTradingModel:
 
         print(f"  Class weights: {class_weights}")
 
-        # Train model with custom class weights for balance
-        self.model = CatBoostClassifier(
-            iterations=self.iterations,
-            depth=self.depth,
-            learning_rate=self.learning_rate,
-            l2_leaf_reg=self.l2_leaf_reg,
-            random_seed=self.random_seed,
-            verbose=False,
-            loss_function='MultiClass',
-            class_weights=class_weights  # Custom weights instead of auto
-        )
-
         train_data = X
         train_labels = labels  # Already converted to 0,1,2
 
+        # Prepare eval data if available
+        eval_data = None
+        eval_labels_converted = None
         if eval_df is not None and not eval_df.empty:
             eval_labels = self._create_labels(
                 eval_df, forward_days, threshold,
@@ -318,20 +311,43 @@ class StockTradingModel:
             eval_X_valid = eval_X[eval_valid_idx]
             eval_labels_valid = (eval_labels[eval_valid_idx] + 1).astype(int)
 
-            # Only use eval_set if we have valid samples
             if len(eval_X_valid) > 0:
-                self.model.fit(
+                eval_data = eval_X_valid
+                eval_labels_converted = eval_labels_valid
+
+        # Train ensemble of models (bagging)
+        self.models = []
+        for i in range(self.n_estimators):
+            # Use different random seed for each model
+            model_seed = self.random_seed + i * 111  # Spread out seeds
+
+            model = CatBoostClassifier(
+                iterations=self.iterations,
+                depth=self.depth,
+                learning_rate=self.learning_rate,
+                l2_leaf_reg=self.l2_leaf_reg,
+                random_seed=model_seed,
+                verbose=False,
+                loss_function='MultiClass',
+                class_weights=class_weights
+            )
+
+            if eval_data is not None:
+                model.fit(
                     train_data, train_labels,
-                    eval_set=(eval_X_valid, eval_labels_valid),
+                    eval_set=(eval_data, eval_labels_converted),
                     early_stopping_rounds=50,
                     verbose=False
                 )
             else:
-                self.model.fit(train_data, train_labels, verbose=False)
-        else:
-            self.model.fit(train_data, train_labels, verbose=False)
+                model.fit(train_data, train_labels, verbose=False)
 
-        # Calculate training metrics
+            self.models.append(model)
+
+        # Use first model as primary for backwards compatibility
+        self.model = self.models[0]
+
+        # Calculate training metrics (from first model for consistency)
         train_pred = self.model.predict(train_data)
         train_accuracy = (train_pred.flatten() == train_labels.values).mean()
 
@@ -347,14 +363,14 @@ class StockTradingModel:
         }
 
     def predict(self, df: pd.DataFrame) -> Tuple[int, float]:
-        """Predict trading action for latest data.
+        """Predict trading action for latest data using ensemble voting.
 
         Returns:
             Tuple of (action, confidence)
             action: 1 (buy), 0 (hold), -1 (sell)
-            confidence: probability of the predicted class
+            confidence: probability of the predicted class (averaged across ensemble)
         """
-        if self.model is None:
+        if len(self.models) == 0:
             raise ValueError("Model not trained")
 
         X = self._prepare_features(df)
@@ -362,64 +378,84 @@ class StockTradingModel:
         # Use only the latest row
         X_latest = X.iloc[[-1]]
 
-        # Predict
-        prediction = self.model.predict(X_latest)
-        pred_class = int(prediction[0][0]) - 1  # Convert 0,1,2 back to -1,0,1
+        # Ensemble prediction: average probabilities across all models
+        all_probabilities = []
+        for model in self.models:
+            probs = model.predict_proba(X_latest)[0]
+            all_probabilities.append(probs)
 
-        # Get probability
-        probabilities = self.model.predict_proba(X_latest)[0]
-        confidence = float(probabilities[pred_class])
+        # Average probabilities (soft voting)
+        avg_probabilities = np.mean(all_probabilities, axis=0)
+        pred_class = int(np.argmax(avg_probabilities))  # Class with highest avg prob
+        confidence = float(avg_probabilities[pred_class])
+
+        # Convert 0,1,2 back to -1,0,1
+        pred_class = pred_class - 1
 
         return pred_class, confidence
 
     def predict_proba(self, df: pd.DataFrame) -> Dict[str, float]:
-        """Get prediction probabilities for all classes."""
-        if self.model is None:
+        """Get prediction probabilities for all classes (averaged across ensemble)."""
+        if len(self.models) == 0:
             raise ValueError("Model not trained")
 
         X = self._prepare_features(df)
         X_latest = X.iloc[[-1]]
 
-        probabilities = self.model.predict_proba(X_latest)[0]
+        # Ensemble: average probabilities
+        all_probabilities = []
+        for model in self.models:
+            probs = model.predict_proba(X_latest)[0]
+            all_probabilities.append(probs)
+
+        avg_probabilities = np.mean(all_probabilities, axis=0)
 
         # Handle case where only 2 classes were learned
-        if len(probabilities) == 2:
+        if len(avg_probabilities) == 2:
             return {
-                'sell_probability': float(probabilities[0]),
+                'sell_probability': float(avg_probabilities[0]),
                 'hold_probability': 0.0,
-                'buy_probability': float(probabilities[1])
+                'buy_probability': float(avg_probabilities[1])
             }
         else:
             return {
-                'sell_probability': float(probabilities[0]),
-                'hold_probability': float(probabilities[1]),
-                'buy_probability': float(probabilities[2])
+                'sell_probability': float(avg_probabilities[0]),
+                'hold_probability': float(avg_probabilities[1]),
+                'buy_probability': float(avg_probabilities[2])
             }
 
     def get_feature_importance(self) -> pd.DataFrame:
-        """Get feature importance."""
-        if self.model is None:
+        """Get feature importance (averaged across ensemble)."""
+        if len(self.models) == 0:
             raise ValueError("Model not trained")
 
-        importance = self.model.get_feature_importance()
+        # Average importance across all models in ensemble
+        all_importance = []
+        for model in self.models:
+            imp = model.get_feature_importance()
+            all_importance.append(imp)
+
+        avg_importance = np.mean(all_importance, axis=0)
+
         return pd.DataFrame({
             'feature': self.feature_names,
-            'importance': importance
+            'importance': avg_importance
         }).sort_values('importance', ascending=False)
 
     def save(self, path: str) -> None:
-        """Save model to file."""
+        """Save ensemble model to file."""
         model_data = {
-            'model': self.model,
+            'models': self.models,
             'feature_names': self.feature_names,
             'config': self.config
         }
         joblib.dump(model_data, path)
 
     def load(self, path: str) -> None:
-        """Load model from file."""
+        """Load ensemble model from file."""
         model_data = joblib.load(path)
-        self.model = model_data['model']
+        self.models = model_data['models']
+        self.model = self.models[0] if self.models else None
         self.feature_names = model_data['feature_names']
         self.config = model_data.get('config', self.config)
 

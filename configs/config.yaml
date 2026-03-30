@@ -61,6 +61,7 @@ model:
     learning_rate: 0.03
     l2_leaf_reg: 5        # Increased for more regularization
     random_seed: 42
+    n_estimators: 3       # Number of models in ensemble for bagging
   # Trading parameters - balanced for HK stocks
   training:
     forward_days: 5       # Longer prediction horizon for stability
