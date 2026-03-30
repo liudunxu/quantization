@@ -177,11 +177,24 @@ See `configs/config.yaml` for model parameters and feature settings.
 See `requirements.txt`
 
 ## TODOs
-- [ ] Add sentiment analysis features
-- [ ] Implement real-time trading signals
-- [ ] Add portfolio optimization
-- [ ] Implement risk management module
-- [ ] Add backtest visualization
-- [ ] Support more data providers (e.g., EastMoney, Wind)
-- [ ] Add automated model retraining
+
+### High Priority
+- [ ] Add sentiment analysis features (news, social media)
+- [ ] Implement real-time trading signals with WebSocket
+- [ ] Add portfolio optimization (multiple stocks)
+- [ ] Implement risk management module (max drawdown control)
+- [ ] Add backtest visualization (charts, equity curves)
+
+### Medium Priority
+- [ ] Support more data providers (EastMoney, Wind, Bloomberg)
+- [ ] Add automated model retraining (scheduled jobs)
 - [ ] Implement cross-validation for model selection
+- [ ] Add model explainability (SHAP values)
+- [ ] Support more markets (Japan, Europe, Crypto)
+
+### Low Priority
+- [ ] Add web dashboard for monitoring
+- [ ] Implement paper trading mode
+- [ ] Add email/SMS alerts for signals
+- [ ] Create REST API for external integration
+- [ ] Add Docker support for deployment
