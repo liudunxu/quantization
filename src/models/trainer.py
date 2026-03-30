@@ -374,7 +374,6 @@ class StockTradingModel:
 
         # Select features before preparing
         self.selected_features = self._select_features(df, labels)
-        print(f"  Selected {len(self.selected_features)} features out of {len(df.columns)}")
 
         # Prepare features with selection
         X = self._prepare_features(df, use_selection=True)
@@ -409,8 +408,6 @@ class StockTradingModel:
         max_weight = 5.0
         for cls in class_weights:
             class_weights[cls] = min(class_weights[cls], max_weight)
-
-        print(f"  Class weights: {class_weights}")
 
         train_data = X
         train_labels = labels  # Already converted to 0,1,2
