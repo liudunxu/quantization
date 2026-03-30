@@ -86,13 +86,33 @@ class HighSellLowBuyStrategy(Strategy):
 
 
 class MLStrategy(Strategy):
-    """Machine learning based strategy."""
+    """Machine learning based strategy with market regime filter."""
 
-    def __init__(self, model, name: str = "ML Strategy", min_samples: int = 20, confidence_threshold: float = 0.0):
+    def __init__(
+        self,
+        model,
+        name: str = "ML Strategy",
+        min_samples: int = 20,
+        confidence_threshold: float = 0.0,
+        bear_market_threshold: float = -0.01,
+        require_bull_market_for_buy: bool = True
+    ):
+        """Initialize ML strategy.
+
+        Args:
+            model: Trained model with predict method
+            name: Strategy name
+            min_samples: Minimum samples before generating signals
+            confidence_threshold: Minimum confidence to trade (0-1)
+            bear_market_threshold: Index return threshold below which market is considered bearish
+            require_bull_market_for_buy: If True, only buy when market is bullish (or neutral)
+        """
         super().__init__(name)
         self.model = model
         self.min_samples = min_samples
         self.confidence_threshold = confidence_threshold
+        self.bear_market_threshold = bear_market_threshold
+        self.require_bull_market_for_buy = require_bull_market_for_buy
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
         signals = pd.Series(0, index=df.index)
@@ -100,12 +120,33 @@ class MLStrategy(Strategy):
         if len(df) < self.min_samples:
             return signals
 
+        # Determine market regime based on index returns if available
+        market_returns = None
+        if 'index_returns' in df.columns:
+            market_returns = df['index_returns'].values
+
         for i in range(self.min_samples, len(df)):
             try:
                 pred, confidence = self.model.predict(df.iloc[:i+1])
+
+                # Check market regime
+                is_bear_market = False
+                if market_returns is not None and i >= 1:
+                    # Use recent market return to determine regime
+                    recent_market_return = market_returns[i-1] if i > 0 else 0
+                    if recent_market_return < self.bear_market_threshold:
+                        is_bear_market = True
+
                 # Only signal if confidence exceeds threshold
                 if confidence >= self.confidence_threshold:
-                    signals.iloc[i] = pred
+                    # In bear market, only allow sell signals (unless explicitly bullish)
+                    if is_bear_market and self.require_bull_market_for_buy:
+                        if pred == -1:  # Only sell in bear market
+                            signals.iloc[i] = pred
+                        else:
+                            signals.iloc[i] = 0  # Hold in bear market unless very confident sell
+                    else:
+                        signals.iloc[i] = pred
                 else:
                     signals.iloc[i] = 0
             except Exception:

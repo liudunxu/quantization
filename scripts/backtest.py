@@ -138,7 +138,14 @@ def main():
         BuyAndHoldStrategy(),
         HighSellLowBuyStrategy(lookback=20, threshold=0.15),
         HighSellLowBuyStrategy(lookback=10, threshold=0.10),
-        MLStrategy(model, name="ML Strategy (CatBoost)", min_samples=min_samples, confidence_threshold=confidence_threshold)
+        MLStrategy(
+            model,
+            name="ML Strategy (CatBoost)",
+            min_samples=min_samples,
+            confidence_threshold=0.55,
+            bear_market_threshold=0.005,  # Market return >0.5% is bullish
+            require_bull_market_for_buy=True
+        )
     ]
 
     results = []

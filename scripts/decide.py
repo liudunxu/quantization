@@ -197,7 +197,14 @@ def main():
         strategies = [
             BuyAndHoldStrategy(),
             HighSellLowBuyStrategy(lookback=20, threshold=0.15),
-            MLStrategy(model, name="ML Strategy", min_samples=min_samples, confidence_threshold=confidence_threshold)
+            MLStrategy(
+                model,
+                name="ML Strategy",
+                min_samples=min_samples,
+                confidence_threshold=0.50,
+                bear_market_threshold=-0.002,
+                require_bull_market_for_buy=True
+            )
         ]
 
         engine = BacktestEngine(

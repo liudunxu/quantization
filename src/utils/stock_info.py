@@ -69,7 +69,7 @@ class StockInfoResolver:
         if stock_info.market == 'a_share':
             return '000001.SH'  # Shanghai Composite
         elif stock_info.market == 'hk_share':
-            return 'HSI.HK'  # Hang Seng Index
+            return '^HSI'  # Hang Seng Index (yfinance format)
         elif stock_info.market == 'us_share':
             return '^GSPC'  # S&P 500
         return '^GSPC'
