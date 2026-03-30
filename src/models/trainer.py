@@ -399,14 +399,14 @@ class StockTradingModel:
         # Thresholds adjusted for more balanced label distribution
 
         labels = pd.Series(0, index=df.index)
-        buy_threshold = 0.1  # Lowered from 0.2 for more buy signals
-        sell_threshold = -0.1  # Lowered from -0.2 for more sell signals
+        buy_threshold = 0.05  # Lowered for more buy signals
+        sell_threshold = -0.05  # Lowered for more sell signals
 
         buy_condition = (composite >= buy_threshold) & (
-            future_returns > threshold * 0.3
+            future_returns > threshold * 0.2
         )
         sell_condition = (composite <= sell_threshold) & (
-            future_returns < -threshold * 0.3
+            future_returns < -threshold * 0.2
         )
 
         labels[buy_condition] = 1
@@ -513,11 +513,19 @@ class StockTradingModel:
                 eval_data = eval_X_valid
                 eval_labels_converted = eval_labels_valid
 
-        # Train ensemble of models (bagging)
+        # Train ensemble of models (bagging with bootstrap sampling)
         self.models = []
+        n_samples = len(train_data)
+
         for i in range(self.n_estimators):
             # Use different random seed for each model
             model_seed = self.random_seed + i * 111  # Spread out seeds
+
+            # Bootstrap sampling for diversity (sample with replacement)
+            np.random.seed(model_seed)
+            bootstrap_idx = np.random.choice(n_samples, size=n_samples, replace=True)
+            bootstrap_data = train_data.iloc[bootstrap_idx]
+            bootstrap_labels = train_labels.iloc[bootstrap_idx]
 
             model = CatBoostClassifier(
                 iterations=self.iterations,
@@ -532,14 +540,14 @@ class StockTradingModel:
 
             if eval_data is not None:
                 model.fit(
-                    train_data,
-                    train_labels,
+                    bootstrap_data,
+                    bootstrap_labels,
                     eval_set=(eval_data, eval_labels_converted),
                     early_stopping_rounds=50,
                     verbose=False,
                 )
             else:
-                model.fit(train_data, train_labels, verbose=False)
+                model.fit(bootstrap_data, bootstrap_labels, verbose=False)
 
             self.models.append(model)
 

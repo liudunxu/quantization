@@ -814,9 +814,10 @@ class BacktestEngine:
 
         # Always use the same logic: calculate position based on risk model
         # This ensures consistent initial allocation across all strategies
+        # Use only 50% of cash for initial position to leave room for adding
         target_shares = self._calculate_position_size(
             signal=1,
-            cash=self.initial_cash,
+            cash=self.initial_cash * 0.5,  # Use 50% of cash for initial position
             current_price=first_price,
             prev_price=first_price,
             position=0,
@@ -825,13 +826,14 @@ class BacktestEngine:
             atr=first_atr,
         )
         # Limit to affordable shares
-        shares = min(target_shares, int(self.initial_cash / first_price))
+        shares = min(target_shares, int(self.initial_cash * 0.5 / first_price))
 
-        # Ensure minimum 1 lot if we have enough cash
-        if shares < 100 and int(self.initial_cash / first_price) >= 100:
-            shares = 100
+        # For expensive stocks (>100), allow smaller minimum (50 shares)
+        min_lot = 50 if first_price > 100 else 100
+        if shares < min_lot and int(self.initial_cash / first_price) >= min_lot:
+            shares = min_lot
 
-        if position == 0 and shares >= 100:
+        if position == 0 and shares >= min_lot:
             cost = shares * first_price
             comm = cost * self.commission
             cash = self.initial_cash - cost - comm
@@ -911,7 +913,9 @@ class BacktestEngine:
                         max_additional = self.max_shares_per_trade
                         shares_to_buy = min(shares_to_buy, max_additional)
 
-                    if shares_to_buy >= 100:  # At least 1 lot
+                    # Minimum lot size: 50 for expensive stocks, 100 otherwise
+                    min_lot = 50 if current_price > 100 else 100
+                    if shares_to_buy >= min_lot:  # At least min lot
                         cost = shares_to_buy * current_price
                         comm = cost * self.commission
                         cash = cash - cost - comm
@@ -1093,8 +1097,19 @@ class BacktestEngine:
         results = []
 
         for strategy in strategies:
-            # For MLStrategy, use full history to generate signals
-            if isinstance(strategy, MLStrategy) and full_history_df is not None:
+            # For ML-based strategies, use full history to generate signals
+            if (
+                isinstance(
+                    strategy,
+                    (
+                        MLStrategy,
+                        HybridStrategy,
+                        RollingMLStrategy,
+                        RollingHybridStrategy,
+                    ),
+                )
+                and full_history_df is not None
+            ):
                 signals = strategy.generate_signals(full_history_df)
                 # Extract only signals for the backtest period
                 signals = signals.iloc[-len(df) :]
