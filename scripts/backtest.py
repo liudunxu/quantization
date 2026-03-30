@@ -25,7 +25,8 @@ from src.backtest import (
     HybridStrategy,
     RollingMLStrategy,
     RollingHybridStrategy,
-    BacktestResult
+    BacktestResult,
+    get_default_strategies,
 )
 
 
@@ -139,48 +140,13 @@ def main():
         take_profit=0.15  # 15% take profit
     )
 
-    strategies = [
-        BuyAndHoldStrategy(),
-        HighSellLowBuyStrategy(lookback=20, threshold=0.15),
-        HighSellLowBuyStrategy(lookback=10, threshold=0.10),
-        MLStrategy(
-            model,
-            name="ML Strategy (CatBoost)",
-            min_samples=min_samples,
-            confidence_threshold=0.55,
-            bear_market_threshold=-0.005,
-            require_bull_market_for_buy=True
-        ),
-        HybridStrategy(
-            model,
-            lookback=10,
-            threshold=0.10,
-            min_samples=min_samples,
-            ml_confidence_threshold=0.50,
-            bear_market_threshold=-0.005,
-            require_bull_market_for_buy=True
-        ),
-        RollingMLStrategy(
-            model_class=type(model),  # Pass model class, not instance
-            train_window=180,  # 6 months training window
-            retrain_interval=20,  # Retrain every 20 days
-            min_samples=min_samples,
-            confidence_threshold=0.50,
-            bear_market_threshold=-0.005,
-            require_bull_market_for_buy=True
-        ),
-        RollingHybridStrategy(
-            model_class=type(model),  # Pass model class, not instance
-            train_window=180,  # 6 months training window
-            retrain_interval=15,  # Retrain every 15 days (more frequent)
-            lookback=10,
-            threshold=0.10,
-            min_samples=min_samples,
-            ml_confidence_threshold=0.45,  # Lower for more trades
-            bear_market_threshold=-0.005,
-            require_bull_market_for_buy=True
-        )
-    ]
+    strategies = get_default_strategies(
+        model=model,
+        min_samples=min_samples,
+        ml_confidence_threshold=0.50,
+        bear_market_threshold=-0.005,
+        require_bull_market_for_buy=True
+    )
 
     results = []
     for strategy in strategies:

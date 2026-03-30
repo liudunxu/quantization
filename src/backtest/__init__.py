@@ -13,6 +13,7 @@ from .engine import (
     RollingHybridStrategy,
     run_backtest
 )
+from .strategies import get_default_strategies, get_quick_strategies
 
 __all__ = [
     'BacktestEngine',
@@ -25,5 +26,7 @@ __all__ = [
     'HybridStrategy',
     'RollingMLStrategy',
     'RollingHybridStrategy',
-    'run_backtest'
+    'run_backtest',
+    'get_default_strategies',
+    'get_quick_strategies',
 ]

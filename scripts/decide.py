@@ -21,11 +21,8 @@ from src.features import get_feature_combinator
 from src.models import StockTradingModel, get_model
 from src.backtest import (
     BacktestEngine,
-    BuyAndHoldStrategy,
-    HighSellLowBuyStrategy,
-    MLStrategy,
-    HybridStrategy,
-    run_backtest
+    run_backtest,
+    get_default_strategies,
 )
 
 
@@ -301,27 +298,13 @@ def main():
     if len(backtest_df) < 10:
         print("\n  Not enough data for backtesting")
     else:
-        strategies = [
-            BuyAndHoldStrategy(),
-            HighSellLowBuyStrategy(lookback=20, threshold=0.15),
-            MLStrategy(
-                model,
-                name="ML Strategy",
-                min_samples=min_samples,
-                confidence_threshold=0.50,
-                bear_market_threshold=-0.005,
-                require_bull_market_for_buy=True
-            ),
-            HybridStrategy(
-                model,
-                lookback=10,
-                threshold=0.10,
-                min_samples=min_samples,
-                ml_confidence_threshold=0.50,
-                bear_market_threshold=-0.005,
-                require_bull_market_for_buy=True
-            )
-        ]
+        strategies = get_default_strategies(
+            model=model,
+            min_samples=min_samples,
+            ml_confidence_threshold=0.50,
+            bear_market_threshold=-0.005,
+            require_bull_market_for_buy=True
+        )
 
         engine = BacktestEngine(
             initial_cash=config.get('backtest.initial_cash', 100000),
