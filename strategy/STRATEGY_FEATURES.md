@@ -560,12 +560,12 @@ avg_probabilities = mean(all_model_probabilities, axis=0)
 
 ### 15.5 市场环境过滤器 (Market Regime Filter)
 ML策略增加市场环境判断:
-- **看涨市场**: 大盘日收益率 > 0.5%
-- **看跌市场**: 大盘日收益率 < 0.5%
+- **看涨市场**: 大盘日收益率 >= -0.5% (非显著下跌)
+- **看跌市场**: 大盘日收益率 < -0.5%
 - **只在看涨/中性市场买入** (除非是非常确定的卖出信号)
 
 ```python
-bear_market_threshold=0.005  # 大盘收益 > 0.5% 才算看涨
+bear_market_threshold=-0.005  # 大盘收益 < -0.5% 才算看跌
 require_bull_market_for_buy=True  # 看跌市场只允许卖出
 ```
 
@@ -578,7 +578,7 @@ require_bull_market_for_buy=True  # 看跌市场只允许卖出
 ```python
 class HybridStrategy(Strategy):
     def __init__(self, model, lookback=10, threshold=0.10,
-                 ml_confidence_threshold=0.50, bear_market_threshold=0.005):
+                 ml_confidence_threshold=0.50, bear_market_threshold=-0.005):
         ...
 ```
 
@@ -602,6 +602,29 @@ engine = BacktestEngine(
 | ML收益率 | -13.61% | **-7.06%** |
 | vs Buy&Hold | -2.65% | **+3.90%** |
 | 最大回撤 | 14.62% | 8.23% |
+
+### 15.8 滚动训练混合策略 (Rolling Hybrid Strategy)
+结合滚动训练和混合确认的策略:
+- **定期重新训练**: 每15天使用最近180天数据重新训练模型
+- **混合确认**: ML和Simple策略信号一致时才交易
+- **市场过滤**: 看跌市场禁止买入
+- **优势**: 适应市场变化，同时保持信号稳定性
+
+```python
+RollingHybridStrategy(
+    model_class=StockTradingModel,
+    train_window=180,      # 训练窗口
+    retrain_interval=15,   # 重新训练间隔
+    lookback=10,            # Simple策略回看
+    threshold=0.10,        # Simple策略阈值
+    ml_confidence_threshold=0.45,  # ML置信度阈值
+    bear_market_threshold=-0.005   # 看跌阈值
+)
+```
+
+**vs RollingMLStrategy**:
+- RollingML: 0 trades (极度保守,只持有现金)
+- RollingHybrid: 有交易 (因为Simple策略提供备份信号)
 
 ---
 

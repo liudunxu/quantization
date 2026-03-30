@@ -23,6 +23,8 @@ from src.backtest import (
     HighSellLowBuyStrategy,
     MLStrategy,
     HybridStrategy,
+    RollingMLStrategy,
+    RollingHybridStrategy,
     BacktestResult
 )
 
@@ -146,7 +148,7 @@ def main():
             name="ML Strategy (CatBoost)",
             min_samples=min_samples,
             confidence_threshold=0.55,
-            bear_market_threshold=0.005,
+            bear_market_threshold=-0.005,
             require_bull_market_for_buy=True
         ),
         HybridStrategy(
@@ -155,7 +157,27 @@ def main():
             threshold=0.10,
             min_samples=min_samples,
             ml_confidence_threshold=0.50,
-            bear_market_threshold=0.005,
+            bear_market_threshold=-0.005,
+            require_bull_market_for_buy=True
+        ),
+        RollingMLStrategy(
+            model_class=type(model),  # Pass model class, not instance
+            train_window=180,  # 6 months training window
+            retrain_interval=20,  # Retrain every 20 days
+            min_samples=min_samples,
+            confidence_threshold=0.50,
+            bear_market_threshold=-0.005,
+            require_bull_market_for_buy=True
+        ),
+        RollingHybridStrategy(
+            model_class=type(model),  # Pass model class, not instance
+            train_window=180,  # 6 months training window
+            retrain_interval=15,  # Retrain every 15 days (more frequent)
+            lookback=10,
+            threshold=0.10,
+            min_samples=min_samples,
+            ml_confidence_threshold=0.45,  # Lower for more trades
+            bear_market_threshold=-0.005,
             require_bull_market_for_buy=True
         )
     ]
@@ -163,7 +185,7 @@ def main():
     results = []
     for strategy in strategies:
         # For ML-based strategies, use full history to generate signals
-        if isinstance(strategy, (MLStrategy, HybridStrategy)):
+        if isinstance(strategy, (MLStrategy, HybridStrategy, RollingMLStrategy, RollingHybridStrategy)):
             signals = strategy.generate_signals(features_df)
             signals = signals.iloc[-len(backtest_df):]
             result = engine.run(backtest_df, strategy, precomputed_signals=signals)

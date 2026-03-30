@@ -169,7 +169,7 @@ class HybridStrategy(Strategy):
         threshold: float = 0.1,
         min_samples: int = 20,
         ml_confidence_threshold: float = 0.50,
-        bear_market_threshold: float = 0.005,
+        bear_market_threshold: float = -0.005,
         require_bull_market_for_buy: bool = True
     ):
         """Initialize hybrid strategy.
@@ -227,6 +227,271 @@ class HybridStrategy(Strategy):
                     if ml_signal == simple_signal:
                         # They agree - use the signal
                         final_signal = ml_signal
+                    else:
+                        # They disagree - use simple strategy (more conservative)
+                        final_signal = simple_signal
+
+                    # Apply market filter for buys
+                    if is_bear_market and self.require_bull_market_for_buy:
+                        if final_signal == 1:
+                            final_signal = 0  # No buy in bear market
+
+                    signals.iloc[i] = final_signal
+                else:
+                    # ML not confident - use simple strategy
+                    # But apply market filter
+                    if is_bear_market and self.require_bull_market_for_buy:
+                        if simple_signal == 1:
+                            signals.iloc[i] = 0
+                        else:
+                            signals.iloc[i] = simple_signal
+                    else:
+                        signals.iloc[i] = simple_signal
+
+            except Exception:
+                # Fall back to simple on error
+                signals.iloc[i] = simple_signals.iloc[i]
+
+        return signals
+
+
+class RollingMLStrategy(Strategy):
+    """ML strategy with periodic retraining to adapt to market changes.
+
+    Retrains the model every N days using a rolling window of training data.
+    This helps the strategy adapt to changing market regimes.
+    """
+
+    def __init__(
+        self,
+        model_class,  # Model class (not instance)
+        train_window: int = 180,  # Days of data to train on
+        retrain_interval: int = 30,  # Days between retraining
+        min_samples: int = 20,
+        confidence_threshold: float = 0.50,
+        bear_market_threshold: float = -0.005,
+        require_bull_market_for_buy: bool = True,
+        model_params: dict = None  # Parameters for the model
+    ):
+        """Initialize rolling ML strategy.
+
+        Args:
+            model_class: CatBoost model class
+            train_window: Number of days to use for training
+            retrain_interval: Days between retraining
+            min_samples: Min samples before generating signals
+            confidence_threshold: Min confidence to trade
+            bear_market_threshold: Market return threshold
+            require_bull_market_for_buy: Only buy in bull market
+            model_params: Dict of model parameters
+        """
+        super().__init__(f"Rolling ML ({train_window}/{retrain_interval})")
+        self.model_class = model_class
+        self.train_window = train_window
+        self.retrain_interval = retrain_interval
+        self.min_samples = min_samples
+        self.confidence_threshold = confidence_threshold
+        self.bear_market_threshold = bear_market_threshold
+        self.require_bull_market_for_buy = require_bull_market_for_buy
+        self.model_params = model_params or {}
+        self.model = None
+        self.last_train_idx = 0
+
+    def _retrain_model(self, df: pd.DataFrame, end_idx: int) -> bool:
+        """Retrain the model using data up to end_idx."""
+        try:
+            start_idx = max(0, end_idx - self.train_window)
+            train_data = df.iloc[start_idx:end_idx].copy()
+
+            if len(train_data) < self.min_samples + 10:
+                return False
+
+            # Create new model
+            self.model = self.model_class()
+
+            # Set parameters
+            for key, value in self.model_params.items():
+                setattr(self.model, key, value)
+
+            # Train
+            self.model.train(train_data, forward_days=5, threshold=0.01)
+            self.last_train_idx = end_idx
+            return True
+        except Exception:
+            return False
+
+    def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        signals = pd.Series(0, index=df.index)
+
+        if len(df) < self.min_samples:
+            return signals
+
+        # Get market returns for regime detection
+        market_returns = None
+        if 'index_returns' in df.columns:
+            market_returns = df['index_returns'].values
+
+        # Initial training
+        self._retrain_model(df, self.min_samples)
+
+        for i in range(self.min_samples, len(df)):
+            # Check if we need to retrain
+            if i - self.last_train_idx >= self.retrain_interval:
+                self._retrain_model(df, i)
+
+            try:
+                if self.model is None:
+                    signals.iloc[i] = 0
+                    continue
+
+                # Get prediction
+                pred, confidence = self.model.predict(df.iloc[:i+1])
+
+                # Check market regime
+                is_bear_market = False
+                if market_returns is not None and i >= 1:
+                    recent_market_return = market_returns[i-1] if i > 0 else 0
+                    if recent_market_return < self.bear_market_threshold:
+                        is_bear_market = True
+
+                if confidence >= self.confidence_threshold:
+                    # Apply market filter for buys
+                    if is_bear_market and self.require_bull_market_for_buy:
+                        if pred == 1:
+                            signals.iloc[i] = 0
+                        else:
+                            signals.iloc[i] = pred
+                    else:
+                        signals.iloc[i] = pred
+                else:
+                    signals.iloc[i] = 0
+
+            except Exception:
+                signals.iloc[i] = 0
+
+        return signals
+
+
+class RollingHybridStrategy(Strategy):
+    """Rolling ML strategy with hybrid confirmation.
+
+    Combines rolling training with the hybrid approach:
+    - Retrains model periodically to adapt to market changes
+    - Uses HighSellLowBuy as fallback/confirmation
+    - Only trades when ML and simple strategy agree
+    - More trades than pure RollingML due to fallback behavior
+    """
+
+    def __init__(
+        self,
+        model_class,  # Model class (not instance)
+        train_window: int = 180,  # Days of data to train on
+        retrain_interval: int = 20,  # Days between retraining
+        lookback: int = 10,  # Lookback for HighSellLowBuy
+        threshold: float = 0.10,  # Threshold for HighSellLowBuy
+        min_samples: int = 20,
+        ml_confidence_threshold: float = 0.45,  # Lower than pure ML for more trades
+        bear_market_threshold: float = -0.005,
+        require_bull_market_for_buy: bool = True,
+        model_params: dict = None  # Parameters for the model
+    ):
+        """Initialize rolling hybrid strategy.
+
+        Args:
+            model_class: CatBoost model class
+            train_window: Number of days to use for training
+            retrain_interval: Days between retraining
+            lookback: Lookback period for HighSellLowBuy
+            threshold: Threshold for HighSellLowBuy
+            min_samples: Min samples before generating signals
+            ml_confidence_threshold: Min confidence for ML signal
+            bear_market_threshold: Market return threshold
+            require_bull_market_for_buy: Only buy in bull market
+            model_params: Dict of model parameters
+        """
+        super().__init__(f"Rolling Hybrid ({train_window}/{retrain_interval})")
+        self.model_class = model_class
+        self.train_window = train_window
+        self.retrain_interval = retrain_interval
+        self.lookback = lookback
+        self.threshold = threshold
+        self.min_samples = min_samples
+        self.ml_confidence_threshold = ml_confidence_threshold
+        self.bear_market_threshold = bear_market_threshold
+        self.require_bull_market_for_buy = require_bull_market_for_buy
+        self.model_params = model_params or {}
+        self.model = None
+        self.last_train_idx = 0
+        # Simple strategy for fallback
+        self.simple_strategy = HighSellLowBuyStrategy(lookback=lookback, threshold=threshold)
+
+    def _retrain_model(self, df: pd.DataFrame, end_idx: int) -> bool:
+        """Retrain the model using data up to end_idx."""
+        try:
+            start_idx = max(0, end_idx - self.train_window)
+            train_data = df.iloc[start_idx:end_idx].copy()
+
+            if len(train_data) < self.min_samples + 10:
+                return False
+
+            # Create new model
+            self.model = self.model_class()
+
+            # Set parameters
+            for key, value in self.model_params.items():
+                setattr(self.model, key, value)
+
+            # Train
+            self.model.train(train_data, forward_days=5, threshold=0.01)
+            self.last_train_idx = end_idx
+            return True
+        except Exception:
+            return False
+
+    def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        signals = pd.Series(0, index=df.index)
+
+        if len(df) < self.min_samples:
+            return signals
+
+        # Get simple strategy signals
+        simple_signals = self.simple_strategy.generate_signals(df)
+
+        # Get market returns for regime detection
+        market_returns = None
+        if 'index_returns' in df.columns:
+            market_returns = df['index_returns'].values
+
+        # Initial training
+        self._retrain_model(df, self.min_samples)
+
+        for i in range(self.min_samples, len(df)):
+            # Check if we need to retrain
+            if i - self.last_train_idx >= self.retrain_interval:
+                self._retrain_model(df, i)
+
+            try:
+                if self.model is None:
+                    signals.iloc[i] = simple_signals.iloc[i]
+                    continue
+
+                # Get ML prediction
+                ml_pred, ml_confidence = self.model.predict(df.iloc[:i+1])
+                simple_signal = simple_signals.iloc[i]
+
+                # Check market regime
+                is_bear_market = False
+                if market_returns is not None and i >= 1:
+                    recent_market_return = market_returns[i-1] if i > 0 else 0
+                    if recent_market_return < self.bear_market_threshold:
+                        is_bear_market = True
+
+                # Determine final signal using hybrid logic
+                if ml_confidence >= self.ml_confidence_threshold:
+                    # ML is confident
+                    if ml_pred == simple_signal:
+                        # They agree - use the signal
+                        final_signal = ml_pred
                     else:
                         # They disagree - use simple strategy (more conservative)
                         final_signal = simple_signal

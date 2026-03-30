@@ -203,7 +203,7 @@ def main():
                 name="ML Strategy",
                 min_samples=min_samples,
                 confidence_threshold=0.50,
-                bear_market_threshold=0.005,
+                bear_market_threshold=-0.005,
                 require_bull_market_for_buy=True
             ),
             HybridStrategy(
@@ -212,7 +212,7 @@ def main():
                 threshold=0.10,
                 min_samples=min_samples,
                 ml_confidence_threshold=0.50,
-                bear_market_threshold=0.005,
+                bear_market_threshold=-0.005,
                 require_bull_market_for_buy=True
             )
         ]
