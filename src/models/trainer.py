@@ -9,6 +9,40 @@ import joblib
 from ..utils.config import get_config
 
 
+# Feature categories for market-aware selection
+FEATURE_CATEGORIES = {
+    'universal': [
+        # Core technical indicators that work across all markets
+        'returns', 'momentum_', 'rsi', 'macd', 'volume_ratio',
+        'ma_', 'volatility', 'atr_', 'bb_', 'stoch_',
+        'cci', 'adx', 'mfi', 'turnover', 'drawdown'
+    ],
+    'a_share': [
+        # A-share specific features
+        'net_flow', 'institutional_ratio', 'main_net_flow',
+        'super_large', 'large_net_flow', 'medium_net_flow', 'small_net_flow',
+        'huanshou', '换手'  # turnover in Chinese
+    ],
+    'hk': [
+        # HK-specific features (mostly index-related)
+        'hsi', 'hang_seng', 'hk_'
+    ],
+    'us': [
+        # US-specific features
+        'sp_', 'nasdaq', 'dow_', '^gspc', 'qqq'
+    ],
+    'market': [
+        # Market-wide features (index, correlation, beta)
+        'index_', 'market_', 'alpha', 'beta', 'corr', 'sector_'
+    ],
+    'fundamental': [
+        # Fundamental features
+        'pe_', 'pb_', 'roe_', 'revenue_', 'debt_', 'profit_',
+        'growth_', 'dividend', 'book_', 'asset_'
+    ]
+}
+
+
 class StockTradingModel:
     """CatBoost model for stock trading decisions."""
 
@@ -24,14 +58,48 @@ class StockTradingModel:
         self.models: List[CatBoostClassifier] = []  # Ensemble of models
         self.feature_names: Optional[List[str]] = None
         self.selected_features: Optional[List[str]] = None
-        self.max_features: int = 80  # Maximum features to use
+        self.max_features: int = 60  # Reduced to prevent overfitting
+        self.market_type: Optional[str] = None  # Track market type
 
-    def _select_features(self, df: pd.DataFrame, labels: pd.Series) -> List[str]:
-        """Select top features based on importance and diversity.
+    def _detect_market_type(self, df: pd.DataFrame) -> str:
+        """Detect market type from available features."""
+        columns = df.columns.tolist()
 
-        Uses a two-stage approach:
-        1. Quick preliminary model to get feature importance
-        2. Remove low importance, correlated, and low variance features
+        # Check for A-share money flow features
+        if any('net_flow' in c.lower() for c in columns):
+            return 'a_share'
+
+        # Check for HK features
+        if any('hsi' in c.lower() or 'hang_seng' in c.lower() for c in columns):
+            return 'hk'
+
+        # Check for US features
+        if any(c.lower().startswith('sp_') or 'nasdaq' in c.lower() or '^gspc' in c.lower() for c in columns):
+            return 'us'
+
+        return 'a_share'  # Default
+
+    def _get_feature_categories(self, feature: str, columns: List[str]) -> List[str]:
+        """Determine which categories a feature belongs to."""
+        categories = []
+        feature_lower = feature.lower()
+
+        for category, patterns in FEATURE_CATEGORIES.items():
+            for pattern in patterns:
+                if pattern.lower() in feature_lower:
+                    categories.append(category)
+                    break
+
+        return categories if categories else ['other']
+
+    def _select_features(self, df: pd.DataFrame, labels: pd.Series, market_type: str = None) -> List[str]:
+        """Select top features based on importance, diversity, and market applicability.
+
+        Uses a market-aware multi-stage approach:
+        1. Detect market type if not provided
+        2. Score features by category relevance for market
+        3. Quick preliminary model to get feature importance
+        4. Select diverse features across categories
         """
         # Drop non-feature columns
         drop_cols = ['date', 'stock_code', 'sector', 'industry', 'close', 'open', 'high', 'low', 'volume']
@@ -42,13 +110,26 @@ class StockTradingModel:
         object_cols = [c for c in feature_df.columns if feature_df[c].dtype == 'object' or feature_df[c].dtype == 'str']
         feature_df = feature_df.drop(columns=object_cols, errors='ignore')
 
+        # Detect market type
+        if market_type is None:
+            market_type = self._detect_market_type(feature_df)
+        self.market_type = market_type
+
+        # Define category priority by market
+        category_priority = {
+            'a_share': ['universal', 'a_share', 'market', 'fundamental'],
+            'hk': ['universal', 'market', 'fundamental'],
+            'us': ['universal', 'market', 'fundamental']
+        }
+        priority = category_priority.get(market_type, ['universal', 'market', 'fundamental'])
+
         # Remove rows where labels are NaN
         valid_idx = ~labels.isna()
         X_quick = feature_df[valid_idx]
         y_quick = labels[valid_idx]
 
         if len(X_quick) < 30:
-            # Not enough samples for importance-based selection, fall back to variance
+            # Not enough samples - use variance-based selection
             variances = feature_df.var()
             low_var_cols = variances[variances < 0.0001].index.tolist()
             feature_df = feature_df.drop(columns=low_var_cols, errors='ignore')
@@ -56,7 +137,7 @@ class StockTradingModel:
 
         # Quick preliminary model to get feature importance
         quick_model = CatBoostClassifier(
-            iterations=50,  # Few iterations for speed
+            iterations=50,
             depth=4,
             learning_rate=0.1,
             random_seed=self.random_seed,
@@ -71,15 +152,56 @@ class StockTradingModel:
             'importance': importance
         }).sort_values('importance', ascending=False)
 
-        # Keep top features by importance (at least top 60%)
-        importance_threshold = importance_df['importance'].quantile(0.40)
-        top_features = importance_df[importance_df['importance'] >= importance_threshold]['feature'].tolist()
+        # Assign categories to each feature
+        importance_df['categories'] = importance_df['feature'].apply(
+            lambda f: self._get_feature_categories(f, feature_df.columns)
+        )
 
-        if len(top_features) < 20:
-            # If too few, take top 40 by importance
-            top_features = importance_df.head(40)['feature'].tolist()
+        # Assign market relevance score
+        def get_market_score(categories):
+            if 'other' in categories:
+                return 0.5  # Unknown features get medium score
+            # Higher score for more relevant categories
+            scores = []
+            for cat in categories:
+                if cat in priority:
+                    scores.append((len(priority) - priority.index(cat)) / len(priority))
+                else:
+                    scores.append(0.3)
+            return max(scores) if scores else 0.5
 
-        feature_df = feature_df[top_features]
+        importance_df['market_score'] = importance_df['categories'].apply(get_market_score)
+        importance_df['combined_score'] = importance_df['importance'] * importance_df['market_score']
+
+        # Sort by combined score
+        importance_df = importance_df.sort_values('combined_score', ascending=False)
+
+        # Select features with diversity across categories
+        selected = []
+        category_count = {cat: 0 for cat in priority}
+        max_per_category = self.max_features // len(priority) + 5  # Allow some imbalance
+
+        for _, row in importance_df.iterrows():
+            feature = row['feature']
+            cats = row['categories']
+
+            # Check if we should include this feature
+            # Prefer features from under-represented categories
+            can_add = False
+            for cat in cats:
+                if cat in priority and category_count.get(cat, 0) < max_per_category:
+                    can_add = True
+                    break
+
+            if can_add or len(selected) < 20:  # Always allow first 20
+                selected.append(feature)
+                for cat in cats:
+                    category_count[cat] = category_count.get(cat, 0) + 1
+
+            if len(selected) >= self.max_features:
+                break
+
+        feature_df = feature_df[selected]
 
         # Remove features with low variance (near-constant)
         variances = feature_df.var()
@@ -92,13 +214,6 @@ class StockTradingModel:
             upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
             to_drop = [column for column in upper_tri.columns if any(upper_tri[column] > 0.95)]
             feature_df = feature_df.drop(columns=to_drop, errors='ignore')
-
-        # Final selection: limit to max_features
-        if len(feature_df.columns) > self.max_features:
-            # Use importance from preliminary model to select final features
-            final_importance = importance_df[importance_df['feature'].isin(feature_df.columns)]
-            final_cols = final_importance.head(self.max_features)['feature'].tolist()
-            feature_df = feature_df[final_cols]
 
         return feature_df.columns.tolist()
 

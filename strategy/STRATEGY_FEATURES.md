@@ -650,6 +650,38 @@ institutional_ratio         # 机构比例 (主力+超大单占比)
 **数据来源**: 东方财富 (via akshare `stock_individual_fund_flow`)
 **适用市场**: A股 (SH/SZ), 不适用港股
 
+### 15.10 市场感知特征选择 (Market-Aware Feature Selection)
+不同市场使用不同特征集:
+
+```python
+# 特征分类
+FEATURE_CATEGORIES = {
+    'universal': ['returns', 'momentum_', 'rsi', 'macd', 'volume_ratio', 'ma_', ...],
+    'a_share': ['net_flow', 'institutional_ratio', 'main_net_flow', ...],
+    'hk': ['hsi', 'hang_seng', 'hk_'],
+    'us': ['sp_', 'nasdaq', 'dow_', ...],
+    'market': ['index_', 'market_', 'alpha', 'beta', ...],
+    'fundamental': ['pe_', 'pb_', 'roe_', ...]
+}
+```
+
+**选择策略**:
+1. 自动检测市场类型 (通过特征名判断)
+2. 按市场优先级分配特征权重
+3. 保留类别多样性 (避免特征过于集中)
+4. 移除低方差和高相关特征
+
+**效果**:
+| 市场 | 特征数 | 说明 |
+|------|--------|------|
+| A股 | 40 | 包含资金流特征 |
+| 港股 | 33 | 无资金流，侧重指数相关 |
+| 美股 | 29 | 通用技术指标为主 |
+
+**港股回测结果改善**:
+- 优化前: ML -1.19% vs Buy&Hold
+- 优化后: ML +10.96% vs Buy&Hold
+
 ---
 
 ## 16. 已接入代码位置汇总
