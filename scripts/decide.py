@@ -22,7 +22,7 @@ from src.models import StockTradingModel, get_model
 from src.backtest import (
     BacktestEngine,
     run_backtest,
-    get_default_strategies,
+    get_market_strategies,
     MLStrategy,
     HybridStrategy,
 )
@@ -312,11 +312,20 @@ def main():
     if len(backtest_df) < 10:
         print("\n  Not enough data for backtesting")
     else:
-        strategies = get_default_strategies(
+        # Map stock_info.market to market key
+        market_map = {
+            'a_share': 'a_share',
+            'hk': 'hk',
+            'us': 'us',
+        }
+        market_key = market_map.get(stock_info.market, 'default')
+
+        print(f"\n  Market config : {market_key}")
+
+        strategies = get_market_strategies(
             model=model,
+            market=market_key,
             min_samples=min_samples,
-            ml_confidence_threshold=0.50,
-            bear_market_threshold=-0.005,
             require_bull_market_for_buy=True
         )
 

@@ -19,14 +19,12 @@ from src.features import get_feature_combinator
 from src.models import StockTradingModel
 from src.backtest import (
     BacktestEngine,
-    BuyAndHoldStrategy,
-    HighSellLowBuyStrategy,
+    BacktestResult,
     MLStrategy,
     HybridStrategy,
     RollingMLStrategy,
     RollingHybridStrategy,
-    BacktestResult,
-    get_default_strategies,
+    get_market_strategies,
 )
 
 
@@ -66,6 +64,14 @@ def main():
     print(f"  Backtest Days  : {args.backtest_days}")
     print(f"  Training Days  : {args.train_days}")
     print(f"  Initial Cash   : ${args.initial_cash:,.2f}")
+
+    # Resolve stock info for market-specific strategies
+    try:
+        stock_info = StockInfoResolver.resolve(stock_code)
+        print(f"  Market         : {stock_info.market}")
+    except ValueError as e:
+        print(f"  Warning: Could not resolve market: {e}")
+        stock_info = None
 
     # Get data
     config = get_config()
@@ -140,11 +146,17 @@ def main():
         take_profit=0.15  # 15% take profit
     )
 
-    strategies = get_default_strategies(
+    # Map stock_info.market to market key
+    if stock_info:
+        market_map = {'a_share': 'a_share', 'hk': 'hk', 'us': 'us'}
+        market_key = market_map.get(stock_info.market, 'default')
+    else:
+        market_key = 'default'
+
+    strategies = get_market_strategies(
         model=model,
+        market=market_key,
         min_samples=min_samples,
-        ml_confidence_threshold=0.50,
-        bear_market_threshold=-0.005,
         require_bull_market_for_buy=True
     )
 

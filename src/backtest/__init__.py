@@ -13,7 +13,12 @@ from .engine import (
     RollingHybridStrategy,
     run_backtest
 )
-from .strategies import get_default_strategies, get_quick_strategies
+from .strategies import (
+    get_default_strategies,
+    get_quick_strategies,
+    get_market_strategies,
+    MARKET_PARAMS,
+)
 
 __all__ = [
     'BacktestEngine',
@@ -29,4 +34,6 @@ __all__ = [
     'run_backtest',
     'get_default_strategies',
     'get_quick_strategies',
+    'get_market_strategies',
+    'MARKET_PARAMS',
 ]
