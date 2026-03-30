@@ -25,6 +25,8 @@ from src.backtest import (
     get_market_strategies,
     MLStrategy,
     HybridStrategy,
+    RollingMLStrategy,
+    RollingHybridStrategy,
 )
 
 
@@ -110,8 +112,8 @@ def print_all_strategy_decisions(
 
     for strategy in strategies:
         try:
-            # Generate signals using full history
-            if isinstance(strategy, (MLStrategy, HybridStrategy)):
+            # Generate signals using full history for ML-based strategies
+            if isinstance(strategy, (MLStrategy, HybridStrategy, RollingMLStrategy, RollingHybridStrategy)):
                 signals = strategy.generate_signals(full_history_df)
                 # Extract signals for backtest period
                 signals = signals.iloc[-len(backtest_df):]

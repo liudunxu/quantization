@@ -14,6 +14,17 @@ from .engine import (
     RollingMLStrategy,
     RollingHybridStrategy,
 )
+from .rule_strategies import (
+    MAGoldenCrossStrategy,
+    BullTrendStrategy,
+    ShrinkPullbackStrategy,
+    BottomVolumeStrategy,
+    BoxOscillationStrategy,
+    EmotionCycleStrategy,
+    VolumeBreakoutStrategy,
+    OneYangThreeYinStrategy,
+    MACDDivergenceStrategy,
+)
 
 
 # Market-specific strategy parameters
@@ -181,13 +192,23 @@ def get_market_strategies(
     params = MARKET_PARAMS.get(market, MARKET_PARAMS['default'])
 
     return [
-        # Non-ML strategies
+        # === Non-ML / Rule-based strategies ===
         BuyAndHoldStrategy(),
         HighSellLowBuyStrategy(
             lookback=params['highsell_lookback'],
             threshold=params['highsell_threshold']
         ),
 
+        # Rule-based strategies from strategy references
+        MAGoldenCrossStrategy(fast_ma=5, slow_ma=10),
+        BullTrendStrategy(ma5_period=5, ma10_period=10, ma20_period=20),
+        ShrinkPullbackStrategy(lookback=5, ma_period=5),
+        BottomVolumeStrategy(drop_threshold=0.15, volume_multiplier=3.0),
+        BoxOscillationStrategy(lookback=60),
+        VolumeBreakoutStrategy(lookback=20, volume_multiplier=2.0),
+        MACDDivergenceStrategy(lookback=20),
+
+        # === ML-based strategies ===
         # Pure ML strategy
         MLStrategy(
             model,
