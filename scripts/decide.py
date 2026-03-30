@@ -101,6 +101,75 @@ def get_strategy_decision(signals: pd.Series) -> tuple:
         return 'HOLD', 0.2
 
 
+def calculate_suggested_lots(
+    action: str,
+    price: float,
+    atr: float,
+    cash: float = 100000,
+    risk_pct: float = 0.02,
+    atr_multiplier: float = 2.0
+) -> dict:
+    """Calculate suggested trading lots based on ATR risk model.
+
+    Args:
+        action: 'BUY', 'SELL', or 'HOLD'
+        price: Current stock price
+        atr: Average True Range
+        cash: Available cash (default 100000)
+        risk_pct: Risk percentage per trade (default 2%)
+        atr_multiplier: ATR multiplier for stop distance (default 2.0)
+
+    Returns:
+        dict with lots, shares, estimated_cost, stop_loss, take_profit
+    """
+    if action == 'HOLD' or price <= 0:
+        return {'lots': 0, 'shares': 0, 'estimated_cost': 0, 'stop_loss': 0, 'take_profit': 0}
+
+    # Risk amount
+    risk_amount = cash * risk_pct
+
+    # Stop distance based on ATR
+    stop_distance = atr * atr_multiplier if atr > 0 else price * 0.04
+
+    # Position size based on risk
+    position_value = risk_amount / (stop_distance / price)
+    shares = int(position_value / price / 100) * 100  # Round to lots
+    lots = shares / 100
+
+    # Calculate stop loss and take profit prices
+    if action == 'BUY':
+        stop_loss = price - stop_distance
+        take_profit = price + stop_distance * 2
+    else:  # SELL
+        stop_loss = price + stop_distance
+        take_profit = price - stop_distance * 2
+
+    return {
+        'lots': lots,
+        'shares': shares,
+        'estimated_cost': shares * price,
+        'stop_loss': stop_loss,
+        'take_profit': take_profit
+    }
+    recent_sum = recent.sum()
+
+    if last_signal == 1:
+        # BUY signal - check conviction
+        conviction = 0.6 + 0.1 * min(abs(recent_sum), 3)  # 0.6-0.9 based on recent history
+        return 'BUY', min(conviction, 1.0)
+    elif last_signal == -1:
+        # SELL signal - higher conviction for sell
+        conviction = 0.7 + 0.1 * min(abs(recent_sum), 3)  # 0.7-1.0
+        return 'SELL', min(conviction, 1.0)
+    else:
+        # HOLD - check if recent signals show momentum
+        if recent_sum > 2:
+            return 'HOLD', 0.4  # Slightly bullish momentum
+        elif recent_sum < -2:
+            return 'HOLD', 0.4  # Slightly bearish momentum
+        return 'HOLD', 0.2
+
+
 def _parse_return(return_str: str) -> float:
     """Parse return string like '12.34%' to float 0.1234."""
     if return_str in ('N/A', 'ERROR', None):
@@ -450,12 +519,32 @@ def main():
             prediction_action_map = {'BUY': 1, 'HOLD': 0, 'SELL': -1}
             prediction_action = prediction_action_map.get(best_action, 0)
             prediction_confidence = best_confidence
+
+            # Calculate suggested lots
+            current_price = backtest_df['close'].iloc[-1]
+            atr_value = backtest_df['atr'].iloc[-1] if 'atr' in backtest_df.columns else current_price * 0.02
+            initial_cash = config.get('backtest.initial_cash', 100000)
+            suggested = calculate_suggested_lots(
+                action=best_action,
+                price=current_price,
+                atr=atr_value,
+                cash=initial_cash
+            )
+
             print_section(" FINAL RECOMMENDATION (BEST PERFORMING STRATEGY)")
             print(f"\n  Best Strategy  : {best_strategy_name}")
-            print(f"  Action        : {best_action}")
+            print(f"  Action       : {best_action}")
             print(f"  Confidence    : {best_confidence:.2f}")
-            print(f"  Backtest Ret  : {best_decision['return']}")
+            print(f"  Backtest Ret : {best_decision['return']}")
             print(f"  Strategy Score: {best_decision['score']:.3f}")
+
+            if best_action != 'HOLD':
+                print(f"\n  === Suggested Position ===")
+                print(f"  Lots          : {suggested['lots']:.0f} 手")
+                print(f"  Shares        : {suggested['shares']} 股")
+                print(f"  Est. Cost     : ¥{suggested['estimated_cost']:,.2f}")
+                print(f"  Stop Loss    : ¥{suggested['stop_loss']:.2f} (-{((current_price - suggested['stop_loss']) / current_price * 100):.1f}%)")
+                print(f"  Take Profit   : ¥{suggested['take_profit']:.2f} (+{((suggested['take_profit'] - current_price) / current_price * 100):.1f}%)")
         else:
             print_decision(prediction_action, prediction_confidence, prediction_proba)
 
