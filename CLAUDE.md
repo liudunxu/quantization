@@ -96,6 +96,12 @@ python scripts/decide.py --stock 0700.HK --refresh  # Force refresh cache
 python scripts/decide.py --stock AAPL
 ```
 
+**Decision Flow:** Train model → Backtest 4 strategies → Output each strategy's decision → Use best-performer as final recommendation.
+
+**Key Parameters:**
+- `--train-days`: Training data size (365 default). Larger = more stable but may include outdated patterns.
+- `--backtest-days`: Backtest window (30 default). Used to select best strategy and evaluate performance.
+
 ### Run Backtest
 ```bash
 python scripts/backtest.py --stock 000001.SZ --days 30 --train-days 365

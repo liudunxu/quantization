@@ -79,9 +79,73 @@ quarnt/
 
 | 策略 | 说明 |
 |------|------|
-| ML策略 | 基于CatBoost模型预测，支持置信度阈值过滤 |
-| 买入持有 | 买入后一直持有，作为基准 |
-| 高卖低买 | 逆势策略，价格高位卖出、低位买入 |
+| Buy & Hold | 买入后一直持有，作为基准 |
+| High Sell Low Buy | 逆势策略，价格高位卖出、低位买入 |
+| ML Strategy | 基于CatBoost模型预测，支持置信度阈值过滤 |
+| Hybrid Strategy | ML策略 + High Sell Low Buy 混合，确认信号 |
+
+### 决策流程
+
+`decide.py` 运行时会：
+
+1. **训练模型** - 使用 train_days 数据训练 CatBoost 模型
+2. **回测对比** - 在 backtest_days 窗口内对比 4 种策略表现
+3. **输出各策略 Decision** - 每种策略的买入/持有/卖出信号
+4. **自动选择最优** - 选择回测收益率最高的策略，以其决策为最终推荐
+
+### 策略选择机制
+
+```python
+# 回测窗口内表现最优的策略决定最终 action
+if best_strategy_return > others:
+    final_decision = best_strategy.action
+```
+
+## 常见问题 (FAQ)
+
+### Q: `--train-days` 参数是越大越好还是越小越好？
+
+**没有绝对最优值，取决于市场特征：**
+
+| train_days | 优点 | 缺点 | 推荐场景 |
+|------------|------|------|----------|
+| 越大 (365-730) | 样本多，模型稳定，减少过拟合 | 可能包含过时模式 | 趋势稳定的市场 |
+| 越小 (90-180) | 更贴近近期市场状态 | 样本少，容易过拟合 | 风格切换快的市场 |
+
+**建议：** 对同一只股票用不同值跑回测对比，选择回测表现最好的。
+
+### Q: `--backtest-days` 参数如何影响决策？
+
+**作用：**
+
+1. **决定训练集大小** - `train_days` 固定时，`backtest_days` 越大则训练集越小
+   ```
+   train_df = features_df[:-backtest_days]  # 训练用
+   eval_df = features_df[-backtest_days:]   # 验证用
+   ```
+
+2. **决定回测评估期** - 用这个窗口判断哪种策略最优
+
+3. **权衡：**
+   - **大 (60-90天)**：结果更统计显著，但可能错过近期变化
+   - **小 (15-20天)**：更贴近当前，但结果不稳定
+
+**推荐：** 默认 30 天是合理折中（一个月交易日约 20-22 天）
+
+### Q: 模型会自动保存吗？
+
+**不会。** 每次运行 `decide.py` 都从头训练新模型，不保存/加载模型文件。
+
+### Q: 如何选择最优参数？
+
+```bash
+# 对比不同参数组合
+python scripts/decide.py --stock 000001.SZ --train-days 180 --backtest-days 30
+python scripts/decide.py --stock 000001.SZ --train-days 365 --backtest-days 30
+python scripts/decide.py --stock 000001.SZ --train-days 365 --backtest-days 15
+```
+
+回测表现最好的参数组合，就是该股票/市场的最优选择。
 
 ## 缓存管理
 

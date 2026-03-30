@@ -66,6 +66,112 @@ def print_backtest_comparison(results_df: pd.DataFrame) -> None:
     print(results_df.to_string(index=False))
 
 
+def get_strategy_decision(signals: pd.Series) -> tuple:
+    """Get the final decision from signals series.
+
+    Returns:
+        tuple: (action_str, confidence)
+            action_str: 'BUY', 'HOLD', or 'SELL'
+            confidence: 1.0 if clear signal, 0.5 if ambiguous
+    """
+    if signals.empty:
+        return 'HOLD', 0.0
+
+    last_signal = signals.iloc[-1]
+    if last_signal == 1:
+        return 'BUY', 1.0
+    elif last_signal == -1:
+        return 'SELL', 1.0
+    else:
+        # Check recent signals for conviction
+        recent = signals.iloc[-5:]
+        if recent.sum() > 0:
+            return 'HOLD', 0.5
+        elif recent.sum() < 0:
+            return 'HOLD', 0.5
+        return 'HOLD', 0.0
+
+
+def print_all_strategy_decisions(
+    strategies: list,
+    results_df: pd.DataFrame,
+    backtest_df: pd.DataFrame,
+    full_history_df: pd.DataFrame,
+    model: StockTradingModel,
+    min_samples: int
+) -> tuple:
+    """Print decisions for all strategies and return the best one.
+
+    Returns:
+        tuple: (best_strategy_name, best_action, best_confidence)
+    """
+    print_section(" ALL STRATEGY DECISIONS")
+
+    decisions = {}
+
+    for strategy in strategies:
+        try:
+            # Generate signals using full history
+            if isinstance(strategy, (MLStrategy, HybridStrategy)):
+                signals = strategy.generate_signals(full_history_df)
+                # Extract signals for backtest period
+                signals = signals.iloc[-len(backtest_df):]
+            else:
+                signals = strategy.generate_signals(backtest_df)
+
+            action, confidence = get_strategy_decision(signals)
+
+            # Find this strategy's backtest result
+            result_row = results_df[results_df['Strategy'] == strategy.name]
+            if not result_row.empty:
+                total_return = result_row['Total Return'].values[0]
+                sharpe = result_row['Sharpe Ratio'].values[0]
+            else:
+                total_return = 'N/A'
+                sharpe = 'N/A'
+
+            decisions[strategy.name] = {
+                'action': action,
+                'confidence': confidence,
+                'return': total_return,
+                'sharpe': sharpe
+            }
+
+            print(f"\n  {strategy.name}:")
+            print(f"    Decision  : {action}")
+            print(f"    Confidence: {confidence:.2f}")
+            print(f"    Return     : {total_return}")
+            print(f"    Sharpe     : {sharpe}")
+
+        except Exception as e:
+            decisions[strategy.name] = {
+                'action': 'ERROR',
+                'confidence': 0.0,
+                'return': 'N/A',
+                'sharpe': 'N/A'
+            }
+            print(f"\n  {strategy.name}: ERROR - {e}")
+
+    # Find best strategy based on return (parse percentage string)
+    best_name = None
+    best_return = -float('inf')
+
+    for name, data in decisions.items():
+        if data['return'] == 'N/A' or data['return'] == 'ERROR':
+            continue
+        try:
+            # Parse percentage string like "12.34%"
+            ret_str = data['return'].replace('%', '')
+            ret_val = float(ret_str) / 100 if '%' in data['return'] else float(ret_str)
+            if ret_val > best_return:
+                best_return = ret_val
+                best_name = name
+        except:
+            continue
+
+    return decisions, best_name
+
+
 def print_feature_importance(model: StockTradingModel, top_n: int = 10) -> None:
     """Print top feature importances."""
     try:
@@ -226,8 +332,25 @@ def main():
         results_df = engine.compare_strategies(backtest_df, strategies, full_history_df=features_df)
         print_backtest_comparison(results_df)
 
-    # Trading decision (moved to end)
-    print_decision(prediction_action, prediction_confidence, prediction_proba)
+        # Print all strategy decisions and find the best one
+        decisions, best_strategy_name = print_all_strategy_decisions(
+            strategies, results_df, backtest_df, features_df, model, min_samples
+        )
+
+        # Trading decision (moved to end)
+        # Use best performing strategy's decision instead of raw model prediction
+        if best_strategy_name and best_strategy_name in decisions:
+            best_decision = decisions[best_strategy_name]
+            prediction_action_map = {'BUY': 1, 'HOLD': 0, 'SELL': -1}
+            prediction_action = prediction_action_map.get(best_decision['action'], 0)
+            prediction_confidence = best_decision['confidence']
+            print_section(" FINAL RECOMMENDATION (BEST PERFORMING STRATEGY)")
+            print(f"\n  Best Strategy : {best_strategy_name}")
+            print(f"  Action        : {best_decision['action']}")
+            print(f"  Confidence     : {best_decision['confidence']:.2f}")
+            print(f"  Backtest Ret  : {best_decision['return']}")
+        else:
+            print_decision(prediction_action, prediction_confidence, prediction_proba)
 
     print("\n" + "="*60)
     print(" Decision process completed!")
