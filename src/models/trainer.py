@@ -25,7 +25,12 @@ class StockTradingModel:
         self.max_features: int = 80  # Maximum features to use
 
     def _select_features(self, df: pd.DataFrame, labels: pd.Series) -> List[str]:
-        """Select top features based on importance and diversity."""
+        """Select top features based on importance and diversity.
+
+        Uses a two-stage approach:
+        1. Quick preliminary model to get feature importance
+        2. Remove low importance, correlated, and low variance features
+        """
         # Drop non-feature columns
         drop_cols = ['date', 'stock_code', 'sector', 'industry', 'close', 'open', 'high', 'low', 'volume']
         drop_cols = [c for c in drop_cols if c in df.columns]
@@ -35,22 +40,63 @@ class StockTradingModel:
         object_cols = [c for c in feature_df.columns if feature_df[c].dtype == 'object' or feature_df[c].dtype == 'str']
         feature_df = feature_df.drop(columns=object_cols, errors='ignore')
 
+        # Remove rows where labels are NaN
+        valid_idx = ~labels.isna()
+        X_quick = feature_df[valid_idx]
+        y_quick = labels[valid_idx]
+
+        if len(X_quick) < 30:
+            # Not enough samples for importance-based selection, fall back to variance
+            variances = feature_df.var()
+            low_var_cols = variances[variances < 0.0001].index.tolist()
+            feature_df = feature_df.drop(columns=low_var_cols, errors='ignore')
+            return feature_df.columns.tolist()[:self.max_features]
+
+        # Quick preliminary model to get feature importance
+        quick_model = CatBoostClassifier(
+            iterations=50,  # Few iterations for speed
+            depth=4,
+            learning_rate=0.1,
+            random_seed=self.random_seed,
+            verbose=False
+        )
+        quick_model.fit(X_quick, y_quick, verbose=False)
+
+        # Get feature importance
+        importance = quick_model.get_feature_importance()
+        importance_df = pd.DataFrame({
+            'feature': X_quick.columns,
+            'importance': importance
+        }).sort_values('importance', ascending=False)
+
+        # Keep top features by importance (at least top 60%)
+        importance_threshold = importance_df['importance'].quantile(0.40)
+        top_features = importance_df[importance_df['importance'] >= importance_threshold]['feature'].tolist()
+
+        if len(top_features) < 20:
+            # If too few, take top 40 by importance
+            top_features = importance_df.head(40)['feature'].tolist()
+
+        feature_df = feature_df[top_features]
+
         # Remove features with low variance (near-constant)
         variances = feature_df.var()
         low_var_cols = variances[variances < 0.0001].index.tolist()
         feature_df = feature_df.drop(columns=low_var_cols, errors='ignore')
 
         # Remove features highly correlated with each other
-        corr_matrix = feature_df.corr().abs()
-        upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-        to_drop = [column for column in upper_tri.columns if any(upper_tri[column] > 0.95)]
-        feature_df = feature_df.drop(columns=to_drop, errors='ignore')
+        if len(feature_df.columns) > 1:
+            corr_matrix = feature_df.corr().abs()
+            upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+            to_drop = [column for column in upper_tri.columns if any(upper_tri[column] > 0.95)]
+            feature_df = feature_df.drop(columns=to_drop, errors='ignore')
 
-        # If too many features, keep top N by variance
+        # Final selection: limit to max_features
         if len(feature_df.columns) > self.max_features:
-            variances = feature_df.var()
-            top_cols = variances.nlargest(self.max_features).index.tolist()
-            feature_df = feature_df[top_cols]
+            # Use importance from preliminary model to select final features
+            final_importance = importance_df[importance_df['feature'].isin(feature_df.columns)]
+            final_cols = final_importance.head(self.max_features)['feature'].tolist()
+            feature_df = feature_df[final_cols]
 
         return feature_df.columns.tolist()
 
