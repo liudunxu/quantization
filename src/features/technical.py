@@ -525,4 +525,7 @@ class TechnicalFeatures(BaseFeatureExtractor):
         # Fill NaN values with forward fill then backward fill for remaining
         df = df.ffill().bfill()
 
+        # Defragment DataFrame to avoid performance warnings
+        df = df.copy()
+
         return df

@@ -204,13 +204,18 @@ class StockTradingModel:
         )
 
         # ========== Create final labels ==========
-        # Buy: composite score >= 0.5 AND future return is positive
-        # Sell: composite score <= -0.5 AND future return is negative
+        # Buy: composite score >= buy_threshold AND future return is positive
+        # Sell: composite score <= sell_threshold AND future return is negative
         # Hold: everything else
+        #
+        # Thresholds lowered to 0.2/0.3 for more signals (while still requiring confirmation)
 
         labels = pd.Series(0, index=df.index)
-        buy_condition = (composite >= 0.5) & (future_returns > threshold * 0.5)
-        sell_condition = (composite <= -0.5) & (future_returns < -threshold * 0.5)
+        buy_threshold = 0.2  # Lowered from 0.5
+        sell_threshold = -0.2  # Lowered from -0.5
+
+        buy_condition = (composite >= buy_threshold) & (future_returns > threshold * 0.5)
+        sell_condition = (composite <= sell_threshold) & (future_returns < -threshold * 0.5)
 
         labels[buy_condition] = 1
         labels[sell_condition] = -1
