@@ -269,7 +269,28 @@ class StockTradingModel:
         # Convert labels: -1->0, 0->1, 1->2 for CatBoost
         labels = (labels + 1).astype(int)
 
-        # Train model with class weights for balance
+        # Calculate class weights based on inverse frequency (with square root damping)
+        # This is more aggressive than balanced but less than pure inverse
+        class_counts = labels.value_counts()
+        total = len(labels)
+        n_classes = len(class_counts)
+
+        # Custom class weights: sqrt(n/ck) gives moderate boost to minority classes
+        class_weights = {}
+        for cls in range(n_classes):
+            if cls in class_counts.index:
+                # Inverse frequency with sqrt damping for less aggressive weighting
+                weight = np.sqrt(total / (n_classes * class_counts[cls]))
+                class_weights[cls] = weight
+
+        # Cap extreme weights to avoid overfitting to minority class
+        max_weight = 5.0
+        for cls in class_weights:
+            class_weights[cls] = min(class_weights[cls], max_weight)
+
+        print(f"  Class weights: {class_weights}")
+
+        # Train model with custom class weights for balance
         self.model = CatBoostClassifier(
             iterations=self.iterations,
             depth=self.depth,
@@ -278,7 +299,7 @@ class StockTradingModel:
             random_seed=self.random_seed,
             verbose=False,
             loss_function='MultiClass',
-            auto_class_weights='Balanced'  # Auto-balance classes
+            class_weights=class_weights  # Custom weights instead of auto
         )
 
         train_data = X
