@@ -23,6 +23,8 @@ from src.backtest import (
     BacktestEngine,
     run_backtest,
     get_default_strategies,
+    MLStrategy,
+    HybridStrategy,
 )
 
 
