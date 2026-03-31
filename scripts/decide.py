@@ -983,7 +983,54 @@ def main():
 
     print("\n" + "=" * 60)
     print(" Decision process completed!")
-    print("=" * 60 + "\n")
+    print("=" * 60)
+
+    # ========== Beginner-Friendly Section ==========
+    print("\n" + "=" * 60)
+    print(" BEGINNER'S GUIDE")
+    print("=" * 60)
+
+    # Risk Warnings
+    print("\n  === Risk Warnings ===")
+    print("  1. 本系统仅供参考，不构成投资建议")
+    print("  2. 过去表现不代表未来收益")
+    print("  3. 建议单笔交易不超过总资金的10%")
+    print("  4. 设置止损位，控制单笔亏损在2%以内")
+    print("  5. 不要追涨杀跌，保持冷静")
+
+    # Key Terms Glossary
+    print("\n  === Key Terms ===")
+    print("  • MA (均线): 移动平均线，反映价格趋势")
+    print("  • RSI (相对强弱): 0-100，>70超买，<30超卖")
+    print("  • MACD: 趋势指标，金叉买入，死叉卖出")
+    print("  • ATR (波动率): 平均真实波幅，用于止损")
+    print("  • 支撑位: 价格下跌时可能止跌的位置")
+    print("  • 阻力位: 价格上涨时可能受阻的位置")
+    print("  • 布林带: 价格波动通道，触及边界可能反转")
+
+    # Trading Tips
+    print("\n  === Trading Tips ===")
+    if final_action == "BUY":
+        print("  • 建议分批建仓，不要一次性满仓")
+        print("  • 设置好止损位，严格执行")
+        print("  • 关注成交量变化，放量上涨更可靠")
+    elif final_action == "SELL":
+        print("  • 建议分批减仓，不要一次性清仓")
+        print("  • 如果是止损，不要犹豫")
+        print("  • 卖出后等待新的买入机会")
+    else:
+        print("  • 当前没有明确信号，建议观望")
+        print("  • 可以利用这段时间学习和研究")
+        print("  • 等待更好的入场时机")
+
+    # Next Steps
+    print("\n  === Next Steps ===")
+    print("  1. 查看 'Simple Analysis' 了解当前技术状态")
+    print("  2. 关注 'Support & Resistance' 确定买卖点")
+    print("  3. 设置价格提醒，及时把握机会")
+    print("  4. 定期复盘，总结经验")
+
+    print("\n" + "=" * 60 + "\n")
 
 
 if __name__ == "__main__":
