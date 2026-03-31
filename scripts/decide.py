@@ -504,6 +504,97 @@ def print_stock_core_data(df: pd.DataFrame) -> None:
             if pd.notna(ret):
                 print(f"  {period}d Return     : {ret * 100:+.2f}%")
 
+    # ========== Simple Analysis for Beginners ==========
+    print(f"\n  === Simple Analysis ===")
+    analyses = []
+
+    # Price vs MA analysis
+    for period in [5, 10, 20, 60]:
+        ma_col = f"ma_{period}"
+        if ma_col in df.columns:
+            ma_value = latest.get(ma_col)
+            if pd.notna(ma_value) and ma_value > 0:
+                if current_price > ma_value * 1.05:
+                    analyses.append(f"价格高于MA{period}均线5%以上，可能偏高")
+                elif current_price < ma_value * 0.95:
+                    analyses.append(f"价格低于MA{period}均线5%以下，可能偏低")
+                elif current_price > ma_value:
+                    analyses.append(f"价格在MA{period}均线上方运行")
+                else:
+                    analyses.append(f"价格跌破MA{period}均线")
+
+    # RSI analysis
+    if "rsi" in df.columns:
+        rsi = latest.get("rsi")
+        if pd.notna(rsi):
+            if rsi > 80:
+                analyses.append("RSI严重超买，短期回调风险大")
+            elif rsi > 70:
+                analyses.append("RSI进入超买区域，注意风险")
+            elif rsi < 20:
+                analyses.append("RSI严重超卖，可能存在反弹机会")
+            elif rsi < 30:
+                analyses.append("RSI进入超卖区域，可关注反弹机会")
+
+    # MACD analysis
+    if "macd" in df.columns and "macd_signal" in df.columns:
+        macd = latest.get("macd")
+        macd_signal = latest.get("macd_signal")
+        macd_hist = latest.get("macd_hist")
+        if pd.notna(macd) and pd.notna(macd_signal) and pd.notna(macd_hist):
+            if macd > macd_signal and macd_hist > 0:
+                analyses.append("MACD金叉且柱状图向上，多头信号")
+            elif macd < macd_signal and macd_hist < 0:
+                analyses.append("MACD死叉且柱状图向下，空头信号")
+            elif macd_hist > 0 and macd_hist > latest.get("macd_hist_lag_1", 0):
+                analyses.append("MACD柱状图放大，动能增强")
+            elif macd_hist < 0 and macd_hist < latest.get("macd_hist_lag_1", 0):
+                analyses.append("MACD柱状图缩小，动能减弱")
+
+    # Volume analysis
+    if "volume_ratio" in df.columns:
+        vol_ratio = latest.get("volume_ratio")
+        if pd.notna(vol_ratio):
+            if vol_ratio > 3:
+                analyses.append("成交量异常放大，需关注是否有重大消息")
+            elif vol_ratio > 2:
+                analyses.append("成交量明显放大，市场关注度提升")
+            elif vol_ratio < 0.5:
+                analyses.append("成交量极度萎缩，市场观望情绪浓厚")
+
+    # Support/Resistance analysis
+    if current_price >= high_20d * 0.99:
+        analyses.append("价格接近20日高点，上方有压力")
+    elif current_price <= low_20d * 1.01:
+        analyses.append("价格接近20日低点，下方有支撑")
+
+    # Bollinger Bands analysis
+    if "bb_upper" in df.columns and "bb_lower" in df.columns:
+        bb_upper = latest.get("bb_upper")
+        bb_lower = latest.get("bb_lower")
+        if pd.notna(bb_upper) and pd.notna(bb_lower):
+            if current_price >= bb_upper * 0.99:
+                analyses.append("价格触及布林带上轨，短期可能回调")
+            elif current_price <= bb_lower * 1.01:
+                analyses.append("价格触及布林带下轨，短期可能反弹")
+
+    # Trend analysis
+    if "ma_5" in df.columns and "ma_20" in df.columns:
+        ma5 = latest.get("ma_5")
+        ma20 = latest.get("ma_20")
+        if pd.notna(ma5) and pd.notna(ma20):
+            if ma5 > ma20:
+                analyses.append("短期均线在长期均线上方，趋势偏多")
+            else:
+                analyses.append("短期均线在长期均线下方，趋势偏空")
+
+    # Print analyses
+    if analyses:
+        for i, analysis in enumerate(analyses[:8], 1):  # Limit to 8 analyses
+            print(f"  {i}. {analysis}")
+    else:
+        print("  暂无明显技术信号")
+
 
 def main():
     args = parse_args()
