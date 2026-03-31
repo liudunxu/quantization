@@ -240,3 +240,8 @@ See `requirements.txt`
 - [x] Market filtering with 3-day average
 - [x] Multi-provider data fetching (baostock, openbb)
 - [x] Risk management (max drawdown control)
+- [x] SQLite-based feature caching
+- [x] Outlier handling (winsorize at 1%-99%)
+- [x] Strategy descriptions (Chinese)
+- [x] Stock core data display (support/resistance, indicators)
+- [x] Top3 Voting Strategy
