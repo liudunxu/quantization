@@ -446,6 +446,26 @@ def main():
         print(f"  Error fetching data: {e}")
         sys.exit(1)
 
+    # Try to get real-time price for latest data point
+    try:
+        from src.data_providers import fetch_realtime_price
+
+        realtime_price = fetch_realtime_price(stock_code)
+        if realtime_price is not None:
+            # Update the last row's close price with real-time price
+            last_idx = features_df.index[-1]
+            old_close = features_df.loc[last_idx, "close"]
+            features_df.loc[last_idx, "close"] = realtime_price
+            # Also update high/low if needed
+            if realtime_price > features_df.loc[last_idx, "high"]:
+                features_df.loc[last_idx, "high"] = realtime_price
+            if realtime_price < features_df.loc[last_idx, "low"]:
+                features_df.loc[last_idx, "low"] = realtime_price
+            print(f"  Realtime price  : {realtime_price:.2f} (was {old_close:.2f})")
+    except Exception as e:
+        # Silently fall back to historical data
+        pass
+
     # Train model
     print_section(" TRAINING MODEL")
 

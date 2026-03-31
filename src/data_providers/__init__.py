@@ -13,15 +13,17 @@ from .tushare_provider import TushareProvider
 from .fetch_stock_data import (
     StockDataFetcher,
     get_data_fetcher,
-    fetch_stock_data
+    fetch_stock_data,
+    fetch_realtime_price,
 )
 
 __all__ = [
-    'BaseDataProvider',
-    'YFinanceProvider',
-    'AKShareProvider',
-    'TushareProvider',
-    'StockDataFetcher',
-    'get_data_fetcher',
-    'fetch_stock_data',
+    "BaseDataProvider",
+    "YFinanceProvider",
+    "AKShareProvider",
+    "TushareProvider",
+    "StockDataFetcher",
+    "get_data_fetcher",
+    "fetch_stock_data",
+    "fetch_realtime_price",
 ]

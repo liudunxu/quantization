@@ -3,12 +3,58 @@
 import logging
 from typing import Optional, List
 import pandas as pd
+import yfinance as yf
 from .base import BaseDataProvider
 from .yfinance_provider import YFinanceProvider
 from .akshare_provider import AKShareProvider
 from .tushare_provider import TushareProvider
 
 logger = logging.getLogger(__name__)
+
+
+def fetch_realtime_price(stock_code: str) -> Optional[float]:
+    """Fetch real-time price for a stock.
+
+    Args:
+        stock_code: Stock code (e.g., '000001.SZ', 'AAPL', '0700.HK')
+
+    Returns:
+        Real-time price or None if failed
+    """
+    try:
+        ticker = yf.Ticker(stock_code)
+        info = ticker.info
+
+        # Try different price fields
+        price_fields = ["currentPrice", "regularMarketPrice", "previousClose"]
+        for field in price_fields:
+            if field in info and info[field] is not None:
+                price = float(info[field])
+                if price > 0:
+                    logger.info(
+                        f"[Realtime] Got price {price} for {stock_code} from {field}"
+                    )
+                    return price
+
+        # Fallback: try fast_info
+        try:
+            price = ticker.fast_info.get("lastPrice") or ticker.fast_info.get(
+                "previousClose"
+            )
+            if price and price > 0:
+                logger.info(
+                    f"[Realtime] Got price {price} for {stock_code} from fast_info"
+                )
+                return float(price)
+        except:
+            pass
+
+        logger.warning(f"[Realtime] No price found for {stock_code}")
+        return None
+
+    except Exception as e:
+        logger.warning(f"[Realtime] Failed to fetch price for {stock_code}: {e}")
+        return None
 
 
 class StockDataFetcher:
@@ -30,20 +76,17 @@ class StockDataFetcher:
             self.providers: List[BaseDataProvider] = [
                 YFinanceProvider(),
                 AKShareProvider(),
-                TushareProvider()
+                TushareProvider(),
             ]
         else:
             self.providers = providers
 
     def _is_chinese_stock(self, stock_code: str) -> bool:
         """Check if stock code is for Chinese market (A-share or HK)."""
-        return any(ext in stock_code.upper() for ext in ['.SH', '.SZ', '.SS', '.HK'])
+        return any(ext in stock_code.upper() for ext in [".SH", ".SZ", ".SS", ".HK"])
 
     def fetch(
-        self,
-        stock_code: str,
-        days: int = 120,
-        providers: Optional[List[str]] = None
+        self, stock_code: str, days: int = 120, providers: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """Fetch stock data with automatic provider fallback.
 
@@ -62,14 +105,16 @@ class StockDataFetcher:
         if self._is_chinese_stock(stock_code):
             provider_order = []
             if providers:
-                provider_order = [p for p in providers if p in ['yfinance', 'akshare', 'tushare']]
+                provider_order = [
+                    p for p in providers if p in ["yfinance", "akshare", "tushare"]
+                ]
             else:
                 # Default: try yfinance first for HK, akshare for A-shares, tushare last
-                if stock_code.endswith('.HK'):
-                    provider_order = ['yfinance', 'akshare', 'tushare']
+                if stock_code.endswith(".HK"):
+                    provider_order = ["yfinance", "akshare", "tushare"]
                 else:
                     # A-share: akshare first, then tushare, then yfinance
-                    provider_order = ['akshare', 'tushare', 'yfinance']
+                    provider_order = ["akshare", "tushare", "yfinance"]
 
             for provider_name in provider_order:
                 provider = self._get_provider(provider_name)
@@ -77,14 +122,18 @@ class StockDataFetcher:
                     continue
 
                 tried_providers.append(provider.name)
-                logger.info(f"[StockDataFetcher] Trying {provider.name} for {stock_code}")
+                logger.info(
+                    f"[StockDataFetcher] Trying {provider.name} for {stock_code}"
+                )
 
                 df = provider.fetch(stock_code, days=days)
                 if not df.empty:
                     logger.info(f"[StockDataFetcher] Success with {provider.name}")
                     return df
 
-                logger.warning(f"[StockDataFetcher] {provider.name} returned empty data for {stock_code}")
+                logger.warning(
+                    f"[StockDataFetcher] {provider.name} returned empty data for {stock_code}"
+                )
         else:
             # Non-Chinese stocks: yfinance only
             if providers:
@@ -112,9 +161,9 @@ class StockDataFetcher:
     def _get_provider(self, name: str) -> Optional[BaseDataProvider]:
         """Get provider by name."""
         name_map = {
-            'yfinance': YFinanceProvider,
-            'akshare': AKShareProvider,
-            'tushare': TushareProvider
+            "yfinance": YFinanceProvider,
+            "akshare": AKShareProvider,
+            "tushare": TushareProvider,
         }
         provider_cls = name_map.get(name.lower())
         if provider_cls:
@@ -135,9 +184,7 @@ def get_data_fetcher() -> StockDataFetcher:
 
 
 def fetch_stock_data(
-    stock_code: str,
-    days: int = 120,
-    providers: Optional[List[str]] = None
+    stock_code: str, days: int = 120, providers: Optional[List[str]] = None
 ) -> pd.DataFrame:
     """Convenience function to fetch stock data.
 
