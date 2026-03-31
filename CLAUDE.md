@@ -35,6 +35,7 @@ Multi-provider data fetching with automatic fallback:
 - **yfinance**: Global stocks (US, HK) - default first choice
 - **akshare**: Chinese A-shares/HK fallback
 - **tushare**: Chinese A-shares/HK (requires TUSHARE_TOKEN env var)
+- **Real-time price**: `fetch_realtime_price()` for intraday data
 - Retry logic (3 attempts, configurable delay)
 - Auto-fallback chain per market type
 
@@ -52,6 +53,7 @@ Multi-provider data fetching with automatic fallback:
 - Feature importance analysis
 - Composite label generation (combining returns, trend, momentum, market)
 - Ensemble learning with bagging for diversity
+- Bootstrap class balancing (ensures 3 classes in all samples)
 
 #### 4. Backtest (`src/backtest/`)
 - Multiple strategies: ML Strategy, Buy & Hold, High Sell Low Buy, and more
@@ -103,6 +105,19 @@ Position formula: `shares = risk_amount / (ATR * atr_multiplier / price)`
 - **Rolling Window**: 100 days
 - **Retrain Interval**: 12 days
 - **Bear Market Threshold**: -0.5%
+
+## Real-time Price Support
+
+The system automatically fetches real-time price during trading hours:
+```python
+from src.data_providers import fetch_realtime_price
+price = fetch_realtime_price('AAPL')  # Returns real-time price or None
+```
+
+Behavior:
+- During trading hours: Uses real-time price if available
+- After hours / fetch failed: Falls back to last closing price
+- Updates close, high, low prices accordingly
 
 ## Feature Caching
 
@@ -198,3 +213,12 @@ See `requirements.txt`
 - [ ] Add email/SMS alerts for signals
 - [ ] Create REST API for external integration
 - [ ] Add Docker support for deployment
+
+### Completed Features
+- [x] Real-time price support
+- [x] Position sizing optimization (ATR-based)
+- [x] Market-specific parameters
+- [x] Ensemble model with bagging
+- [x] Bootstrap class balancing
+- [x] Small position sell logic
+- [x] Market filtering with 3-day average
