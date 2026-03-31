@@ -12,10 +12,50 @@
 
 ## 快速开始
 
-### 安装依赖
+### 方式一：使用 uv（推荐）
+
+[uv](https://github.com/astral-sh/uv) 是一个极快的 Python 包管理器，推荐使用。
 
 ```bash
+# 安装 uv（如果尚未安装）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 创建虚拟环境并安装依赖
+uv sync
+
+# 运行决策脚本
+uv run python scripts/decide.py --stock 000001.SZ
+
+# 运行回测脚本
+uv run python scripts/backtest.py --stock 000001.SZ --days 30
+```
+
+### 方式二：使用 pip
+
+```bash
+# 创建虚拟环境
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# 或 .venv\Scripts\activate  # Windows
+
+# 安装依赖
 pip install -r requirements.txt
+
+# 运行脚本
+python scripts/decide.py --stock 000001.SZ
+```
+
+### 安装可选依赖
+
+```bash
+# 使用 uv
+uv sync --extra openbb      # 安装 OpenBB 数据源
+uv sync --extra sentiment   # 安装情绪分析依赖 (SnowNLP)
+uv sync --extra dev         # 安装开发依赖 (pytest, ruff)
+
+# 使用 pip
+pip install openbb           # 安装 OpenBB 数据源
+pip install snownlp          # 安装情绪分析依赖
 ```
 
 ### 运行决策
@@ -55,6 +95,8 @@ python scripts/backtest.py --stock 000001.SZ --days 30 --output results.csv
 
 ```
 quarnt/
+├── pyproject.toml     # 项目配置和依赖管理 (uv)
+├── requirements.txt   # pip 依赖文件
 ├── configs/           # 配置文件（config.yaml）
 ├── cache/             # 特征缓存（parquet格式）
 ├── data/              # 原始数据存储
@@ -65,6 +107,7 @@ quarnt/
 │   │   ├── fundamental.py  # 基本面数据
 │   │   ├── market.py       # 市场/大盘数据
 │   │   ├── industry.py     # 行业数据
+│   │   ├── sentiment.py    # 情绪分析
 │   │   └── combinator.py   # 特征合并
 │   ├── models/        # 模型训练与预测
 │   ├── backtest/      # 回测引擎
