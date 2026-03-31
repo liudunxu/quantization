@@ -261,13 +261,24 @@ def print_all_strategy_decisions(
     """Print decisions for all strategies and return the best one.
 
     Uses multi-indicator scoring and consensus mechanism.
+    Strategies are printed in the same order as results_df (sorted by Total Return).
     """
     print_section(" ALL STRATEGY DECISIONS")
 
     decisions = {}
     action_counts = {"BUY": 0, "HOLD": 0, "SELL": 0}  # For consensus
 
-    for strategy in strategies:
+    # Create a mapping from strategy name to strategy object
+    strategy_map = {s.name: s for s in strategies}
+
+    # Process strategies in the order of results_df (sorted by Total Return)
+    for _, result_row in results_df.iterrows():
+        strategy_name = result_row["Strategy"]
+        strategy = strategy_map.get(strategy_name)
+
+        if strategy is None:
+            continue
+
         try:
             # Generate signals using full history for ML-based strategies
             if isinstance(
@@ -286,18 +297,11 @@ def print_all_strategy_decisions(
                 (MLStrategy, HybridStrategy, RollingMLStrategy, RollingHybridStrategy),
             )
 
-            # Find this strategy's backtest result
-            result_row = results_df[results_df["Strategy"] == strategy.name]
-            if not result_row.empty:
-                total_return = result_row["Total Return"].values[0]
-                sharpe = _parse_sharpe(result_row["Sharpe Ratio"].values[0])
-                win_rate = result_row["Win Rate"].values[0]
-                max_drawdown = result_row["Max Drawdown"].values[0]
-            else:
-                total_return = "N/A"
-                sharpe = 0.0
-                win_rate = "0%"
-                max_drawdown = "0%"
+            # Get backtest result from results_df
+            total_return = result_row["Total Return"]
+            sharpe = _parse_sharpe(result_row["Sharpe Ratio"])
+            win_rate = result_row["Win Rate"]
+            max_drawdown = result_row["Max Drawdown"]
 
             # Calculate comprehensive score
             return_val = _parse_return(total_return)
