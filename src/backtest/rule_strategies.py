@@ -23,22 +23,26 @@ class MAGoldenCrossStrategy(Strategy):
     """
 
     def __init__(self, fast_ma: int = 5, slow_ma: int = 10, volume_ratio: float = 1.2):
-        super().__init__(f"MA Golden Cross ({fast_ma}/{slow_ma})")
+        description = (
+            f"均线金叉策略：当{fast_ma}日均线上穿{slow_ma}日均线且成交量放大时买入，"
+            f"下穿时卖出。量能确认阈值={volume_ratio}。"
+        )
+        super().__init__(f"MA Golden Cross ({fast_ma}/{slow_ma})", description)
         self.fast_ma = fast_ma
         self.slow_ma = slow_ma
         self.volume_ratio = volume_ratio
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
         signals = pd.Series(0, index=df.index)
-        close = df['close']
+        close = df["close"]
 
         # Calculate moving averages
         ma_fast = close.rolling(window=self.fast_ma).mean()
         ma_slow = close.rolling(window=self.slow_ma).mean()
 
         # Calculate volume MA
-        if 'volume' in df.columns:
-            volume_ma = df['volume'].rolling(window=self.fast_ma).mean()
+        if "volume" in df.columns:
+            volume_ma = df["volume"].rolling(window=self.fast_ma).mean()
         else:
             volume_ma = pd.Series(1, index=df.index)
 
@@ -49,7 +53,7 @@ class MAGoldenCrossStrategy(Strategy):
         death_cross = (ma_fast < ma_slow) & (ma_fast.shift(1) >= ma_slow.shift(1))
 
         # Volume confirmation
-        volume_confirm = df['volume'] > volume_ma * self.volume_ratio
+        volume_confirm = df["volume"] > volume_ma * self.volume_ratio
 
         for i in range(self.slow_ma, len(df)):
             if golden_cross.iloc[i] and volume_confirm.iloc[i]:
@@ -72,15 +76,23 @@ class BullTrendStrategy(Strategy):
     - Hold: In uptrend but price too far from MA5
     """
 
-    def __init__(self, ma5_period: int = 5, ma10_period: int = 10, ma20_period: int = 20):
-        super().__init__(f"Bull Trend ({ma5_period}/{ma10_period}/{ma20_period})")
+    def __init__(
+        self, ma5_period: int = 5, ma10_period: int = 10, ma20_period: int = 20
+    ):
+        description = (
+            f"趋势跟随策略：当MA{ma5_period}>=MA{ma10_period}>=MA{ma20_period}形成多头排列时，"
+            f"价格回调至均线附近（5%以内）买入，跌破MA{ma20_period}卖出。"
+        )
+        super().__init__(
+            f"Bull Trend ({ma5_period}/{ma10_period}/{ma20_period})", description
+        )
         self.ma5_period = ma5_period
         self.ma10_period = ma10_period
         self.ma20_period = ma20_period
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
         signals = pd.Series(0, index=df.index)
-        close = df['close']
+        close = df["close"]
 
         ma5 = close.rolling(window=self.ma5_period).mean()
         ma10 = close.rolling(window=self.ma10_period).mean()
@@ -124,28 +136,36 @@ class ShrinkPullbackStrategy(Strategy):
     - Hold: Otherwise
     """
 
-    def __init__(self, lookback: int = 5, ma_period: int = 5, volume_shrink: float = 0.7):
-        super().__init__(f"Shrink Pullback ({ma_period}d, vol<{volume_shrink})")
+    def __init__(
+        self, lookback: int = 5, ma_period: int = 5, volume_shrink: float = 0.7
+    ):
+        description = (
+            f"缩量回调策略：在上升趋势中，当价格回调至均线附近且成交量缩小时买入，"
+            f"跌破MA20卖出。缩量阈值={volume_shrink}。"
+        )
+        super().__init__(
+            f"Shrink Pullback ({ma_period}d, vol<{volume_shrink})", description
+        )
         self.lookback = lookback
         self.ma_period = ma_period
         self.volume_shrink = volume_shrink
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
         signals = pd.Series(0, index=df.index)
-        close = df['close']
+        close = df["close"]
 
         ma5 = close.rolling(window=5).mean()
         ma10 = close.rolling(window=10).mean()
         ma20 = close.rolling(window=20).mean()
 
-        volume_ma5 = df['volume'].rolling(window=5).mean()
+        volume_ma5 = df["volume"].rolling(window=5).mean()
 
         for i in range(20, len(df)):
             current_price = close.iloc[i]
             current_ma5 = ma5.iloc[i]
             current_ma10 = ma10.iloc[i]
             current_ma20 = ma20.iloc[i]
-            current_volume = df['volume'].iloc[i]
+            current_volume = df["volume"].iloc[i]
             vol_ma5 = volume_ma5.iloc[i]
 
             # Check uptrend
@@ -183,26 +203,33 @@ class BottomVolumeStrategy(Strategy):
     """
 
     def __init__(self, drop_threshold: float = 0.15, volume_multiplier: float = 3.0):
-        super().__init__(f"Bottom Volume (drop>{drop_threshold}, vol>{volume_multiplier}x)")
+        description = (
+            f"底部放量策略：当股价从20日高点下跌超过{drop_threshold * 100:.0f}%后，"
+            f"出现{volume_multiplier}倍放量且收阳线时买入，为反转信号。"
+        )
+        super().__init__(
+            f"Bottom Volume (drop>{drop_threshold}, vol>{volume_multiplier}x)",
+            description,
+        )
         self.drop_threshold = drop_threshold
         self.volume_multiplier = volume_multiplier
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
         signals = pd.Series(0, index=df.index)
-        close = df['close']
-        high = df['high'] if 'high' in df.columns else close
-        low = df['low'] if 'low' in df.columns else close
+        close = df["close"]
+        high = df["high"] if "high" in df.columns else close
+        low = df["low"] if "low" in df.columns else close
 
-        volume_ma5 = df['volume'].rolling(window=5).mean()
+        volume_ma5 = df["volume"].rolling(window=5).mean()
 
         for i in range(25, len(df)):
             current_price = close.iloc[i]
-            current_volume = df['volume'].iloc[i]
+            current_volume = df["volume"].iloc[i]
             vol_ma5 = volume_ma5.iloc[i]
 
             # Calculate 20-day high
-            high_20d = high.iloc[max(0, i-20):i].max()
-            low_20d = low.iloc[max(0, i-20):i].min()
+            high_20d = high.iloc[max(0, i - 20) : i].max()
+            low_20d = low.iloc[max(0, i - 20) : i].min()
 
             # Check drop > threshold
             dropped = (high_20d - current_price) / high_20d > self.drop_threshold
@@ -211,8 +238,8 @@ class BottomVolumeStrategy(Strategy):
             volume_surge = current_volume > vol_ma5 * self.volume_multiplier
 
             # Check bullish candle
-            if 'open' in df.columns:
-                bullish = current_price > df['open'].iloc[i]
+            if "open" in df.columns:
+                bullish = current_price > df["open"].iloc[i]
             else:
                 bullish = True
 
@@ -243,9 +270,15 @@ class BoxOscillationStrategy(Strategy):
         box_touch_min: int = 2,
         support_margin: float = 0.05,
         resistance_margin: float = 0.05,
-        box_width_min: float = 0.05
+        box_width_min: float = 0.05,
     ):
-        super().__init__(f"Box Oscillation (L:{lookback}, T:{box_touch_min})")
+        description = (
+            f"箱体震荡策略：识别价格波动区间（箱体），在箱体底部附近买入，"
+            f"顶部附近或跌破箱底时卖出。支撑/阻力边际={support_margin * 100:.0f}%。"
+        )
+        super().__init__(
+            f"Box Oscillation (L:{lookback}, T:{box_touch_min})", description
+        )
         self.lookback = lookback
         self.box_touch_min = box_touch_min
         self.support_margin = support_margin
@@ -256,9 +289,9 @@ class BoxOscillationStrategy(Strategy):
         signals = pd.Series(0, index=df.index)
 
         for i in range(self.lookback, len(df)):
-            window_data = df.iloc[max(0, i-self.lookback):i]
-            close = window_data['close']
-            high = window_data['high'] if 'high' in window_data.columns else close
+            window_data = df.iloc[max(0, i - self.lookback) : i]
+            close = window_data["close"]
+            high = window_data["high"] if "high" in window_data.columns else close
 
             # Find box top and bottom
             box_top = high.quantile(0.9)  # 90th percentile high
@@ -269,7 +302,7 @@ class BoxOscillationStrategy(Strategy):
             if box_width < self.box_width_min:
                 continue
 
-            current_price = df['close'].iloc[i]
+            current_price = df["close"].iloc[i]
 
             # Calculate position in box
             distance_to_bottom = (current_price - box_bottom) / box_bottom
@@ -305,20 +338,26 @@ class EmotionCycleStrategy(Strategy):
         self,
         volume_shrink: float = 0.5,
         rsi_oversold: float = 30,
-        rsi_overbought: float = 70
+        rsi_overbought: float = 70,
     ):
-        super().__init__(f"Emotion Cycle (RSI {rsi_oversold}/{rsi_overbought})")
+        description = (
+            f"情绪周期策略：基于RSI和成交量判断市场情绪，"
+            f"超卖（RSI<{rsi_oversold}）且缩量时买入，超买（RSI>{rsi_overbought}）时卖出。"
+        )
+        super().__init__(
+            f"Emotion Cycle (RSI {rsi_oversold}/{rsi_overbought})", description
+        )
         self.volume_shrink = volume_shrink
         self.rsi_oversold = rsi_oversold
         self.rsi_overbought = rsi_overbought
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
         signals = pd.Series(0, index=df.index)
-        close = df['close']
+        close = df["close"]
 
         # Calculate RSI if not present
-        if 'rsi' in df.columns:
-            rsi = df['rsi']
+        if "rsi" in df.columns:
+            rsi = df["rsi"]
         else:
             # Calculate simple RSI
             delta = close.diff()
@@ -327,8 +366,8 @@ class EmotionCycleStrategy(Strategy):
             rs = gain / (loss + 1e-10)
             rsi = 100 - (100 / (1 + rs))
 
-        volume_ma = df['volume'].rolling(window=20).mean()
-        volume_ma5 = df['volume'].rolling(window=5).mean()
+        volume_ma = df["volume"].rolling(window=20).mean()
+        volume_ma5 = df["volume"].rolling(window=5).mean()
 
         # Calculate price position in 20-day range
         high_20d = close.rolling(window=20).max()
@@ -336,7 +375,7 @@ class EmotionCycleStrategy(Strategy):
         price_position = (close - low_20d) / (high_20d - low_20d + 1e-10)
 
         for i in range(20, len(df)):
-            current_volume = df['volume'].iloc[i]
+            current_volume = df["volume"].iloc[i]
             vol_ma = volume_ma.iloc[i]
             vol_ma5_val = volume_ma5.iloc[i]
             current_rsi = rsi.iloc[i]
@@ -373,34 +412,44 @@ class VolumeBreakoutStrategy(Strategy):
     """
 
     def __init__(self, lookback: int = 20, volume_multiplier: float = 2.0):
-        super().__init__(f"Volume Breakout ({lookback}d, vol>{volume_multiplier}x)")
+        description = (
+            f"放量突破策略：当价格突破{lookback}日高点且成交量放大{volume_multiplier}倍时买入，"
+            f"跌破{lookback}日低点或连续3日下跌时卖出。"
+        )
+        super().__init__(
+            f"Volume Breakout ({lookback}d, vol>{volume_multiplier}x)", description
+        )
         self.lookback = lookback
         self.volume_multiplier = volume_multiplier
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
         signals = pd.Series(0, index=df.index)
-        close = df['close']
+        close = df["close"]
 
         high_20d = close.rolling(window=self.lookback).max()
         low_20d = close.rolling(window=self.lookback).min()
-        volume_ma = df['volume'].rolling(window=5).mean()
+        volume_ma = df["volume"].rolling(window=5).mean()
 
         for i in range(self.lookback, len(df)):
             current_price = close.iloc[i]
-            current_volume = df['volume'].iloc[i]
+            current_volume = df["volume"].iloc[i]
             vol_ma = volume_ma.iloc[i]
 
             # Check breakout
-            breakout_up = current_price > high_20d.iloc[i-1] if i > 0 else False
-            breakout_down = current_price < low_20d.iloc[i-1] if i > 0 else False
+            breakout_up = current_price > high_20d.iloc[i - 1] if i > 0 else False
+            breakout_down = current_price < low_20d.iloc[i - 1] if i > 0 else False
 
             # Volume confirmation
             volume_confirm = current_volume > vol_ma * self.volume_multiplier
 
             # Check 3 consecutive lower closes
             if i >= 3:
-                three_lower = (close.iloc[i] < close.iloc[i-1] <
-                               close.iloc[i-2] < close.iloc[i-3])
+                three_lower = (
+                    close.iloc[i]
+                    < close.iloc[i - 1]
+                    < close.iloc[i - 2]
+                    < close.iloc[i - 3]
+                )
             else:
                 three_lower = False
 
@@ -428,7 +477,11 @@ class OneYangThreeYinStrategy(Strategy):
     """
 
     def __init__(self, body_threshold: float = 0.02):
-        super().__init__(f"One Yang Three Yin (body>{body_threshold})")
+        description = (
+            f"一阳三阴策略：经典的K线形态，一根大阳线后连续三根缩量小阴线，"
+            f"第五天突破阳线收盘价时买入。阳线实体阈值={body_threshold * 100:.0f}%。"
+        )
+        super().__init__(f"One Yang Three Yin (body>{body_threshold})", description)
         self.body_threshold = body_threshold
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
@@ -436,7 +489,7 @@ class OneYangThreeYinStrategy(Strategy):
 
         for i in range(5, len(df)):
             # Get last 5 candles
-            recent = df.iloc[i-4:i+1]
+            recent = df.iloc[i - 4 : i + 1]
 
             if len(recent) < 5:
                 continue
@@ -448,28 +501,30 @@ class OneYangThreeYinStrategy(Strategy):
             day5 = recent.iloc[4]
 
             # Day 1: Bullish with body > threshold
-            day1_bullish = day1['close'] > day1['open']
-            day1_body = (day1['close'] - day1['open']) / day1['open']
+            day1_bullish = day1["close"] > day1["open"]
+            day1_body = (day1["close"] - day1["open"]) / day1["open"]
 
             if not day1_bullish or day1_body < self.body_threshold:
                 continue
 
-            day1_open = day1['open']
-            day1_close = day1['close']
+            day1_open = day1["open"]
+            day1_close = day1["close"]
 
             # Days 2-4: Bearish
-            days_2_4_bearish = (day2['close'] < day2['open'] and
-                                day3['close'] < day3['open'] and
-                                day4['close'] < day4['open'])
+            days_2_4_bearish = (
+                day2["close"] < day2["open"]
+                and day3["close"] < day3["open"]
+                and day4["close"] < day4["open"]
+            )
 
             if not days_2_4_bearish:
                 continue
 
             # Days 2-4: Volume shrinking
-            vol1 = day1['volume']
-            vol2 = day2['volume']
-            vol3 = day3['volume']
-            vol4 = day4['volume']
+            vol1 = day1["volume"]
+            vol2 = day2["volume"]
+            vol3 = day3["volume"]
+            vol4 = day4["volume"]
 
             vol_shrinking = vol4 < vol3 < vol2 < vol1
 
@@ -477,15 +532,15 @@ class OneYangThreeYinStrategy(Strategy):
                 continue
 
             # Days 2-4: Don't break day1's open
-            days_2_4_low = min(day2['low'], day3['low'], day4['low'])
+            days_2_4_low = min(day2["low"], day3["low"], day4["low"])
             support_hold = days_2_4_low > day1_open * 0.99
 
             if not support_hold:
                 continue
 
             # Day 5: Breakout above day1's close
-            day5_bullish = day5['close'] > day5['open']
-            day5_breakout = day5['close'] > day1_close
+            day5_bullish = day5["close"] > day5["open"]
+            day5_breakout = day5["close"] > day1_close
 
             if day5_bullish and day5_breakout:
                 signals.iloc[i] = 1  # Buy
@@ -507,31 +562,35 @@ class MACDDivergenceStrategy(Strategy):
     """
 
     def __init__(self, lookback: int = 20):
-        super().__init__(f"MACD Divergence ({lookback}d)")
+        description = (
+            f"MACD背驰策略：当价格创新低但MACD柱状图回升时（底背驰）买入，"
+            f"价格创新高但MACD减弱时（顶背驰）卖出。回溯周期={lookback}日。"
+        )
+        super().__init__(f"MACD Divergence ({lookback}d)", description)
         self.lookback = lookback
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
         signals = pd.Series(0, index=df.index)
-        close = df['close']
+        close = df["close"]
 
         # Calculate MACD if not present
-        if 'macd' not in df.columns or 'macd_hist' not in df.columns:
+        if "macd" not in df.columns or "macd_hist" not in df.columns:
             exp1 = close.ewm(span=12, adjust=False).mean()
             exp2 = close.ewm(span=26, adjust=False).mean()
             macd = exp1 - exp2
             signal_line = macd.ewm(span=9, adjust=False).mean()
             macd_hist = macd - signal_line
         else:
-            macd_hist = df['macd_hist']
+            macd_hist = df["macd_hist"]
 
         for i in range(self.lookback + 5, len(df)):
             current_price = close.iloc[i]
             current_hist = macd_hist.iloc[i]
-            prev_hist = macd_hist.iloc[i-1]
+            prev_hist = macd_hist.iloc[i - 1]
 
             # Calculate 20-day low
-            low_20d = close.iloc[max(0, i-self.lookback):i].min()
-            high_20d = close.iloc[max(0, i-self.lookback):i].max()
+            low_20d = close.iloc[max(0, i - self.lookback) : i].min()
+            high_20d = close.iloc[max(0, i - self.lookback) : i].max()
 
             # Bottom divergence: price making new low, MACD improving
             price_new_low = current_price < low_20d
