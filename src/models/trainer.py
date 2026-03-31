@@ -482,9 +482,6 @@ class StockTradingModel:
                 )
                 X = pd.concat([X, synthetic_X])
                 labels = pd.concat([labels, synthetic_label])
-            print(
-                f"Warning: Added {len(missing_classes)} synthetic samples to ensure 3 classes"
-            )
 
         # Calculate class weights based on inverse frequency (with square root damping)
         # This is more aggressive than balanced but less than pure inverse
