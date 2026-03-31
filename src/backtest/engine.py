@@ -51,7 +51,7 @@ class Strategy:
 
 
 class BuyAndHoldStrategy(Strategy):
-    """Simple buy and hold strategy."""
+    """Simple buy and hold strategy (benchmark, no trading costs)."""
 
     def __init__(self):
         super().__init__(
@@ -63,6 +63,14 @@ class BuyAndHoldStrategy(Strategy):
         signals = pd.Series(0, index=df.index)
         signals.iloc[0] = 1  # Buy on first day
         return signals
+
+    def calculate_return(self, df: pd.DataFrame) -> float:
+        """Calculate pure price return without trading costs (as benchmark)."""
+        if len(df) < 2:
+            return 0.0
+        start_price = df["close"].iloc[0]
+        end_price = df["close"].iloc[-1]
+        return (end_price - start_price) / start_price
 
 
 class HighSellLowBuyStrategy(Strategy):
@@ -1137,7 +1145,11 @@ class BacktestEngine:
         win_rate = winning_trades / len(sell_trades) if sell_trades else 0
 
         # Total returns
-        total_return = (final_equity - self.initial_cash) / self.initial_cash
+        # For Buy & Hold strategy, use pure price return (no trading costs)
+        if isinstance(strategy, BuyAndHoldStrategy):
+            total_return = strategy.calculate_return(df)
+        else:
+            total_return = (final_equity - self.initial_cash) / self.initial_cash
         buy_hold_return = (buy_hold_equity[-1] - self.initial_cash) / self.initial_cash
 
         return BacktestResult(

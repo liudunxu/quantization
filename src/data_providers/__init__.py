@@ -14,6 +14,7 @@ from .akshare_provider import AKShareProvider
 from .tushare_provider import TushareProvider
 from .baostock_provider import BaostockProvider
 from .openbb_provider import OpenBBProvider
+from .sentiment_provider import SentimentProvider
 from .fetch_stock_data import (
     StockDataFetcher,
     get_data_fetcher,
@@ -28,6 +29,7 @@ __all__ = [
     "TushareProvider",
     "BaostockProvider",
     "OpenBBProvider",
+    "SentimentProvider",
     "StockDataFetcher",
     "get_data_fetcher",
     "fetch_stock_data",

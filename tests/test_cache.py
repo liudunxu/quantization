@@ -57,7 +57,8 @@ class TestCache(unittest.TestCase):
         self.cache.set("TEST2.SZ", "technical", pd.DataFrame({"a": [2]}))
 
         self.cache.clear_all()
-        self.assertEqual(len(self.cache.manifest), 0)
+        stats = self.cache.get_stats()
+        self.assertEqual(stats["total_items"], 0)
 
     def test_get_cache_info(self):
         """Test getting cache info for a stock."""

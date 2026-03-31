@@ -17,7 +17,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.utils import get_cache, get_config, StockInfoResolver
-from src.features import get_feature_combinator
+from src.features import get_feature_combinator, SentimentFeatures
 from src.models import StockTradingModel, get_model
 from src.backtest import (
     BacktestEngine,
@@ -392,23 +392,159 @@ def print_all_strategy_decisions(
 
 
 def print_feature_importance(model: StockTradingModel, top_n: int = 10) -> None:
-    """Print top feature importances."""
+    """Print top feature importances with descriptions."""
+    # Feature descriptions mapping
+    feature_descriptions = {
+        # Technical indicators
+        "ma_5": "5日均线",
+        "ma_10": "10日均线",
+        "ma_20": "20日均线",
+        "ma_60": "60日均线",
+        "rsi": "RSI相对强弱指标",
+        "macd": "MACD指标",
+        "macd_signal": "MACD信号线",
+        "macd_hist": "MACD柱状图",
+        "atr": "平均真实波幅",
+        "bb_upper": "布林带上轨",
+        "bb_lower": "布林带下轨",
+        "volume_ratio": "成交量比率",
+        "returns": "日收益率",
+        "momentum_5": "5日动量",
+        "momentum_10": "10日动量",
+        "momentum_20": "20日动量",
+        # Lag features
+        "rsi_lag_1": "RSI滞后1日",
+        "rsi_lag_2": "RSI滞后2日",
+        "rsi_lag_3": "RSI滞后3日",
+        "macd_lag_1": "MACD滞后1日",
+        "macd_lag_2": "MACD滞后2日",
+        "macd_lag_3": "MACD滞后3日",
+        "macd_hist_lag_1": "MACD柱状图滞后1日",
+        "macd_hist_lag_2": "MACD柱状图滞后2日",
+        "macd_hist_lag_3": "MACD柱状图滞后3日",
+        "return_lag_1": "收益率滞后1日",
+        "return_lag_2": "收益率滞后2日",
+        "return_lag_3": "收益率滞后3日",
+        # Market features
+        "index_returns": "指数收益率",
+        "index_rsi": "指数RSI",
+        "index_ma_20_ratio": "指数MA20比率",
+        "index_momentum_5": "指数5日动量",
+        "index_momentum_10": "指数10日动量",
+        "index_momentum_20": "指数20日动量",
+        "index_volume_ratio": "指数成交量比率",
+        # Relative performance
+        "alpha": "超额收益(Alpha)",
+        "alpha_5d": "5日超额收益",
+        "alpha_10d": "10日超额收益",
+        "sector_relative": "相对行业表现",
+        "sector_relative_5d": "5日相对行业表现",
+        "market_corr_5": "5日市场相关性",
+        "market_corr_10": "10日市场相关性",
+        "beta_5": "5日Beta系数",
+        "beta_20": "20日Beta系数",
+        # Volatility
+        "returns_std_5": "5日收益波动率",
+        "returns_std_10": "10日收益波动率",
+        "returns_skew_10": "10日收益偏度",
+        "returns_skew_20": "20日收益偏度",
+        # Stochastic
+        "stoch_k": "随机指标K值",
+        "stoch_d": "随机指标D值",
+        # Aroon
+        "aroon_high": "Aroon高位",
+        "aroon_low": "Aroon低位",
+        "aroon_up": "Aroon上升",
+        "aroon_down": "Aroon下降",
+        "aroon_oscillator": "Aroon振荡器",
+        # DMI
+        "dmi_plus_di": "DMI+DI",
+        "dmi_minus_di": "DMI-DI",
+        "dmi_di_diff": "DMI差值",
+        "dmi_adx": "ADX趋势强度",
+        # ROC
+        "roc_5": "5日变动率",
+        "roc_10": "10日变动率",
+        "roc_20": "20日变动率",
+        # AD Line
+        "ad_line": "累积/派发线",
+        "ad_oscillator": "AD振荡器",
+        # VWAP
+        "vwap": "成交量加权平均价",
+        "price_to_vwap": "价格/VWAP比率",
+        # Sentiment features
+        "sentiment_score": "情绪分数",
+        "sentiment_ma3": "3日情绪均线",
+        "sentiment_ma7": "7日情绪均线",
+        "sentiment_ma14": "14日情绪均线",
+        "sentiment_std7": "7日情绪波动",
+        "sentiment_std14": "14日情绪波动",
+        "sentiment_momentum": "情绪动量",
+        "sentiment_momentum3": "3日情绪动量",
+        "sentiment_acceleration": "情绪加速度",
+        "sentiment_trend": "情绪趋势",
+        "sentiment_regime": "情绪状态",
+        "news_count": "新闻数量",
+        "news_count_ma3": "3日新闻数量均线",
+        "news_count_ma7": "7日新闻数量均线",
+        "news_volume_change": "新闻量变化",
+        "news_volume_spike": "新闻量激增",
+        "weighted_sentiment": "加权情绪",
+        "sentiment_divergence": "情绪背离",
+        # Fundamental
+        "pe_ratio": "市盈率",
+        "pb_ratio": "市净率",
+        "roe": "净资产收益率",
+        "revenue_growth": "营收增长率",
+        "debt_ratio": "负债率",
+        # Money flow
+        "money_flow": "资金流向",
+        "main_inflow": "主力流入",
+        "main_outflow": "主力流出",
+        # Industry
+        "sector_returns": "行业收益率",
+        "sector_momentum_5": "行业5日动量",
+        "sector_volume_ratio": "行业成交量比率",
+    }
+
     try:
         importance = model.get_feature_importance()
         print_section(f" TOP {top_n} FEATURE IMPORTANCE")
         print()
         top_features = importance.head(top_n)
         for _, row in top_features.iterrows():
-            bar = "█" * int(row["importance"] / 2)
-            print(f"  {row['feature']:<30} {row['importance']:6.2f} {bar}")
+            feature_name = row["feature"]
+            importance_val = row["importance"]
+            bar = "█" * int(importance_val / 2)
+            description = feature_descriptions.get(feature_name, "")
+            if description:
+                print(
+                    f"  {feature_name:<30} {importance_val:6.2f} {bar}  # {description}"
+                )
+            else:
+                print(f"  {feature_name:<30} {importance_val:6.2f} {bar}")
     except Exception as e:
         print(f"  (Could not display feature importance: {e})")
 
 
-def print_stock_core_data(df: pd.DataFrame) -> None:
-    """Print core stock data including support/resistance levels and key indicators."""
+def print_stock_core_data(
+    df: pd.DataFrame, full_history_df: pd.DataFrame = None
+) -> None:
+    """Print core stock data including support/resistance levels and key indicators.
+
+    Args:
+        df: Current period data (backtest_df) for display
+        full_history_df: Full historical data for calculating performance metrics
+    """
     if df.empty:
         return
+
+    # Use full_history_df for performance calculations if provided
+    history_df = (
+        full_history_df
+        if full_history_df is not None and not full_history_df.empty
+        else df
+    )
 
     print_section(" STOCK CORE DATA")
 
@@ -504,6 +640,49 @@ def print_stock_core_data(df: pd.DataFrame) -> None:
             if pd.notna(ret):
                 print(f"  {period}d Return     : {ret * 100:+.2f}%")
 
+    # Sentiment Analysis
+    print(f"\n  === Market Sentiment ===")
+    sentiment_cols = [col for col in df.columns if "sentiment" in col.lower()]
+    if sentiment_cols:
+        sentiment_score = latest.get("sentiment_score", 0)
+        news_count = latest.get("news_count", 0)
+        sentiment_ma3 = latest.get("sentiment_ma3", 0)
+        sentiment_trend = latest.get("sentiment_trend", 0)
+
+        # Sentiment label
+        if sentiment_score > 0.3:
+            sentiment_label = "积极 (Positive)"
+            sentiment_emoji = "🟢"
+        elif sentiment_score < -0.3:
+            sentiment_label = "消极 (Negative)"
+            sentiment_emoji = "🔴"
+        else:
+            sentiment_label = "中性 (Neutral)"
+            sentiment_emoji = "⚪"
+
+        print(f"  Sentiment Score : {sentiment_score:.3f} {sentiment_emoji}")
+        print(f"  Sentiment Label : {sentiment_label}")
+        print(f"  News Count      : {news_count:.0f}")
+        print(f"  3-day MA        : {sentiment_ma3:.3f}")
+        print(f"  Trend           : {sentiment_trend:+.3f}")
+
+        # News activity level
+        if news_count > 10:
+            news_activity = "高 (High)"
+        elif news_count > 3:
+            news_activity = "中 (Moderate)"
+        else:
+            news_activity = "低 (Low)"
+        print(f"  News Activity   : {news_activity}")
+
+        # Extreme sentiment warning
+        if sentiment_score > 0.5:
+            print(f"  ⚠️  市场情绪极度乐观，注意风险")
+        elif sentiment_score < -0.5:
+            print(f"  ⚠️  市场情绪极度悲观，可能存在机会")
+    else:
+        print(f"  情绪数据不可用 (Sentiment data not available)")
+
     # ========== Simple Analysis for Beginners ==========
     print(f"\n  === Simple Analysis ===")
     analyses = []
@@ -598,34 +777,62 @@ def print_stock_core_data(df: pd.DataFrame) -> None:
     # ========== Historical Performance Summary ==========
     print(f"\n  === Historical Performance ===")
 
-    # Calculate performance metrics
-    if len(df) >= 20:
-        # 20-day performance
-        start_price_20d = df["close"].iloc[-20]
-        end_price = df["close"].iloc[-1]
+    # Calculate performance metrics using full history data
+    if len(history_df) >= 20:
+        # Get last 20 trading days data
+        last_20 = history_df.tail(20).copy()
+
+        # 20-day performance (use actual close prices)
+        start_price_20d = last_20["close"].iloc[0]
+        end_price = last_20["close"].iloc[-1]
         perf_20d = (end_price - start_price_20d) / start_price_20d * 100
 
-        # Volatility
-        volatility_20d = (
-            df["returns"].tail(20).std() * 100 if "returns" in df.columns else 0
-        )
+        # Daily volatility (standard deviation of daily returns)
+        if "returns" in last_20.columns:
+            daily_returns = last_20["returns"].dropna()
+            if len(daily_returns) > 0:
+                daily_volatility = daily_returns.std() * 100
+                annualized_volatility = daily_volatility * (252**0.5)  # Annualize
+            else:
+                daily_volatility = 0
+                annualized_volatility = 0
+        else:
+            # Calculate returns from close prices
+            daily_returns = last_20["close"].pct_change().dropna()
+            daily_volatility = (
+                daily_returns.std() * 100 if len(daily_returns) > 0 else 0
+            )
+            annualized_volatility = daily_volatility * (252**0.5)
 
-        # Max drawdown
-        rolling_max = df["close"].tail(20).cummax()
-        drawdown = (df["close"].tail(20) - rolling_max) / rolling_max
-        max_dd = drawdown.min() * 100
+        # Max drawdown (from peak to trough)
+        rolling_max = last_20["close"].cummax()
+        drawdown_series = (last_20["close"] - rolling_max) / rolling_max
+        max_dd = drawdown_series.min() * 100
+
+        # Verify max drawdown is reasonable
+        price_range_pct = (
+            (last_20["close"].max() - last_20["close"].min())
+            / last_20["close"].max()
+            * 100
+        )
+        if abs(max_dd) > price_range_pct * 1.5:
+            # Recalculate if max drawdown seems unreasonable
+            max_dd = -price_range_pct
 
         # Win rate (days with positive returns)
-        if "returns" in df.columns:
-            positive_days = (df["returns"].tail(20) > 0).sum()
-            win_rate = positive_days / 20 * 100
+        if "returns" in last_20.columns:
+            positive_days = (last_20["returns"] > 0).sum()
         else:
-            win_rate = 0
+            calculated_returns = last_20["close"].pct_change()
+            positive_days = (calculated_returns > 0).sum()
+        win_rate = positive_days / 20 * 100
 
         print(f"  20日涨跌幅     : {perf_20d:+.2f}%")
-        print(f"  20日波动率     : {volatility_20d:.2f}%")
+        print(
+            f"  20日波动率     : {daily_volatility:.2f}% (日) / {annualized_volatility:.1f}% (年化)"
+        )
         print(f"  20日最大回撤   : {max_dd:.2f}%")
-        print(f"  20日胜率       : {win_rate:.0f}% ({int(win_rate * 20 / 100)}/20天)")
+        print(f"  20日胜率       : {win_rate:.0f}% ({positive_days}/20天)")
 
         # Performance rating
         if perf_20d > 5:
@@ -860,7 +1067,7 @@ def main():
         final_strategy = best_strategy_name
 
         # Print stock core data before final recommendation
-        print_stock_core_data(backtest_df)
+        print_stock_core_data(backtest_df, features_df)
 
         # Trading decision (moved to end)
         if final_action != "HOLD":
@@ -1027,53 +1234,6 @@ def main():
     print("\n" + "=" * 60)
     print(" Decision process completed!")
     print("=" * 60)
-
-    # ========== Beginner-Friendly Section ==========
-    print("\n" + "=" * 60)
-    print(" BEGINNER'S GUIDE")
-    print("=" * 60)
-
-    # Risk Warnings
-    print("\n  === Risk Warnings ===")
-    print("  1. 本系统仅供参考，不构成投资建议")
-    print("  2. 过去表现不代表未来收益")
-    print("  3. 建议单笔交易不超过总资金的10%")
-    print("  4. 设置止损位，控制单笔亏损在2%以内")
-    print("  5. 不要追涨杀跌，保持冷静")
-
-    # Key Terms Glossary
-    print("\n  === Key Terms ===")
-    print("  • MA (均线): 移动平均线，反映价格趋势")
-    print("  • RSI (相对强弱): 0-100，>70超买，<30超卖")
-    print("  • MACD: 趋势指标，金叉买入，死叉卖出")
-    print("  • ATR (波动率): 平均真实波幅，用于止损")
-    print("  • 支撑位: 价格下跌时可能止跌的位置")
-    print("  • 阻力位: 价格上涨时可能受阻的位置")
-    print("  • 布林带: 价格波动通道，触及边界可能反转")
-
-    # Trading Tips
-    print("\n  === Trading Tips ===")
-    if final_action == "BUY":
-        print("  • 建议分批建仓，不要一次性满仓")
-        print("  • 设置好止损位，严格执行")
-        print("  • 关注成交量变化，放量上涨更可靠")
-    elif final_action == "SELL":
-        print("  • 建议分批减仓，不要一次性清仓")
-        print("  • 如果是止损，不要犹豫")
-        print("  • 卖出后等待新的买入机会")
-    else:
-        print("  • 当前没有明确信号，建议观望")
-        print("  • 可以利用这段时间学习和研究")
-        print("  • 等待更好的入场时机")
-
-    # Next Steps
-    print("\n  === Next Steps ===")
-    print("  1. 查看 'Simple Analysis' 了解当前技术状态")
-    print("  2. 关注 'Support & Resistance' 确定买卖点")
-    print("  3. 设置价格提醒，及时把握机会")
-    print("  4. 定期复盘，总结经验")
-
-    print("\n" + "=" * 60 + "\n")
 
 
 if __name__ == "__main__":

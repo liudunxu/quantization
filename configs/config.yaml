@@ -73,6 +73,14 @@ features:
 
   sentiment:
     enabled: true
+    # Data source for sentiment analysis
+    sources:
+      - akshare  # 东方财富新闻
+      - sina     # 新浪财经
+    # Cache duration in hours
+    cache_hours: 6
+    # Sentiment analysis method: 'keywords', 'snownlp', 'combined'
+    method: combined
 
 model:
   catboost:

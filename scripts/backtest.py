@@ -15,7 +15,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.utils import get_cache, get_config, StockInfoResolver
-from src.features import get_feature_combinator
+from src.features import get_feature_combinator, SentimentFeatures
 from src.models import StockTradingModel
 from src.backtest import (
     BacktestEngine,
@@ -59,6 +59,94 @@ def print_result(result: BacktestResult, prefix: str = "  ") -> None:
         print(
             f"{prefix}Last Trade     : {result.trades[-1].action} on {result.trades[-1].date.strftime('%Y-%m-%d')}"
         )
+
+
+def print_sentiment_summary(df: pd.DataFrame, stock_code: str) -> None:
+    """Print sentiment analysis summary for backtest."""
+    print("\n" + "=" * 60)
+    print(" SENTIMENT ANALYSIS SUMMARY")
+    print("=" * 60)
+
+    # Check if sentiment columns exist
+    sentiment_cols = [col for col in df.columns if "sentiment" in col.lower()]
+    if not sentiment_cols:
+        print("\n  情绪数据不可用 (Sentiment data not available)")
+        return
+
+    latest = df.iloc[-1]
+
+    # Basic sentiment info
+    sentiment_score = latest.get("sentiment_score", 0)
+    news_count = latest.get("news_count", 0)
+    sentiment_ma3 = latest.get("sentiment_ma3", 0)
+    sentiment_ma7 = latest.get("sentiment_ma7", 0)
+    sentiment_trend = latest.get("sentiment_trend", 0)
+
+    # Sentiment label
+    if sentiment_score > 0.3:
+        sentiment_label = "积极 (Positive)"
+        sentiment_emoji = "🟢"
+    elif sentiment_score < -0.3:
+        sentiment_label = "消极 (Negative)"
+        sentiment_emoji = "🔴"
+    else:
+        sentiment_label = "中性 (Neutral)"
+        sentiment_emoji = "⚪"
+
+    print(f"\n  股票代码 (Stock Code)  : {stock_code}")
+    print(f"  情绪分数 (Sentiment)  : {sentiment_score:.3f} {sentiment_emoji}")
+    print(f"  情绪标签 (Label)      : {sentiment_label}")
+    print(f"  新闻数量 (News Count) : {news_count:.0f}")
+    print(f"  3日均线 (MA3)         : {sentiment_ma3:.3f}")
+    print(f"  7日均线 (MA7)         : {sentiment_ma7:.3f}")
+    print(f"  情绪趋势 (Trend)      : {sentiment_trend:+.3f}")
+
+    # News activity level
+    if news_count > 10:
+        news_activity = "高 (High)"
+    elif news_count > 3:
+        news_activity = "中 (Moderate)"
+    else:
+        news_activity = "低 (Low)"
+    print(f"  新闻活跃度 (Activity) : {news_activity}")
+
+    # Extreme sentiment warning
+    if sentiment_score > 0.5:
+        print(f"\n  ⚠️  市场情绪极度乐观，注意风险")
+        print(f"     (Market sentiment extremely bullish, be cautious)")
+    elif sentiment_score < -0.5:
+        print(f"\n  ⚠️  市场情绪极度悲观，可能存在机会")
+        print(f"     (Market sentiment extremely bearish, potential opportunity)")
+
+    # Sentiment volatility
+    sentiment_std = latest.get("sentiment_std7", 0)
+    if sentiment_std > 0.3:
+        print(f"\n  📊 情绪波动较大 (High sentiment volatility: {sentiment_std:.3f})")
+    elif sentiment_std < 0.1:
+        print(f"\n  📊 情绪波动较小 (Low sentiment volatility: {sentiment_std:.3f})")
+
+    # Recent sentiment trend
+    if len(df) >= 5:
+        recent_sentiment = df["sentiment_score"].tail(5)
+        if recent_sentiment.mean() > 0.2:
+            print(f"  📈 近期情绪偏积极 (Recent sentiment: bullish)")
+        elif recent_sentiment.mean() < -0.2:
+            print(f"  📉 近期情绪偏消极 (Recent sentiment: bearish)")
+        else:
+            print(f"  ➡️  近期情绪中性 (Recent sentiment: neutral)")
+
+    # Trading suggestion based on sentiment
+    print(f"\n  === 基于情绪的交易建议 (Sentiment-based Suggestion) ===")
+    if sentiment_score > 0.4 and sentiment_trend > 0:
+        print(f"  情绪积极且上升，可考虑买入 (Positive and rising sentiment)")
+    elif sentiment_score < -0.4 and sentiment_trend < 0:
+        print(f"  情绪消极且下降，注意风险 (Negative and declining sentiment)")
+    elif sentiment_score > 0.2:
+        print(f"  情绪略偏积极，谨慎乐观 (Slightly positive, cautious optimism)")
+    elif sentiment_score < -0.2:
+        print(f"  情绪略偏消极，谨慎观望 (Slightly negative, cautious观望)")
+    else:
+        print(f"  情绪中性，建议观望 (Neutral sentiment, wait and see)")
 
 
 def main():
@@ -213,6 +301,9 @@ def main():
         print(f"    {result.strategy_name:<35} {vs_benchmark:+.2%}{marker}")
 
     print(f"\n  Best strategy: {best_strategy}")
+
+    # Print sentiment analysis summary
+    print_sentiment_summary(backtest_df, stock_code)
 
     # Save results if requested
     if args.output:
