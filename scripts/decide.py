@@ -595,6 +595,49 @@ def print_stock_core_data(df: pd.DataFrame) -> None:
     else:
         print("  暂无明显技术信号")
 
+    # ========== Historical Performance Summary ==========
+    print(f"\n  === Historical Performance ===")
+
+    # Calculate performance metrics
+    if len(df) >= 20:
+        # 20-day performance
+        start_price_20d = df["close"].iloc[-20]
+        end_price = df["close"].iloc[-1]
+        perf_20d = (end_price - start_price_20d) / start_price_20d * 100
+
+        # Volatility
+        volatility_20d = (
+            df["returns"].tail(20).std() * 100 if "returns" in df.columns else 0
+        )
+
+        # Max drawdown
+        rolling_max = df["close"].tail(20).cummax()
+        drawdown = (df["close"].tail(20) - rolling_max) / rolling_max
+        max_dd = drawdown.min() * 100
+
+        # Win rate (days with positive returns)
+        if "returns" in df.columns:
+            positive_days = (df["returns"].tail(20) > 0).sum()
+            win_rate = positive_days / 20 * 100
+        else:
+            win_rate = 0
+
+        print(f"  20日涨跌幅     : {perf_20d:+.2f}%")
+        print(f"  20日波动率     : {volatility_20d:.2f}%")
+        print(f"  20日最大回撤   : {max_dd:.2f}%")
+        print(f"  20日胜率       : {win_rate:.0f}% ({int(win_rate * 20 / 100)}/20天)")
+
+        # Performance rating
+        if perf_20d > 5:
+            perf_rating = "近期表现强势"
+        elif perf_20d > 0:
+            perf_rating = "近期表现一般"
+        elif perf_20d > -5:
+            perf_rating = "近期表现偏弱"
+        else:
+            perf_rating = "近期表现较弱"
+        print(f"  综合评价       : {perf_rating}")
+
 
 def main():
     args = parse_args()
