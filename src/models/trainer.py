@@ -526,6 +526,20 @@ class StockTradingModel:
             eval_X_valid = eval_X[eval_valid_idx]
             eval_labels_valid = (eval_labels[eval_valid_idx] + 1).astype(int)
 
+            # Ensure eval data also has all 3 classes
+            eval_unique = eval_labels_valid.unique()
+            if len(eval_unique) < 3:
+                eval_missing = [c for c in [0, 1, 2] if c not in eval_unique]
+                for missing_class in eval_missing:
+                    synthetic_eval_X = eval_X_valid.iloc[[0]].copy()
+                    synthetic_eval_label = pd.Series(
+                        [missing_class], index=[f"synthetic_eval_{missing_class}"]
+                    )
+                    eval_X_valid = pd.concat([eval_X_valid, synthetic_eval_X])
+                    eval_labels_valid = pd.concat(
+                        [eval_labels_valid, synthetic_eval_label]
+                    )
+
             if len(eval_X_valid) > 0:
                 eval_data = eval_X_valid
                 eval_labels_converted = eval_labels_valid
