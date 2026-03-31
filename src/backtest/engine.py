@@ -565,6 +565,7 @@ class BacktestEngine:
         take_profit: float = 0.0,
         max_lots_per_trade: int = 3,  # Max 3 lots (300 shares) per trade
         lot_size: int = 100,  # 1 lot = 100 shares
+        max_drawdown_threshold: float = 0.20,  # Max 20% drawdown before stopping
     ):
         self.initial_cash = initial_cash
         self.commission = commission
@@ -574,6 +575,7 @@ class BacktestEngine:
         self.max_lots_per_trade = max_lots_per_trade
         self.lot_size = lot_size
         self.max_shares_per_trade = max_lots_per_trade * lot_size
+        self.max_drawdown_threshold = max_drawdown_threshold  # Risk control
 
     def _calculate_position_size(
         self,
@@ -874,6 +876,32 @@ class BacktestEngine:
             current_drawdown = (peak_equity - equity_value) / peak_equity
             max_drawdown = max(max_drawdown, current_drawdown)
 
+            # Risk control: force sell if drawdown exceeds threshold
+            risk_control_triggered = False
+            if (
+                self.max_drawdown_threshold > 0
+                and current_drawdown >= self.max_drawdown_threshold
+            ):
+                risk_control_triggered = True
+                if position == 1:
+                    # Force sell all shares
+                    proceeds = shares * current_price
+                    comm = proceeds * self.commission
+                    cash = cash + proceeds - comm
+                    trades.append(
+                        Trade(
+                            date=dates[i]
+                            if hasattr(dates[i], "date")
+                            else pd.Timestamp(dates[i]),
+                            action="sell",
+                            price=current_price,
+                            quantity=shares,
+                            commission=comm,
+                        )
+                    )
+                    shares = 0
+                    position = 0
+
             # Check stop loss and take profit first (these override signals)
             stop_loss_triggered = False
             take_profit_triggered = False
@@ -886,8 +914,12 @@ class BacktestEngine:
                 elif self.take_profit > 0 and price_change >= self.take_profit:
                     take_profit_triggered = True
 
-            # Execute signals (only if not stopped out or took profit)
-            if not stop_loss_triggered and not take_profit_triggered:
+            # Execute signals (only if not stopped out, took profit, or risk controlled)
+            if (
+                not stop_loss_triggered
+                and not take_profit_triggered
+                and not risk_control_triggered
+            ):
                 # Buy signal - support both new position and adding to existing position
                 if signals.iloc[i] == 1:
                     prev_day_price = prices[i - 1]

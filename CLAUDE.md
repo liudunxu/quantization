@@ -7,6 +7,7 @@ This project implements a machine learning-based stock trading decision system t
 - Implements file-system based caching for all features
 - Provides backtesting against multiple strategies
 - Supports A-shares, HK, and US stocks
+- Includes risk management with max drawdown control
 
 ## Architecture
 
@@ -19,10 +20,10 @@ This project implements a machine learning-based stock trading decision system t
 ├── logs/              # Log files
 ├── models/            # Trained model files
 ├── src/
-│   ├── data_providers/ # Multi-provider data fetching (yfinance, akshare, tushare)
+│   ├── data_providers/ # Multi-provider data fetching
 │   ├── features/      # Feature engineering
 │   ├── models/        # CatBoost model training/prediction
-│   ├── backtest/      # Backtesting engine
+│   ├── backtest/      # Backtesting engine with risk control
 │   └── utils/         # Utilities (cache, config, stock_info)
 ├── scripts/           # Entry scripts (decide.py, backtest.py)
 └── tests/             # Unit tests
@@ -32,12 +33,19 @@ This project implements a machine learning-based stock trading decision system t
 
 #### 1. Data Providers (`src/data_providers/`)
 Multi-provider data fetching with automatic fallback:
-- **yfinance**: Global stocks (US, HK) - default first choice
+- **baostock**: Chinese A-shares (free, high-quality, forward-adjusted prices)
+- **yfinance**: Global stocks (US, HK)
 - **akshare**: Chinese A-shares/HK fallback
 - **tushare**: Chinese A-shares/HK (requires TUSHARE_TOKEN env var)
+- **openbb**: Global stocks via OpenBB ODP (multi-source, requires pip install openbb)
 - **Real-time price**: `fetch_realtime_price()` for intraday data
-- Retry logic (3 attempts, configurable delay)
-- Auto-fallback chain per market type
+
+**Fallback Priority by Market:**
+| Market | Priority Order |
+|--------|----------------|
+| A-shares | baostock → akshare → tushare → openbb → yfinance |
+| HK | openbb → yfinance → akshare → tushare |
+| US | openbb → yfinance |
 
 #### 2. Feature Engineering (`src/features/`)
 - **Technical Features**: MA, RSI, MACD, Bollinger, ATR, ADX, Stochastic, MFI, CCI, momentum
@@ -59,13 +67,22 @@ Multi-provider data fetching with automatic fallback:
 - Multiple strategies: ML Strategy, Buy & Hold, High Sell Low Buy, and more
 - Dynamic position sizing based on ATR risk model
 - Support for adding to existing positions (pyramiding)
+- **Risk Control**: Max drawdown threshold (default 20%)
 - Metrics: Returns, Sharpe ratio, max drawdown, win rate, trade count
 
 #### 5. Scripts (`scripts/`)
 - `decide.py`: Trading decision with confidence/probabilities and suggested position
 - `backtest.py`: Strategy comparison backtest
 
-## Position Sizing Model
+## Risk Management
+
+### Max Drawdown Control
+The system implements a simple risk control mechanism:
+- **Threshold**: 20% maximum drawdown (configurable in `configs/config.yaml`)
+- **Behavior**: When drawdown exceeds threshold, force sell all positions and stop trading
+- **Configuration**: `backtest.max_drawdown_threshold: 0.20`
+
+### Position Sizing Model
 
 The system uses ATR-based position sizing:
 - **Risk per trade**: 1% of capital
@@ -197,7 +214,6 @@ See `requirements.txt`
 - [ ] Add sentiment analysis features (news, social media)
 - [ ] Implement real-time trading signals with WebSocket
 - [ ] Add portfolio optimization (multiple stocks)
-- [ ] Implement risk management module (max drawdown control)
 - [ ] Add backtest visualization (charts, equity curves)
 
 ### Medium Priority
@@ -222,3 +238,5 @@ See `requirements.txt`
 - [x] Bootstrap class balancing
 - [x] Small position sell logic
 - [x] Market filtering with 3-day average
+- [x] Multi-provider data fetching (baostock, openbb)
+- [x] Risk management (max drawdown control)
