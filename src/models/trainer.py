@@ -558,6 +558,23 @@ class StockTradingModel:
             bootstrap_data = train_data.iloc[bootstrap_idx]
             bootstrap_labels = train_labels.iloc[bootstrap_idx]
 
+            # Ensure bootstrap sample has all 3 classes
+            bootstrap_unique = bootstrap_labels.unique()
+            if len(bootstrap_unique) < 3:
+                # Add one sample for each missing class from original data
+                for missing_class in [0, 1, 2]:
+                    if missing_class not in bootstrap_unique:
+                        # Find a sample with this class in original data
+                        class_idx = train_labels[train_labels == missing_class].index[0]
+                        sample_idx = train_data.index.get_loc(class_idx)
+                        # Add it to bootstrap data
+                        bootstrap_data = pd.concat(
+                            [bootstrap_data, train_data.iloc[[sample_idx]]]
+                        )
+                        bootstrap_labels = pd.concat(
+                            [bootstrap_labels, pd.Series([missing_class])]
+                        )
+
             model = CatBoostClassifier(
                 iterations=self.iterations,
                 depth=self.depth,
