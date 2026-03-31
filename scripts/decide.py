@@ -326,6 +326,8 @@ def print_all_strategy_decisions(
             print(f"    Return    : {total_return}")
             print(f"    Sharpe    : {sharpe:.2f}")
             print(f"    Score     : {score:.3f}")
+            if hasattr(strategy, "description") and strategy.description:
+                print(f"    Description: {strategy.description}")
 
         except Exception as e:
             decisions[strategy.name] = {
