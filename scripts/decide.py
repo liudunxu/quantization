@@ -405,6 +405,106 @@ def print_feature_importance(model: StockTradingModel, top_n: int = 10) -> None:
         print(f"  (Could not display feature importance: {e})")
 
 
+def print_stock_core_data(df: pd.DataFrame) -> None:
+    """Print core stock data including support/resistance levels and key indicators."""
+    if df.empty:
+        return
+
+    print_section(" STOCK CORE DATA")
+
+    # Get latest data
+    latest = df.iloc[-1]
+    current_price = latest.get("close", 0)
+
+    print(f"\n  === Price Info ===")
+    print(f"  Current Price : {current_price:.2f}")
+    print(f"  Open          : {latest.get('open', 'N/A')}")
+    print(f"  High          : {latest.get('high', 'N/A')}")
+    print(f"  Low           : {latest.get('low', 'N/A')}")
+    print(f"  Volume        : {latest.get('volume', 'N/A'):,.0f}")
+
+    # Moving Averages
+    print(f"\n  === Moving Averages ===")
+    for period in [5, 10, 20, 60]:
+        ma_col = f"ma_{period}"
+        if ma_col in df.columns:
+            ma_value = latest.get(ma_col)
+            if pd.notna(ma_value) and ma_value > 0:
+                diff_pct = (current_price - ma_value) / ma_value * 100
+                direction = "↑" if diff_pct > 0 else "↓"
+                print(
+                    f"  MA{period:<2}          : {ma_value:.2f} ({direction}{abs(diff_pct):.1f}%)"
+                )
+
+    # Support and Resistance
+    print(f"\n  === Support & Resistance ===")
+
+    # Recent high/low
+    high_20d = df["high"].tail(20).max() if len(df) >= 20 else df["high"].max()
+    low_20d = df["low"].tail(20).min() if len(df) >= 20 else df["low"].min()
+    print(
+        f"  Resistance (20d High) : {high_20d:.2f} (+{((high_20d - current_price) / current_price * 100):.1f}%)"
+    )
+    print(
+        f"  Support (20d Low)     : {low_20d:.2f} ({((low_20d - current_price) / current_price * 100):.1f}%)"
+    )
+
+    # Bollinger Bands
+    if "bb_upper" in df.columns and "bb_lower" in df.columns:
+        bb_upper = latest.get("bb_upper")
+        bb_lower = latest.get("bb_lower")
+        if pd.notna(bb_upper) and pd.notna(bb_lower):
+            print(f"  BB Upper       : {bb_upper:.2f}")
+            print(f"  BB Lower       : {bb_lower:.2f}")
+
+    # Key Indicators
+    print(f"\n  === Key Indicators ===")
+
+    # RSI
+    if "rsi" in df.columns:
+        rsi = latest.get("rsi")
+        if pd.notna(rsi):
+            rsi_status = "超买" if rsi > 70 else ("超卖" if rsi < 30 else "中性")
+            print(f"  RSI (14)       : {rsi:.1f} ({rsi_status})")
+
+    # MACD
+    if "macd" in df.columns and "macd_signal" in df.columns:
+        macd = latest.get("macd")
+        macd_signal = latest.get("macd_signal")
+        macd_hist = latest.get("macd_hist")
+        if pd.notna(macd) and pd.notna(macd_signal):
+            macd_status = "多头" if macd > macd_signal else "空头"
+            print(f"  MACD           : {macd:.4f} ({macd_status})")
+            if pd.notna(macd_hist):
+                print(f"  MACD Hist      : {macd_hist:.4f}")
+
+    # ATR
+    if "atr" in df.columns:
+        atr = latest.get("atr")
+        if pd.notna(atr) and atr > 0:
+            atr_pct = atr / current_price * 100
+            print(f"  ATR (14)       : {atr:.2f} ({atr_pct:.1f}%)")
+
+    # Volume Analysis
+    print(f"\n  === Volume Analysis ===")
+    if "volume_ratio" in df.columns:
+        vol_ratio = latest.get("volume_ratio")
+        if pd.notna(vol_ratio):
+            vol_status = (
+                "放量" if vol_ratio > 1.5 else ("缩量" if vol_ratio < 0.8 else "正常")
+            )
+            print(f"  Volume Ratio   : {vol_ratio:.2f} ({vol_status})")
+
+    # Returns
+    print(f"\n  === Recent Returns ===")
+    for period in [1, 5, 10, 20]:
+        ret_col = f"momentum_{period}"
+        if ret_col in df.columns:
+            ret = latest.get(ret_col)
+            if pd.notna(ret):
+                print(f"  {period}d Return     : {ret * 100:+.2f}%")
+
+
 def main():
     args = parse_args()
     stock_code = args.stock
@@ -624,6 +724,9 @@ def main():
         )
         final_confidence = best_confidence
         final_strategy = best_strategy_name
+
+        # Print stock core data before final recommendation
+        print_stock_core_data(backtest_df)
 
         # Trading decision (moved to end)
         if final_action != "HOLD":
