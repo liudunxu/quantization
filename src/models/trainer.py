@@ -469,6 +469,23 @@ class StockTradingModel:
         # Convert labels: -1->0, 0->1, 1->2 for CatBoost
         labels = (labels + 1).astype(int)
 
+        # Ensure all 3 classes are present (add synthetic samples if needed)
+        unique_classes = labels.unique()
+        if len(unique_classes) < 3:
+            # Add one synthetic sample for each missing class
+            missing_classes = [c for c in [0, 1, 2] if c not in unique_classes]
+            for missing_class in missing_classes:
+                # Create a synthetic sample by duplicating first row
+                synthetic_X = X.iloc[[0]].copy()
+                synthetic_label = pd.Series(
+                    [missing_class], index=[f"synthetic_{missing_class}"]
+                )
+                X = pd.concat([X, synthetic_X])
+                labels = pd.concat([labels, synthetic_label])
+            print(
+                f"Warning: Added {len(missing_classes)} synthetic samples to ensure 3 classes"
+            )
+
         # Calculate class weights based on inverse frequency (with square root damping)
         # This is more aggressive than balanced but less than pure inverse
         class_counts = labels.value_counts()
