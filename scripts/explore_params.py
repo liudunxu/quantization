@@ -211,11 +211,13 @@ def generate_param_grid(
                 param_def["max"] + param_def["step"] / 2,
                 param_def["step"],
             )
+            # Round to 3 decimal places
+            values = np.round(values, 3).tolist()
             # Limit to max_samples
             if len(values) > max_samples:
                 indices = np.linspace(0, len(values) - 1, max_samples, dtype=int)
                 values = [values[i] for i in indices]
-            param_values[param_name] = values.tolist()
+            param_values[param_name] = values
 
     # Generate all combinations
     keys = list(param_values.keys())
@@ -426,8 +428,10 @@ def main():
     print("=" * 60)
 
     stock_code = args.stock
-    market = StockInfoResolver.get_market(stock_code)
-    exchange = StockInfoResolver.get_exchange(stock_code)
+    stock_info = StockInfoResolver.resolve(stock_code)
+    # Convert market format: hk_share -> hk, a_share -> a_share, us_share -> us
+    market = stock_info.market.replace("_share", "")
+    exchange = stock_info.exchange
 
     print(f"\n  Stock Code  : {stock_code}")
     print(f"  Market      : {market}")

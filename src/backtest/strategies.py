@@ -27,6 +27,118 @@ from .rule_strategies import (
 )
 from ..utils import get_param_manager
 
+# Legacy market params (for backward compatibility)
+MARKET_PARAMS = {
+    "a_share": {
+        "highsell_lookback": 8,
+        "highsell_threshold": 0.06,
+        "ml_confidence_threshold": 0.30,
+        "rolling_train_window": 60,
+        "rolling_retrain_interval": 8,
+        "bear_market_threshold": -0.012,
+    },
+    "hk": {
+        "highsell_lookback": 10,
+        "highsell_threshold": 0.07,
+        "ml_confidence_threshold": 0.32,
+        "rolling_train_window": 80,
+        "rolling_retrain_interval": 10,
+        "bear_market_threshold": -0.008,
+    },
+    "us": {
+        "highsell_lookback": 12,
+        "highsell_threshold": 0.09,
+        "ml_confidence_threshold": 0.35,
+        "rolling_train_window": 100,
+        "rolling_retrain_interval": 12,
+        "bear_market_threshold": -0.005,
+    },
+    "default": {
+        "highsell_lookback": 10,
+        "highsell_threshold": 0.08,
+        "ml_confidence_threshold": 0.35,
+        "rolling_train_window": 90,
+        "rolling_retrain_interval": 10,
+        "bear_market_threshold": -0.008,
+    },
+}
+
+
+def get_default_strategies(
+    model,
+    min_samples: int = 20,
+    ml_confidence_threshold: float = 0.50,
+    bear_market_threshold: float = -0.005,
+    require_bull_market_for_buy: bool = True,
+) -> List[Strategy]:
+    """Get default strategies for backtesting."""
+    return [
+        BuyAndHoldStrategy(),
+        HighSellLowBuyStrategy(lookback=20, threshold=0.15),
+        MLStrategy(
+            model,
+            name="ML Strategy (CatBoost)",
+            min_samples=min_samples,
+            confidence_threshold=0.55,
+            bear_market_threshold=bear_market_threshold,
+            require_bull_market_for_buy=require_bull_market_for_buy,
+        ),
+        HybridStrategy(
+            model,
+            lookback=10,
+            threshold=0.10,
+            min_samples=min_samples,
+            ml_confidence_threshold=ml_confidence_threshold,
+            bear_market_threshold=bear_market_threshold,
+            require_bull_market_for_buy=require_bull_market_for_buy,
+        ),
+        RollingMLStrategy(
+            model_class=type(model),
+            train_window=180,
+            retrain_interval=20,
+            min_samples=min_samples,
+            confidence_threshold=0.50,
+            bear_market_threshold=bear_market_threshold,
+            require_bull_market_for_buy=require_bull_market_for_buy,
+        ),
+        RollingHybridStrategy(
+            model_class=type(model),
+            train_window=180,
+            retrain_interval=15,
+            lookback=10,
+            threshold=0.10,
+            min_samples=min_samples,
+            ml_confidence_threshold=0.45,
+            bear_market_threshold=bear_market_threshold,
+            require_bull_market_for_buy=require_bull_market_for_buy,
+        ),
+    ]
+
+
+def get_quick_strategies(model, min_samples: int = 20) -> List[Strategy]:
+    """Get quick strategies for decide.py (fewer strategies, faster)."""
+    return [
+        BuyAndHoldStrategy(),
+        HighSellLowBuyStrategy(lookback=20, threshold=0.15),
+        MLStrategy(
+            model,
+            name="ML Strategy",
+            min_samples=min_samples,
+            confidence_threshold=0.50,
+            bear_market_threshold=-0.005,
+            require_bull_market_for_buy=True,
+        ),
+        HybridStrategy(
+            model,
+            lookback=10,
+            threshold=0.10,
+            min_samples=min_samples,
+            ml_confidence_threshold=0.50,
+            bear_market_threshold=-0.005,
+            require_bull_market_for_buy=True,
+        ),
+    ]
+
 
 def get_market_strategies(
     model,
