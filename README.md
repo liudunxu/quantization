@@ -91,6 +91,31 @@ python scripts/backtest.py --stock 0700.HK --days 30 --train-days 200 --initial-
 python scripts/backtest.py --stock 000001.SZ --days 30 --output results.csv
 ```
 
+### 参数优化
+
+为特定股票寻找最优的基于规则的策略参数：
+
+```bash
+# 优化所有规则策略参数
+python scripts/explore_params.py --stock 000001.SZ
+
+# 优化特定策略
+python scripts/explore_params.py --stock 000001.SZ --strategies ma_golden_cross box_oscillation
+
+# 使用随机搜索（更快）
+python scripts/explore_params.py --stock 000001.SZ --search-method random --random-samples 100
+
+# 优化更长周期
+python scripts/explore_params.py --stock 000001.SZ --train-days 365 --backtest-days 90
+
+# 试运行（不保存结果）
+python scripts/explore_params.py --stock 000001.SZ --dry-run
+```
+
+**参数优先级：** `股票代码 > 市场 > 默认`
+
+优化后的参数会保存到 SQLite 数据库（`cache/strategy_params.db`），后续 `decide.py` 和 `backtest.py` 会自动使用这些优化参数。
+
 ## 项目结构
 
 ```
@@ -99,6 +124,8 @@ quarnt/
 ├── requirements.txt   # pip 依赖文件
 ├── configs/           # 配置文件（config.yaml）
 ├── cache/             # 特征缓存（parquet格式）
+│   ├── feature_cache.db      # 特征缓存数据库
+│   └── strategy_params.db    # 策略参数数据库
 ├── data/              # 原始数据存储
 ├── models/            # 模型文件
 ├── src/
@@ -111,10 +138,18 @@ quarnt/
 │   │   └── combinator.py   # 特征合并
 │   ├── models/        # 模型训练与预测
 │   ├── backtest/      # 回测引擎
+│   │   ├── engine.py       # 回测引擎核心
+│   │   ├── strategies.py   # 策略配置
+│   │   └── rule_strategies.py  # 基于规则的策略
 │   └── utils/         # 工具（缓存、配置）
+│       ├── cache.py            # 特征缓存
+│       ├── config.py           # 配置管理
+│       ├── stock_info.py       # 股票信息
+│       └── strategy_params.py  # 策略参数管理
 ├── scripts/           # 入口脚本
-│   ├── decide.py      # 交易决策脚本
-│   └── backtest.py    # 回测脚本
+│   ├── decide.py          # 交易决策脚本
+│   ├── backtest.py        # 回测脚本
+│   └── explore_params.py  # 参数优化脚本
 └── tests/             # 测试
 ```
 
