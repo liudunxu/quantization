@@ -23,6 +23,26 @@ data:
   # 数据目录
   data_dir: "data"
 
+# Data provider configuration
+data_providers:
+  # Provider priority by market
+  priority:
+    a_share: ['baostock', 'akshare', 'tushare', 'openbb', 'yfinance']
+    hk: ['openbb', 'yfinance', 'akshare', 'tushare']
+    us: ['openbb', 'yfinance']
+  
+  # Provider-specific settings
+  baostock:
+    adjustflag: "2"  # 1=backward adjusted, 2=forward adjusted, 3=no adjustment
+  
+  openbb:
+    default_provider: "yfinance"  # Default source within OpenBB
+  
+  # API Keys (use environment variables for security)
+  api_keys:
+    tushare: "${TUSHARE_TOKEN}"
+    openbb: "${OPENBB_API_KEY}"
+
 features:
   fundamental:
     enabled: true
