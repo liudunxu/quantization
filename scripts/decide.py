@@ -650,9 +650,36 @@ def main():
             print(f"\n  Best Strategy by Score ({best_strategy_name}):")
             print(f"    Score     : {decisions[best_strategy_name]['score']:.3f}")
             print(f"    Return    : {decisions[best_strategy_name]['return']}")
+
+            # Get best strategy description
+            best_strategy_desc = ""
+            for strategy in strategies:
+                if (
+                    strategy.name == best_strategy_name
+                    and hasattr(strategy, "description")
+                    and strategy.description
+                ):
+                    best_strategy_desc = strategy.description
+                    break
+            if best_strategy_desc:
+                print(f"    Description: {best_strategy_desc}")
+
             print(f"\n  Best Strategy by Return ({best_return_name}):")
             print(f"    Return    : {best_return_value:.2%}")
             print(f"    Decision  : {best_return_action}")
+
+            # Get best return strategy description
+            best_return_desc = ""
+            for strategy in strategies:
+                if (
+                    strategy.name == best_return_name
+                    and hasattr(strategy, "description")
+                    and strategy.description
+                ):
+                    best_return_desc = strategy.description
+                    break
+            if best_return_desc:
+                print(f"    Description: {best_return_desc}")
 
             # Print Top3 Voting Strategy
             print(f"\n  === Top3 Voting Strategy ===")
@@ -702,6 +729,19 @@ def main():
             print(f"\n  Best Strategy by Return ({best_return_name}):")
             print(f"    Return    : {best_return_value:.2%}")
             print(f"    Decision  : {best_return_action}")
+
+            # Get best return strategy description
+            best_return_desc = ""
+            for strategy in strategies:
+                if (
+                    strategy.name == best_return_name
+                    and hasattr(strategy, "description")
+                    and strategy.description
+                ):
+                    best_return_desc = strategy.description
+                    break
+            if best_return_desc:
+                print(f"    Description: {best_return_desc}")
 
             # Show suggested position based on best return strategy's decision
             if best_return_action != "HOLD":
