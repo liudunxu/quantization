@@ -37,8 +37,9 @@ class BacktestResult:
 class Strategy:
     """Base strategy class."""
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, description: str = ""):
         self.name = name
+        self.description = description
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
         """Generate trading signals.
@@ -53,7 +54,10 @@ class BuyAndHoldStrategy(Strategy):
     """Simple buy and hold strategy."""
 
     def __init__(self):
-        super().__init__("Buy & Hold")
+        super().__init__(
+            "Buy & Hold",
+            "买入并持有策略：在第一天买入后长期持有，不做任何操作。作为基准策略用于比较。",
+        )
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
         signals = pd.Series(0, index=df.index)
@@ -65,7 +69,10 @@ class HighSellLowBuyStrategy(Strategy):
     """Contrarian strategy: sell when price is high, buy when low."""
 
     def __init__(self, lookback: int = 20, threshold: float = 0.1):
-        super().__init__(f"High Sell Low Buy (L:{lookback}, T:{threshold})")
+        super().__init__(
+            f"High Sell Low Buy (L:{lookback}, T:{threshold})",
+            f"高抛低吸策略：基于{lookback}日价格区间，当价格处于区间底部{threshold * 100:.0f}%时买入，处于顶部{threshold * 100:.0f}%时卖出。",
+        )
         self.lookback = lookback
         self.threshold = threshold
 
@@ -109,7 +116,13 @@ class MLStrategy(Strategy):
             bear_market_threshold: Index return threshold below which market is considered bearish
             require_bull_market_for_buy: If True, only buy when market is bullish (or neutral)
         """
-        super().__init__(name)
+        description = (
+            f"机器学习策略：使用CatBoost模型预测买卖信号，"
+            f"置信度阈值={confidence_threshold:.0%}，"
+            f"熊市阈值={bear_market_threshold:.1%}，"
+            f"{'熊市禁止买入' if require_bull_market_for_buy else '允许熊市买入'}。"
+        )
+        super().__init__(name, description)
         self.model = model
         self.min_samples = min_samples
         self.confidence_threshold = confidence_threshold
@@ -193,7 +206,13 @@ class HybridStrategy(Strategy):
             bear_market_threshold: Market return threshold for bull/bear
             require_bull_market_for_buy: Only buy in bull market
         """
-        super().__init__(f"Hybrid Strategy (ML+HSSLB)")
+        description = (
+            f"混合策略：结合机器学习和高抛低吸，"
+            f"ML置信度阈值={ml_confidence_threshold:.0%}，"
+            f"高抛低吸回溯={lookback}日，阈值={threshold:.0%}。"
+            f"当两者信号一致时才交易。"
+        )
+        super().__init__(f"Hybrid Strategy (ML+HSSLB)", description)
         self.model = model
         self.min_samples = min_samples
         self.ml_confidence_threshold = ml_confidence_threshold
@@ -304,7 +323,13 @@ class RollingMLStrategy(Strategy):
             require_bull_market_for_buy: Only buy in bull market
             model_params: Dict of model parameters
         """
-        super().__init__(f"Rolling ML ({train_window}/{retrain_interval})")
+        description = (
+            f"滚动机器学习策略：每{retrain_interval}天重新训练模型，"
+            f"使用{train_window}天的滚动窗口数据，"
+            f"置信度阈值={confidence_threshold:.0%}，"
+            f"适应市场风格变化。"
+        )
+        super().__init__(f"Rolling ML ({train_window}/{retrain_interval})", description)
         self.model_class = model_class
         self.train_window = train_window
         self.retrain_interval = retrain_interval
@@ -433,7 +458,15 @@ class RollingHybridStrategy(Strategy):
             require_bull_market_for_buy: Only buy in bull market
             model_params: Dict of model parameters
         """
-        super().__init__(f"Rolling Hybrid ({train_window}/{retrain_interval})")
+        description = (
+            f"滚动混合策略：每{retrain_interval}天重新训练模型，"
+            f"结合高抛低吸策略，"
+            f"ML置信度阈值={ml_confidence_threshold:.0%}，"
+            f"高抛低吸回溯={lookback}日。"
+        )
+        super().__init__(
+            f"Rolling Hybrid ({train_window}/{retrain_interval})", description
+        )
         self.model_class = model_class
         self.train_window = train_window
         self.retrain_interval = retrain_interval

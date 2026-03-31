@@ -585,6 +585,37 @@ def main():
             strategies, results_df, backtest_df, features_df, model, min_samples
         )
 
+        # Top3 Voting Strategy: select top 3 strategies by return and vote
+        top3_strategies = results_df.head(3)
+        top3_votes = {"BUY": 0, "HOLD": 0, "SELL": 0}
+        top3_details = []
+
+        for _, row in top3_strategies.iterrows():
+            strategy_name = row["Strategy"]
+            if strategy_name in decisions:
+                action = decisions[strategy_name]["action"]
+                top3_votes[action] = top3_votes.get(action, 0) + 1
+                top3_details.append(
+                    {
+                        "name": strategy_name,
+                        "return": row["Total Return"],
+                        "action": action,
+                    }
+                )
+
+        # Determine Top3 action with priority: BUY > SELL > HOLD
+        top3_action = "HOLD"
+        if top3_votes["BUY"] > 0:
+            top3_action = "BUY"
+        elif top3_votes["SELL"] > 0:
+            top3_action = "SELL"
+
+        # Check if there's a clear majority
+        max_votes = max(top3_votes.values())
+        actions_with_max_votes = [a for a, v in top3_votes.items() if v == max_votes]
+        if len(actions_with_max_votes) == 1:
+            top3_action = actions_with_max_votes[0]
+
         # Determine final action by majority vote
         final_action = (
             max(action_counts, key=action_counts.get) if action_counts else "HOLD"
@@ -620,6 +651,19 @@ def main():
             print(f"\n  Best Strategy by Return ({best_return_name}):")
             print(f"    Return    : {best_return_value:.2%}")
             print(f"    Decision  : {best_return_action}")
+
+            # Print Top3 Voting Strategy
+            print(f"\n  === Top3 Voting Strategy ===")
+            print(f"  Action: {top3_action}")
+            print(
+                f"  Votes: BUY={top3_votes['BUY']}, SELL={top3_votes['SELL']}, HOLD={top3_votes['HOLD']}"
+            )
+            print(f"  Top Strategies:")
+            for detail in top3_details:
+                print(
+                    f"    - {detail['name']}: {detail['return']} -> {detail['action']}"
+                )
+
             print(f"\n  === Suggested Position ===")
             print(f"  Lots          : {suggested['lots']:.1f} 手")
             print(f"  Shares        : {suggested['shares']} 股")
