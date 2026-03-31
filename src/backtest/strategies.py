@@ -25,232 +25,141 @@ from .rule_strategies import (
     OneYangThreeYinStrategy,
     MACDDivergenceStrategy,
 )
-
-
-# Market-specific strategy parameters
-MARKET_PARAMS = {
-    "a_share": {
-        # A股市场：政策影响大、风格切换快、波动性高
-        "highsell_lookback": 8,  # 更短产生更多信号
-        "highsell_threshold": 0.06,  # 更低threshold产生更多信号
-        "ml_confidence_threshold": 0.30,  # 较低置信度产生更多信号
-        "rolling_train_window": 60,  # 更短的训练窗口
-        "rolling_retrain_interval": 8,  # 更频繁的retrain
-        "bear_market_threshold": -0.012,  # 放宽熊市定义
-    },
-    "hk": {
-        # 港股市场：受A股和美股双重影响
-        "highsell_lookback": 10,  # 较短产生更多信号
-        "highsell_threshold": 0.07,  # 较低threshold产生更多信号
-        "ml_confidence_threshold": 0.32,  # 较低置信度产生更多信号
-        "rolling_train_window": 80,  # 较短训练窗口
-        "rolling_retrain_interval": 10,  # 更频繁的retrain
-        "bear_market_threshold": -0.008,
-    },
-    "us": {
-        # 美股市场：趋势性强、波动相对平稳
-        "highsell_lookback": 12,  # 较长lookback更稳定
-        "highsell_threshold": 0.09,  # 较高threshold减少噪音
-        "ml_confidence_threshold": 0.35,  # 较高置信度
-        "rolling_train_window": 100,  # 较长训练窗口
-        "rolling_retrain_interval": 12,  # 较少retrain
-        "bear_market_threshold": -0.005,
-    },
-    "default": {
-        # 默认参数
-        "highsell_lookback": 10,
-        "highsell_threshold": 0.08,
-        "ml_confidence_threshold": 0.35,
-        "rolling_train_window": 90,
-        "rolling_retrain_interval": 10,
-        "bear_market_threshold": -0.008,
-    },
-}
-
-
-def get_default_strategies(
-    model,
-    min_samples: int = 20,
-    ml_confidence_threshold: float = 0.50,
-    bear_market_threshold: float = -0.005,
-    require_bull_market_for_buy: bool = True,
-) -> List[Strategy]:
-    """Get default strategies for backtesting.
-
-    Args:
-        model: Trained ML model instance
-        min_samples: Minimum samples for ML strategies
-        ml_confidence_threshold: ML confidence threshold
-        bear_market_threshold: Bear market threshold
-        require_bull_market_for_buy: Require bull market for buy signals
-
-    Returns:
-        List of strategy instances
-    """
-    return [
-        # Non-ML strategies
-        BuyAndHoldStrategy(),
-        HighSellLowBuyStrategy(lookback=20, threshold=0.15),
-        # Pure ML strategy
-        MLStrategy(
-            model,
-            name="ML Strategy (CatBoost)",
-            min_samples=min_samples,
-            confidence_threshold=0.55,
-            bear_market_threshold=bear_market_threshold,
-            require_bull_market_for_buy=require_bull_market_for_buy,
-        ),
-        # Hybrid strategy
-        HybridStrategy(
-            model,
-            lookback=10,
-            threshold=0.10,
-            min_samples=min_samples,
-            ml_confidence_threshold=ml_confidence_threshold,
-            bear_market_threshold=bear_market_threshold,
-            require_bull_market_for_buy=require_bull_market_for_buy,
-        ),
-        # Rolling ML strategy
-        RollingMLStrategy(
-            model_class=type(model),
-            train_window=180,
-            retrain_interval=20,
-            min_samples=min_samples,
-            confidence_threshold=0.50,
-            bear_market_threshold=bear_market_threshold,
-            require_bull_market_for_buy=require_bull_market_for_buy,
-        ),
-        # Rolling Hybrid strategy
-        RollingHybridStrategy(
-            model_class=type(model),
-            train_window=180,
-            retrain_interval=15,
-            lookback=10,
-            threshold=0.10,
-            min_samples=min_samples,
-            ml_confidence_threshold=0.45,
-            bear_market_threshold=bear_market_threshold,
-            require_bull_market_for_buy=require_bull_market_for_buy,
-        ),
-    ]
-
-
-def get_quick_strategies(model, min_samples: int = 20) -> List[Strategy]:
-    """Get quick strategies for decide.py (fewer strategies, faster).
-
-    Args:
-        model: Trained ML model instance
-        min_samples: Minimum samples for ML strategies
-
-    Returns:
-        List of strategy instances
-    """
-    return [
-        BuyAndHoldStrategy(),
-        HighSellLowBuyStrategy(lookback=20, threshold=0.15),
-        MLStrategy(
-            model,
-            name="ML Strategy",
-            min_samples=min_samples,
-            confidence_threshold=0.50,
-            bear_market_threshold=-0.005,
-            require_bull_market_for_buy=True,
-        ),
-        HybridStrategy(
-            model,
-            lookback=10,
-            threshold=0.10,
-            min_samples=min_samples,
-            ml_confidence_threshold=0.50,
-            bear_market_threshold=-0.005,
-            require_bull_market_for_buy=True,
-        ),
-    ]
+from ..utils import get_param_manager
 
 
 def get_market_strategies(
     model,
     market: Literal["a_share", "hk", "us"],
+    stock_code: Optional[str] = None,
     min_samples: int = 20,
     require_bull_market_for_buy: bool = True,
 ) -> List[Strategy]:
     """Get market-specific strategies with tuned parameters.
 
+    Parameters are loaded with priority: stock_code > market > default.
+
     Args:
         model: Trained ML model instance
         market: Market type ('a_share', 'hk', 'us')
+        stock_code: Stock code (optional, for stock-specific params)
         min_samples: Minimum samples for ML strategies
         require_bull_market_for_buy: Require bull market for buy signals
 
     Returns:
         List of strategy instances with market-tuned parameters
     """
-    params = MARKET_PARAMS.get(market, MARKET_PARAMS["default"])
+    param_manager = get_param_manager()
+
+    # Get market parameters with priority: stock_code > market > default
+    market_params = param_manager.get_market_params(market, stock_code)
+
+    # Get rule strategy parameters with priority
+    highsell_params = param_manager.get_all_strategy_params(
+        "highsell_lowbuy", market, stock_code
+    )
+    ma_cross_params = param_manager.get_all_strategy_params(
+        "ma_golden_cross", market, stock_code
+    )
+    bull_trend_params = param_manager.get_all_strategy_params(
+        "bull_trend", market, stock_code
+    )
+    shrink_params = param_manager.get_all_strategy_params(
+        "shrink_pullback", market, stock_code
+    )
+    bottom_params = param_manager.get_all_strategy_params(
+        "bottom_volume", market, stock_code
+    )
+    box_params = param_manager.get_all_strategy_params(
+        "box_oscillation", market, stock_code
+    )
+    volume_params = param_manager.get_all_strategy_params(
+        "volume_breakout", market, stock_code
+    )
+    macd_params = param_manager.get_all_strategy_params(
+        "macd_divergence", market, stock_code
+    )
 
     return [
         # === Non-ML / Rule-based strategies ===
         BuyAndHoldStrategy(),
         HighSellLowBuyStrategy(
-            lookback=params["highsell_lookback"], threshold=params["highsell_threshold"]
+            lookback=highsell_params.get("lookback", 20),
+            threshold=highsell_params.get("threshold", 0.15),
         ),
         # Rule-based strategies from strategy references
         MAGoldenCrossStrategy(
-            fast_ma=5, slow_ma=10, volume_ratio=1.0
-        ),  # 降低量能确认阈值
-        BullTrendStrategy(ma5_period=5, ma10_period=10, ma20_period=20),
+            fast_ma=ma_cross_params.get("fast_ma", 5),
+            slow_ma=ma_cross_params.get("slow_ma", 10),
+            volume_ratio=ma_cross_params.get("volume_ratio", 1.0),
+        ),
+        BullTrendStrategy(
+            ma5_period=bull_trend_params.get("ma5_period", 5),
+            ma10_period=bull_trend_params.get("ma10_period", 10),
+            ma20_period=bull_trend_params.get("ma20_period", 20),
+        ),
         ShrinkPullbackStrategy(
-            lookback=5, ma_period=5, volume_shrink=0.8
-        ),  # 放宽缩量要求
+            lookback=shrink_params.get("lookback", 5),
+            ma_period=shrink_params.get("ma_period", 5),
+            volume_shrink=shrink_params.get("volume_shrink", 0.8),
+        ),
         BottomVolumeStrategy(
-            drop_threshold=0.10, volume_multiplier=2.0
-        ),  # 降低跌幅和量能要求
+            drop_threshold=bottom_params.get("drop_threshold", 0.10),
+            volume_multiplier=bottom_params.get("volume_multiplier", 2.0),
+        ),
         BoxOscillationStrategy(
-            lookback=40, support_margin=0.03, resistance_margin=0.03
-        ),  # 更宽的支撑阻力
+            lookback=box_params.get("lookback", 40),
+            support_margin=box_params.get("support_margin", 0.03),
+            resistance_margin=box_params.get("resistance_margin", 0.03),
+        ),
         VolumeBreakoutStrategy(
-            lookback=15, volume_multiplier=1.5
-        ),  # 更短周期、更低量能
-        MACDDivergenceStrategy(lookback=15),  # 更短周期
+            lookback=volume_params.get("lookback", 15),
+            volume_multiplier=volume_params.get("volume_multiplier", 1.5),
+        ),
+        MACDDivergenceStrategy(
+            lookback=macd_params.get("lookback", 15),
+        ),
         # === ML-based strategies ===
         # Pure ML strategy
         MLStrategy(
             model,
             name=f"ML Strategy ({market.upper()})",
             min_samples=min_samples,
-            confidence_threshold=params["ml_confidence_threshold"],
-            bear_market_threshold=params["bear_market_threshold"],
+            confidence_threshold=market_params.get("ml_confidence_threshold", 0.35),
+            bear_market_threshold=market_params.get("bear_market_threshold", -0.008),
             require_bull_market_for_buy=require_bull_market_for_buy,
         ),
         # Hybrid strategy
         HybridStrategy(
             model,
-            lookback=params["highsell_lookback"] - 5,
-            threshold=params["highsell_threshold"] - 0.02,
+            lookback=market_params.get("highsell_lookback", 10) - 5,
+            threshold=market_params.get("highsell_threshold", 0.08) - 0.02,
             min_samples=min_samples,
-            ml_confidence_threshold=params["ml_confidence_threshold"],
-            bear_market_threshold=params["bear_market_threshold"],
+            ml_confidence_threshold=market_params.get("ml_confidence_threshold", 0.35),
+            bear_market_threshold=market_params.get("bear_market_threshold", -0.008),
             require_bull_market_for_buy=require_bull_market_for_buy,
         ),
         # Rolling ML strategy
         RollingMLStrategy(
             model_class=type(model),
-            train_window=params["rolling_train_window"],
-            retrain_interval=params["rolling_retrain_interval"],
+            train_window=market_params.get("rolling_train_window", 90),
+            retrain_interval=market_params.get("rolling_retrain_interval", 10),
             min_samples=min_samples,
-            confidence_threshold=params["ml_confidence_threshold"],
-            bear_market_threshold=params["bear_market_threshold"],
+            confidence_threshold=market_params.get("ml_confidence_threshold", 0.35),
+            bear_market_threshold=market_params.get("bear_market_threshold", -0.008),
             require_bull_market_for_buy=require_bull_market_for_buy,
         ),
         # Rolling Hybrid strategy
         RollingHybridStrategy(
             model_class=type(model),
-            train_window=params["rolling_train_window"],
-            retrain_interval=params["rolling_retrain_interval"],
-            lookback=params["highsell_lookback"] - 5,
-            threshold=params["highsell_threshold"] - 0.02,
+            train_window=market_params.get("rolling_train_window", 90),
+            retrain_interval=market_params.get("rolling_retrain_interval", 10),
+            lookback=market_params.get("highsell_lookback", 10) - 5,
+            threshold=market_params.get("highsell_threshold", 0.08) - 0.02,
             min_samples=min_samples,
-            ml_confidence_threshold=params["ml_confidence_threshold"] - 0.05,
-            bear_market_threshold=params["bear_market_threshold"],
+            ml_confidence_threshold=market_params.get("ml_confidence_threshold", 0.35)
+            - 0.05,
+            bear_market_threshold=market_params.get("bear_market_threshold", -0.008),
             require_bull_market_for_buy=require_bull_market_for_buy,
         ),
     ]
