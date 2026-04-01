@@ -40,11 +40,12 @@
 
 ## 🚀 未来计划
 
-### v1.4 - 多模型集成 (计划中)
-- [ ] 支持 LightGBM 模型
-- [ ] 支持 XGBoost 模型
-- [ ] 模型投票集成
-- [ ] 模型权重自动优化
+### v1.4 - 多模型集成 (已完成)
+- [x] 支持 LightGBM 模型
+- [x] 支持 XGBoost 模型
+- [x] 模型投票集成 (MultiModelEnsemble)
+- [x] 模型权重自动优化
+- [x] explore_params 支持多模型参数探索
 
 ### v1.5 - 实时预测 (计划中)
 - [ ] WebSocket 实时数据接入

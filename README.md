@@ -52,11 +52,13 @@ python scripts/decide.py --stock 000001.SZ
 # 使用 uv
 uv sync --extra openbb      # 安装 OpenBB 数据源
 uv sync --extra sentiment   # 安装情绪分析依赖 (SnowNLP)
+uv sync --extra ml          # 安装多模型支持 (LightGBM, XGBoost)
 uv sync --extra dev         # 安装开发依赖 (pytest, ruff)
 
 # 使用 pip
 pip install openbb           # 安装 OpenBB 数据源
 pip install snownlp          # 安装情绪分析依赖
+pip install lightgbm xgboost # 安装多模型支持
 ```
 
 ## 使用指南
@@ -159,6 +161,9 @@ python scripts/predict.py --stock AAPL
 
 # 自定义参数
 python scripts/predict.py --stock 000001.SZ --train-days 365 --threshold 0.01
+
+# 使用多模型集成 (CatBoost + LightGBM + XGBoost)
+python scripts/predict.py --stock 000001.SZ --multi-model
 
 # JSON输出（便于程序处理）
 python scripts/predict.py --stock 000001.SZ --output json
