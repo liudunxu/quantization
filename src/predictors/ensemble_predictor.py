@@ -819,6 +819,9 @@ class EnsemblePredictor:
         )
         neutral_score = sum(s["weight"] for s in signals if s["direction"] == "NEUTRAL")
 
+        # 降低中性信号权重，让UP/DOWN信号更容易胜出
+        neutral_score *= 0.3
+
         # 应用市场状态调整
         if market_regime and market_regime["regime"] == "trending":
             # 趋势市场: 增强一致性信号
@@ -835,24 +838,34 @@ class EnsemblePredictor:
         else:
             up_ratio = down_ratio = 0.33
 
-        # 确定最终方向 - 使用更严格的阈值
+        # 确定最终方向 - 使用更宽松的阈值(0.38)，更容易给出方向
         signal_strength = abs(up_score - down_score)
 
-        if up_score > down_score and up_ratio > 0.42:
+        if up_score > down_score and up_ratio > 0.38:
             direction = "UP"
             confidence = up_ratio
-        elif down_score > up_score and down_ratio > 0.42:
+        elif down_score > up_score and down_ratio > 0.38:
             direction = "DOWN"
             confidence = down_ratio
         else:
-            direction = "NEUTRAL"
-            confidence = 0.5
+            # 当分数接近时，选择分数较高的一方（而不是NEUTRAL）
+            if up_score > down_score:
+                direction = "UP"
+                confidence = 0.5 + (up_ratio - 0.5) * 0.5
+            elif down_score > up_score:
+                direction = "DOWN"
+                confidence = 0.5 + (down_ratio - 0.5) * 0.5
+            else:
+                direction = "NEUTRAL"
+                confidence = 0.45
 
-        # 调整置信度
-        if signal_strength > 0.3:
-            confidence = min(confidence + 0.15, 0.95)
-        elif signal_strength > 0.2:
-            confidence = min(confidence + 0.10, 0.90)
+        # 调整置信度 - 更激进地提升置信度
+        if signal_strength > 0.25:
+            confidence = min(confidence + 0.18, 0.95)
+        elif signal_strength > 0.15:
+            confidence = min(confidence + 0.12, 0.92)
+        elif signal_strength > 0.08:
+            confidence = min(confidence + 0.08, 0.88)
 
         # 信号一致性检查 (借鉴decide.py的共识机制)
         agreement_count = sum(1 for s in signals if s["direction"] == direction)
@@ -861,9 +874,11 @@ class EnsemblePredictor:
             agreement_ratio = agreement_count / total_active
             # 共识加成: 如果>=3个信号源同意，增强置信度
             if agreement_count >= 3:
-                confidence = min(confidence + 0.10, 0.95)
-            elif agreement_ratio > 0.7:
-                confidence = min(confidence + 0.05, 0.95)
+                confidence = min(confidence + 0.12, 0.95)
+            elif agreement_count >= 2:
+                confidence = min(confidence + 0.08, 0.92)
+            elif agreement_ratio > 0.6:
+                confidence = min(confidence + 0.05, 0.90)
 
         # Top3投票机制 (借鉴decide.py)
         # 按权重排序，选择前3个信号源投票
@@ -873,23 +888,25 @@ class EnsemblePredictor:
         top3_down = sum(1 for s in top3_signals if s["direction"] == "DOWN")
         top3_neutral = sum(1 for s in top3_signals if s["direction"] == "NEUTRAL")
 
-        # Top3投票加成
+        # Top3投票加成 - 更激进
         if top3_up >= 2 and direction == "UP":
-            confidence = min(confidence + 0.08, 0.95)
+            confidence = min(confidence + 0.10, 0.95)
         elif top3_down >= 2 and direction == "DOWN":
-            confidence = min(confidence + 0.08, 0.95)
+            confidence = min(confidence + 0.10, 0.95)
+        elif top3_up == 1 and top3_down == 0 and direction == "UP":
+            confidence = min(confidence + 0.05, 0.90)
+        elif top3_down == 1 and top3_up == 0 and direction == "DOWN":
+            confidence = min(confidence + 0.05, 0.90)
 
-        # 市场状态过滤 (借鉴decide.py的require_bull_market_for_buy)
+        # 市场状态过滤 - 更宽松
         if market_regime:
-            # 震荡市场中，降低非趋势信号的置信度
-            if market_regime["regime"] == "ranging":
-                if direction == "UP" and technical_result.get("signal_strength", 0) < 2:
-                    confidence = max(confidence - 0.10, 0.3)
-                elif (
-                    direction == "DOWN"
-                    and technical_result.get("signal_strength", 0) < 2
-                ):
-                    confidence = max(confidence - 0.10, 0.3)
+            # 只在极度震荡市场降低置信度
+            if (
+                market_regime["regime"] == "ranging"
+                and market_regime.get("adx", 20) < 15
+            ):
+                if direction != "NEUTRAL":
+                    confidence = max(confidence - 0.05, 0.40)
 
         # 收集所有解释因素
         bullish_factors = []
@@ -955,9 +972,12 @@ class EnsemblePredictor:
             ):
                 bearish_factors.append(multi_tf_result["explanation"])
 
-        # 高置信度过滤: 如果信号不明确，降低置信度
-        if len(bullish_factors) <= 2 and len(bearish_factors) <= 2:
-            confidence = max(confidence - 0.10, 0.3)
+        # 高置信度过滤: 更宽松的条件
+        # 只有当两个方向的因素都很少时才降低置信度
+        if len(bullish_factors) == 0 and len(bearish_factors) == 0:
+            confidence = max(confidence - 0.08, 0.35)
+        elif len(bullish_factors) <= 1 and len(bearish_factors) <= 1:
+            confidence = max(confidence - 0.03, 0.40)
 
         return {
             "direction": direction,

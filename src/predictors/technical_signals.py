@@ -216,20 +216,35 @@ class TechnicalSignalGenerator:
 
         if bullish_count > bearish_count:
             direction = "UP"
-            confidence = bullish_count / total_signals if total_signals > 0 else 0.5
+            # 即使只有一个信号优势，也给出方向
+            confidence = (
+                0.5 + (bullish_count - bearish_count) / max(total_signals, 1) * 0.5
+            )
         elif bearish_count > bullish_count:
             direction = "DOWN"
-            confidence = bearish_count / total_signals if total_signals > 0 else 0.5
+            confidence = (
+                0.5 + (bearish_count - bullish_count) / max(total_signals, 1) * 0.5
+            )
         else:
-            direction = "NEUTRAL"
-            confidence = 0.5
+            # 当数量相等时，选择第一个非中性因素的方向
+            if bullish_factors:
+                direction = "UP"
+                confidence = 0.52
+            elif bearish_factors:
+                direction = "DOWN"
+                confidence = 0.52
+            else:
+                direction = "NEUTRAL"
+                confidence = 0.45
 
         # 增强置信度计算
         signal_strength = abs(bullish_count - bearish_count)
         if signal_strength >= 3:
-            confidence = min(confidence + 0.15, 0.95)
+            confidence = min(confidence + 0.18, 0.95)
         elif signal_strength >= 2:
-            confidence = min(confidence + 0.10, 0.90)
+            confidence = min(confidence + 0.12, 0.90)
+        elif signal_strength >= 1:
+            confidence = min(confidence + 0.06, 0.85)
 
         return {
             "direction": direction,
