@@ -3,6 +3,7 @@
 股票下个交易日涨跌预测脚本
 
 预测股票下个交易日的涨跌方向，输出概率和置信度。
+结合ML模型、技术分析和动量分析进行综合预测。
 
 Usage:
     python scripts/predict.py --stock 000001.SZ
@@ -13,9 +14,10 @@ Usage:
 
 Features:
     - 使用 CatBoost 模型预测下个交易日涨跌
-    - 输出方向：UP (看涨) / DOWN (看跌) / NEUTRAL (中性)
+    - 结合技术分析信号（均线、RSI、MACD、布林带等）
+    - 结合动量分析和市场情绪
+    - 输出详细的看涨/看跌因素解释
     - 支持多种输出格式：text (默认), json, csv
-    - 每次重新训练模型，针对当前股票优化
 """
 
 import sys
@@ -31,6 +33,7 @@ sys.path.insert(0, str(project_root))
 
 from src.utils import get_cache, get_config, StockInfoResolver
 from src.pipelines import DataPipeline, ModelPipeline
+from src.predictors import EnsemblePredictor
 from src.display import PredictionFormatter
 
 # Configure logging
@@ -73,6 +76,15 @@ def parse_args():
     )
     parser.add_argument("--refresh", action="store_true", help="强制刷新数据缓存")
     parser.add_argument("--verbose", action="store_true", help="详细输出")
+    parser.add_argument(
+        "--ml-weight", type=float, default=0.5, help="ML模型权重 (默认: 0.5)"
+    )
+    parser.add_argument(
+        "--technical-weight", type=float, default=0.3, help="技术分析权重 (默认: 0.3)"
+    )
+    parser.add_argument(
+        "--momentum-weight", type=float, default=0.2, help="动量分析权重 (默认: 0.2)"
+    )
     return parser.parse_args()
 
 
@@ -84,7 +96,7 @@ def main():
     Path("logs").mkdir(exist_ok=True)
 
     print("=" * 60)
-    print("  STOCK PREDICTION SYSTEM")
+    print("  STOCK PREDICTION SYSTEM (Enhanced)")
     print("=" * 60)
 
     # 1. 解析股票信息
@@ -136,18 +148,27 @@ def main():
     )
     print(f"  Accuracy: {accuracy:.1%}")
 
-    # 7. 获取最新特征并预测
-    print("\n  Predicting next day...")
-    latest_df = data_pipeline.get_latest(df)
+    # 7. 获取实时价格
+    print("\n  Getting real-time price...")
     current_price = data_pipeline.get_realtime_price(stock_code)
 
     if current_price is None:
         current_price = df["close"].iloc[-1]
         print(f"  (Using last close price)")
 
-    prediction = model_pipeline.predict_direction(model, latest_df, current_price)
+    # 8. 使用集成预测器进行综合预测
+    print("\n  Running ensemble prediction...")
+    ensemble_predictor = EnsemblePredictor(
+        {
+            "ml_weight": args.ml_weight,
+            "technical_weight": args.technical_weight,
+            "momentum_weight": args.momentum_weight,
+        }
+    )
 
-    # 8. 添加元数据
+    prediction = ensemble_predictor.predict(model, df, current_price)
+
+    # 9. 添加元数据
     prediction["stock_code"] = stock_code
     prediction["market"] = market
     prediction["prediction_date"] = datetime.now().strftime("%Y-%m-%d")
@@ -155,10 +176,6 @@ def main():
         "%Y-%m-%d"
     )
     prediction["model_accuracy"] = accuracy
-
-    # 9. 获取特征重要性
-    importance = model.get_feature_importance()
-    prediction["top_features"] = importance.head(5).to_dict("records")
 
     # 10. 输出结果
     formatter = PredictionFormatter()
@@ -171,6 +188,9 @@ def main():
         print(f"  Threshold: {args.threshold}")
         print(f"  Train days: {args.train_days}")
         print(f"  Data range: {df['date'].min()} to {df['date'].max()}")
+        print(f"  ML weight: {args.ml_weight}")
+        print(f"  Technical weight: {args.technical_weight}")
+        print(f"  Momentum weight: {args.momentum_weight}")
 
     print("\n" + "=" * 60)
     print("  PREDICTION COMPLETE")

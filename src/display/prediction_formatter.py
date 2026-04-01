@@ -29,7 +29,7 @@ class PredictionFormatter:
         return formatter(prediction)
 
     def _format_text(self, p: Dict[str, Any]) -> str:
-        """纯文本格式"""
+        """纯文本格式 - 带详细解释"""
         direction_emoji = {
             "UP": "↑",
             "DOWN": "↓",
@@ -42,9 +42,25 @@ class PredictionFormatter:
         }
 
         # 概率柱状图
-        up_bar = "█" * int(p.get("up_prob", 0) * 20)
-        down_bar = "█" * int(p.get("down_prob", 0) * 20)
-        hold_bar = "█" * int(p.get("hold_prob", 0) * 20)
+        up_prob = p.get("ml_up_prob", p.get("up_prob", 0))
+        down_prob = p.get("ml_down_prob", p.get("down_prob", 0))
+        hold_prob = p.get("ml_hold_prob", p.get("hold_prob", 0))
+
+        up_bar = "█" * int(up_prob * 20)
+        down_bar = "█" * int(down_prob * 20)
+        hold_bar = "█" * int(hold_prob * 20)
+
+        # 置信度等级
+        confidence = p.get("confidence", 0)
+        if confidence >= 0.7:
+            confidence_level = "高 (HIGH)"
+            confidence_bar = "██████████"
+        elif confidence >= 0.5:
+            confidence_level = "中 (MEDIUM)"
+            confidence_bar = "██████"
+        else:
+            confidence_level = "低 (LOW)"
+            confidence_bar = "███"
 
         lines = [
             "=" * 60,
@@ -55,31 +71,156 @@ class PredictionFormatter:
             f"  Prediction Date: {p.get('prediction_date', 'N/A')}",
             f"  Target Date    : {p.get('target_date', 'N/A')}",
             "",
-            "  === Prediction ===",
-            f"  Direction      : {p.get('direction', 'N/A')} {direction_emoji.get(p.get('direction'), '')}",
-            f"  Signal         : {direction_label.get(p.get('direction'), 'N/A')}",
-            f"  Confidence     : {p.get('confidence', 0):.2f}",
+            "  ══════════════════════════════════════════════════════",
+            "  预测结果 (PREDICTION RESULT)",
+            "  ══════════════════════════════════════════════════════",
             "",
-            "  === Probability Distribution ===",
-            f"  UP   : {p.get('up_prob', 0) * 100:5.1f}% {up_bar}",
-            f"  DOWN : {p.get('down_prob', 0) * 100:5.1f}% {down_bar}",
-            f"  HOLD : {p.get('hold_prob', 0) * 100:5.1f}% {hold_bar}",
+            f"  方向 (Direction)  : {p.get('direction', 'N/A')} {direction_emoji.get(p.get('direction'), '')}",
+            f"  信号 (Signal)     : {direction_label.get(p.get('direction'), 'N/A')}",
+            f"  置信度 (Confidence): {confidence:.1%} [{confidence_level}] {confidence_bar}",
             "",
-            "  === Model Performance ===",
-            f"  Accuracy       : {p.get('model_accuracy', 0) * 100:.1f}%",
+            "  ══════════════════════════════════════════════════════",
+            "  ML模型概率分布 (ML Probability Distribution)",
+            "  ══════════════════════════════════════════════════════",
+            "",
+            f"  看涨 (UP)   : {up_prob * 100:5.1f}% {up_bar}",
+            f"  持有 (HOLD) : {hold_prob * 100:5.1f}% {hold_bar}",
+            f"  看跌 (DOWN) : {down_prob * 100:5.1f}% {down_bar}",
         ]
 
-        # 添加特征贡献
-        top_features = p.get("top_features", [])
-        if top_features:
-            lines.append("")
-            lines.append("  === Key Features ===")
-            for i, feat in enumerate(top_features[:5], 1):
-                name = feat.get("feature", "N/A")
-                importance = feat.get("importance", 0)
-                lines.append(f"  {i}. {name:<25} {importance:.2f}")
+        # 添加信号源分析
+        signal_sources = p.get("signal_sources", {})
+        if signal_sources:
+            lines.extend(
+                [
+                    "",
+                    "  ══════════════════════════════════════════════════════",
+                    "  信号源分析 (SIGNAL SOURCES)",
+                    "  ══════════════════════════════════════════════════════",
+                    "",
+                ]
+            )
+            for source_name, source_info in signal_sources.items():
+                source_labels = {
+                    "ml": "ML模型",
+                    "technical": "技术分析",
+                    "momentum": "动量分析",
+                }
+                label = source_labels.get(source_name, source_name)
+                direction = source_info.get("direction", "NEUTRAL")
+                conf = source_info.get("confidence", 0)
+                direction_symbol = {
+                    "UP": "↑ 看涨",
+                    "DOWN": "↓ 看跌",
+                    "NEUTRAL": "→ 中性",
+                }.get(direction, "?")
+                lines.append(f"  {label:<12} : {direction_symbol} (置信度: {conf:.1%})")
 
-        lines.append("=" * 60)
+        # 添加看涨因素
+        bullish_factors = p.get("bullish_factors", [])
+        if bullish_factors:
+            lines.extend(
+                [
+                    "",
+                    "  ══════════════════════════════════════════════════════",
+                    "  看涨因素 (BULLISH FACTORS)",
+                    "  ══════════════════════════════════════════════════════",
+                    "",
+                ]
+            )
+            for i, factor in enumerate(bullish_factors[:5], 1):
+                lines.append(f"  {i}. {factor}")
+
+        # 添加看跌因素
+        bearish_factors = p.get("bearish_factors", [])
+        if bearish_factors:
+            lines.extend(
+                [
+                    "",
+                    "  ══════════════════════════════════════════════════════",
+                    "  看跌因素 (BEARISH FACTORS)",
+                    "  ══════════════════════════════════════════════════════",
+                    "",
+                ]
+            )
+            for i, factor in enumerate(bearish_factors[:5], 1):
+                lines.append(f"  {i}. {factor}")
+
+        # 添加关键指标
+        lines.extend(
+            [
+                "",
+                "  ══════════════════════════════════════════════════════",
+                "  关键指标 (KEY INDICATORS)",
+                "  ══════════════════════════════════════════════════════",
+                "",
+                f"  5日动量 (Momentum 5d)  : {p.get('momentum_5', 0) * 100:+.2f}%",
+                f"  10日动量 (Momentum 10d): {p.get('momentum_10', 0) * 100:+.2f}%",
+                f"  市场情绪 (Sentiment)   : {p.get('sentiment_score', 0):.2f}",
+                f"  看涨信号数 (Bullish)   : {p.get('bullish_count', 0)}",
+                f"  看跌信号数 (Bearish)   : {p.get('bearish_count', 0)}",
+            ]
+        )
+
+        # 添加模型性能
+        lines.extend(
+            [
+                "",
+                "  ══════════════════════════════════════════════════════",
+                "  模型性能 (MODEL PERFORMANCE)",
+                "  ══════════════════════════════════════════════════════",
+                "",
+                f"  评估准确率 (Accuracy)  : {p.get('model_accuracy', 0) * 100:.1f}%",
+                f"  ML置信度 (ML Conf)     : {p.get('ml_confidence', 0) * 100:.1f}%",
+            ]
+        )
+
+        # 添加交易建议
+        direction = p.get("direction", "NEUTRAL")
+        lines.extend(
+            [
+                "",
+                "  ══════════════════════════════════════════════════════",
+                "  交易建议 (TRADING SUGGESTION)",
+                "  ══════════════════════════════════════════════════════",
+                "",
+            ]
+        )
+        if direction == "UP":
+            lines.extend(
+                [
+                    "  ✓ 多数指标显示看涨信号",
+                    "  ✓ 可考虑逢低买入",
+                    "  ✓ 注意设置止损位控制风险",
+                ]
+            )
+        elif direction == "DOWN":
+            lines.extend(
+                [
+                    "  ✗ 多数指标显示看跌信号",
+                    "  ✗ 建议观望或减仓",
+                    "  ✗ 如有持仓注意止损",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "  - 多空信号胶着，方向不明",
+                    "  - 建议观望等待明确信号",
+                    "  - 可关注成交量变化",
+                ]
+            )
+
+        lines.extend(
+            [
+                "",
+                "  ⚠️  免责声明：本预测仅供参考，不构成投资建议",
+                "     投资有风险，入市需谨慎",
+                "",
+                "=" * 60,
+            ]
+        )
+
         return "\n".join(lines)
 
     def _format_json(self, p: Dict[str, Any]) -> str:
@@ -105,10 +246,15 @@ class PredictionFormatter:
             "target_date",
             "current_price",
             "direction",
-            "up_prob",
-            "down_prob",
-            "hold_prob",
             "confidence",
+            "ml_up_prob",
+            "ml_down_prob",
+            "ml_hold_prob",
+            "ml_confidence",
+            "bullish_count",
+            "bearish_count",
+            "momentum_5",
+            "sentiment_score",
             "model_accuracy",
         ]
 
