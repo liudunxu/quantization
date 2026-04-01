@@ -118,6 +118,31 @@ python scripts/explore_params.py --stock 000001.SZ --metric sharpe_ratio
 python scripts/explore_params.py --stock 000001.SZ --dry-run
 ```
 
+**预测场景参数优化：**
+
+针对 `predict.py` 进行参数优化，包括 forward_days、threshold、模型参数、信号权重和策略叠加：
+
+```bash
+# 优化预测参数（默认场景）
+python scripts/explore_params.py --stock 000001.SZ --scenario prediction
+
+# 激进场景（更多信号）
+python scripts/explore_params.py --stock 000001.SZ --scenario prediction --threshold 0.003
+
+# 保守场景（更高准确率）
+python scripts/explore_params.py --stock 000001.SZ --scenario prediction --threshold 0.01
+
+# 更长训练周期
+python scripts/explore_params.py --stock 000001.SZ --scenario prediction --train-days 500 --backtest-days 60
+```
+
+**优化内容：**
+- `forward_days`: 1/2/3/5 天预测周期
+- `threshold`: 0.003/0.005/0.007/0.01 涨跌阈值
+- 模型参数: iterations/depth/learning_rate 组合
+- 信号权重: ML/技术/动量/趋势/Alpha 权重分配
+- 策略叠加: 评估各规则策略表现，选择最佳组合
+
 ### 4. 涨跌预测
 
 预测股票下个交易日的涨跌方向，结合ML模型、技术分析、动量分析、趋势强度和超额收益进行综合预测：
@@ -146,11 +171,15 @@ python scripts/predict.py --stock 000001.SZ --output csv
 
 | 信号源 | 权重 | 说明 |
 |--------|------|------|
-| ML模型 | 40% | CatBoost集成模型预测 |
-| 技术分析 | 30% | 14种技术指标综合判断（均线、RSI、MACD、布林带、成交量、动量、KDJ、ATR、ADX、MFI、CCI、DMI、RSI背离、量价背离） |
+| ML模型 | 35% | CatBoost集成模型预测 |
+| 技术分析 | 25% | 18种技术指标综合判断 |
 | 动量分析 | 15% | 5/10/20日动量趋势 |
 | 趋势强度 | 10% | ADX趋势强度 + 均线排列 |
 | 超额收益 | 5% | 个股相对市场的Alpha |
+| 策略叠加 | 10% | 10种规则策略投票 |
+
+**技术指标（共18种）：**
+均线系统、RSI、MACD、布林带、成交量、KDJ动量、ATR波动率、ADX趋势强度、MFI资金流、CCI顺势指标、DMI方向运动、RSI背离、量价背离、Ichimoku云、Williams %R、OBV量能、连续涨跌、支撑阻力
 
 **输出示例：**
 
