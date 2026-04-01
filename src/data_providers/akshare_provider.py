@@ -18,9 +18,12 @@ def _get_akshare():
     if akshare is None:
         try:
             import akshare as akshare_pkg
+
             akshare = akshare_pkg
         except ImportError:
-            logger.warning("[akshare] akshare not installed. Install with: pip install akshare")
+            logger.warning(
+                "[akshare] akshare not installed. Install with: pip install akshare"
+            )
             return None
     return akshare
 
@@ -41,15 +44,15 @@ class AKShareProvider(BaseDataProvider):
         Returns:
             tuple: (symbol, exchange) e.g., ('000001', 'sz') or ('600519', 'sh')
         """
-        code = stock_code.split('.')[0]
+        code = stock_code.split(".")[0]
 
-        if stock_code.endswith('.SH') or stock_code.endswith('.SS'):
-            return code, 'sh'
-        elif stock_code.endswith('.SZ'):
-            return code, 'sz'
-        elif stock_code.endswith('.HK'):
+        if stock_code.endswith(".SH") or stock_code.endswith(".SS"):
+            return code, "sh"
+        elif stock_code.endswith(".SZ"):
+            return code, "sz"
+        elif stock_code.endswith(".HK"):
             # Remove leading zeros from HK stock codes
-            return code.lstrip('0') or '0', 'hk'
+            return code.lstrip("0") or "0", "hk"
         return code, None
 
     def fetch(
@@ -57,7 +60,7 @@ class AKShareProvider(BaseDataProvider):
         stock_code: str,
         days: int = 120,
         retry_count: int = 3,
-        retry_delay: float = 1.0
+        retry_delay: float = 1.0,
     ) -> pd.DataFrame:
         """Fetch stock data from AKShare."""
         akshare_lib = _get_akshare()
@@ -73,19 +76,21 @@ class AKShareProvider(BaseDataProvider):
         last_error = None
 
         # Calculate date range based on days needed (add buffer for indicators)
-        start_date = (pd.Timestamp.today() - pd.Timedelta(days=days * 2)).strftime('%Y%m%d')
-        end_date = pd.Timestamp.today().strftime('%Y%m%d')
+        start_date = (pd.Timestamp.today() - pd.Timedelta(days=days * 2)).strftime(
+            "%Y%m%d"
+        )
+        end_date = pd.Timestamp.today().strftime("%Y%m%d")
 
         for attempt in range(retry_count):
             try:
-                if exchange == 'hk':
+                if exchange == "hk":
                     # HK stock
                     df = akshare_lib.stock_hk_hist(
                         symbol=symbol,
                         period="daily",
                         start_date=start_date,
                         end_date=end_date,
-                        adjust=""
+                        adjust="",
                     )
                 else:
                     # A-share
@@ -94,7 +99,7 @@ class AKShareProvider(BaseDataProvider):
                         period="daily",
                         start_date=start_date,
                         end_date=end_date,
-                        adjust="qfq"
+                        adjust="qfq",
                     )
 
                 if df is None or df.empty:
@@ -108,12 +113,12 @@ class AKShareProvider(BaseDataProvider):
                 # AKShare A-share columns: 日期, 开盘, 收盘, 最高, 最低, 成交量, 成交额, 振幅, 涨跌幅, 涨跌额,换手率
                 # HK columns: 日期, 开盘, 收盘, 最高, 最低, 成交量
                 column_mapping = {
-                    '日期': 'date',
-                    '开盘': 'open',
-                    '收盘': 'close',
-                    '最高': 'high',
-                    '最低': 'low',
-                    '成交量': 'volume',
+                    "日期": "date",
+                    "开盘": "open",
+                    "收盘": "close",
+                    "最高": "high",
+                    "最低": "low",
+                    "成交量": "volume",
                 }
 
                 # Handle MultiIndex if present
@@ -123,7 +128,7 @@ class AKShareProvider(BaseDataProvider):
                 df = df.rename(columns=column_mapping)
 
                 # Keep only required columns
-                required = ['date', 'open', 'close', 'high', 'low', 'volume']
+                required = ["date", "open", "close", "high", "low", "volume"]
                 df = df[[c for c in required if c in df.columns]]
 
                 if not self._validate_data(df):
@@ -134,12 +139,14 @@ class AKShareProvider(BaseDataProvider):
                     break
 
                 # Convert date to datetime
-                df['date'] = pd.to_datetime(df['date'])
+                df["date"] = pd.to_datetime(df["date"])
 
                 # Sort by date and take last N days
-                df = df.sort_values('date').tail(days)
+                df = df.sort_values("date").tail(days)
 
-                logger.info(f"[{self.name}] Successfully fetched {len(df)} rows for {stock_code}")
+                logger.info(
+                    f"[{self.name}] Successfully fetched {len(df)} rows for {stock_code}"
+                )
                 return df.reset_index(drop=True)
 
             except Exception as e:
@@ -151,5 +158,93 @@ class AKShareProvider(BaseDataProvider):
                 if attempt < retry_count - 1:
                     time.sleep(retry_delay)
 
-        logger.error(f"[{self.name}] All {retry_count} attempts failed for {stock_code}: {last_error}")
+        logger.error(
+            f"[{self.name}] All {retry_count} attempts failed for {stock_code}: {last_error}"
+        )
         return pd.DataFrame()
+
+    def fetch_southbound_flow(self, days: int = 120) -> pd.DataFrame:
+        """Fetch southbound capital flow data (港股通资金流向).
+
+        Args:
+            days: Number of days to fetch
+
+        Returns:
+            DataFrame with columns: date, southbound_net_buy, southbound_buy,
+                                    southbound_sell, southbound_net_flow
+        """
+        akshare_lib = _get_akshare()
+        if akshare_lib is None:
+            logger.warning("[akshare] akshare not installed")
+            return pd.DataFrame()
+
+        try:
+            # 获取沪港通-港股通(沪)数据
+            df_sh = akshare_lib.stock_hsgt_hist_em(symbol="港股通(沪)")
+            # 获取深港通-港股通(深)数据
+            df_sz = akshare_lib.stock_hsgt_hist_em(symbol="港股通(深)")
+
+            if df_sh is None or df_sh.empty:
+                logger.warning("[akshare] No southbound flow data (港股通沪)")
+                return pd.DataFrame()
+
+            # 合并沪深港股通数据
+            result = pd.DataFrame()
+            result["date"] = pd.to_datetime(df_sh["日期"])
+
+            # 沪港通-港股通数据
+            result["southbound_sh_net_buy"] = df_sh["当日成交净买额"].values
+            result["southbound_sh_buy"] = df_sh["买入成交额"].values
+            result["southbound_sh_sell"] = df_sh["卖出成交额"].values
+
+            # 深港通-港股通数据
+            if df_sz is not None and not df_sz.empty:
+                df_sz["日期"] = pd.to_datetime(df_sz["日期"])
+                # 合并数据
+                result = result.merge(
+                    df_sz[["日期", "当日成交净买额", "买入成交额", "卖出成交额"]],
+                    left_on="date",
+                    right_on="日期",
+                    how="left",
+                    suffixes=("", "_sz"),
+                )
+                result["southbound_sz_net_buy"] = result["当日成交净买额_sz"].fillna(0)
+                result["southbound_sz_buy"] = result["买入成交额_sz"].fillna(0)
+                result["southbound_sz_sell"] = result["卖出成交额_sz"].fillna(0)
+                # 清理多余列
+                result = result.drop(
+                    columns=[
+                        "日期",
+                        "当日成交净买额_sz",
+                        "买入成交额_sz",
+                        "卖出成交额_sz",
+                    ],
+                    errors="ignore",
+                )
+            else:
+                result["southbound_sz_net_buy"] = 0
+                result["southbound_sz_buy"] = 0
+                result["southbound_sz_sell"] = 0
+
+            # 计算总南向资金
+            result["southbound_net_buy"] = (
+                result["southbound_sh_net_buy"] + result["southbound_sz_net_buy"]
+            )
+            result["southbound_buy"] = (
+                result["southbound_sh_buy"] + result["southbound_sz_buy"]
+            )
+            result["southbound_sell"] = (
+                result["southbound_sh_sell"] + result["southbound_sz_sell"]
+            )
+
+            # 排序并取最近N天
+            result = result.sort_values("date").tail(days)
+
+            logger.info(
+                f"[{self.name}] Successfully fetched {len(result)} days of southbound flow data"
+            )
+            return result.reset_index(drop=True)
+
+        except Exception as e:
+            logger.error(f"[akshare] Failed to fetch southbound flow: {e}")
+            return pd.DataFrame()
