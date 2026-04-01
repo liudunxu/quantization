@@ -108,8 +108,19 @@ class ModelPipeline:
 
         # 获取概率
         probs = result["probabilities"]
-        if len(probs) > 0 and len(probs[0]) >= 3:
-            sell_prob, hold_prob, buy_prob = probs[0]
+
+        # 处理字典格式的概率
+        if isinstance(probs, dict):
+            sell_prob = probs.get("sell_probability", 0.33)
+            hold_prob = probs.get("hold_probability", 0.34)
+            buy_prob = probs.get("buy_probability", 0.33)
+        elif isinstance(probs, list) and len(probs) > 0:
+            if isinstance(probs[0], (list, tuple)) and len(probs[0]) >= 3:
+                sell_prob, hold_prob, buy_prob = probs[0]
+            elif len(probs) >= 3:
+                sell_prob, hold_prob, buy_prob = probs[0], probs[1], probs[2]
+            else:
+                sell_prob, hold_prob, buy_prob = 0.33, 0.34, 0.33
         else:
             sell_prob, hold_prob, buy_prob = 0.33, 0.34, 0.33
 
@@ -147,29 +158,21 @@ class ModelPipeline:
         Returns:
             准确率 (0-1)
         """
-        if eval_df.empty:
+        if eval_df.empty or len(eval_df) < 2:
             return 0.0
 
         correct = 0
         total = 0
 
+        # 逐行评估，跳过最后一行（因为没有下一天的数据）
         for i in range(len(eval_df) - 1):
-            # 获取当前特征
+            # 获取当前特征（用于预测）
             row = eval_df.iloc[[i]]
 
-            # 获取实际涨跌
-            if "returns" in eval_df.columns:
-                actual_return = (
-                    eval_df["returns"].iloc[i + 1] if i + 1 < len(eval_df) else 0
-                )
-            else:
-                current_close = eval_df["close"].iloc[i]
-                next_close = (
-                    eval_df["close"].iloc[i + 1]
-                    if i + 1 < len(eval_df)
-                    else current_close
-                )
-                actual_return = (next_close - current_close) / current_close
+            # 计算实际涨跌（从当前行到下一行）
+            current_close = eval_df["close"].iloc[i]
+            next_close = eval_df["close"].iloc[i + 1]
+            actual_return = (next_close - current_close) / current_close
 
             # 确定实际方向
             if actual_return > threshold:
@@ -181,16 +184,15 @@ class ModelPipeline:
 
             # 预测方向
             try:
-                prediction = self.predict_direction(
-                    model, row, eval_df["close"].iloc[i]
-                )
+                prediction = self.predict_direction(model, row, current_close)
                 predicted_direction = prediction["direction"]
 
+                # 判断预测是否正确
                 if predicted_direction == actual_direction:
                     correct += 1
                 total += 1
             except Exception as e:
-                logger.warning(f"Prediction error at index {i}: {e}")
+                logger.debug(f"Prediction error at index {i}: {e}")
                 continue
 
         accuracy = correct / total if total > 0 else 0.0

@@ -108,7 +108,8 @@ class DataPipeline:
             实时价格，如果获取失败返回None
         """
         try:
-            price, _ = fetch_realtime_price(stock_code)
+            # fetch_realtime_price 直接返回 price 或 None
+            price = fetch_realtime_price(stock_code)
             return price
         except Exception as e:
             logger.warning(f"Failed to get realtime price: {e}")
