@@ -89,7 +89,10 @@ class EnsemblePredictor:
         # 9. 支撑阻力分析 (新增)
         support_resistance = self._analyze_support_resistance(latest, df)
 
-        # 10. 综合判断
+        # 10. 多时间框架趋势确认 (新增)
+        multi_tf_result = self._analyze_multi_timeframe(latest, df)
+
+        # 11. 综合判断
         final_result = self._combine_predictions(
             ml_result,
             technical_result,
@@ -101,6 +104,7 @@ class EnsemblePredictor:
             strategy_result,
             market_regime,
             support_resistance,
+            multi_tf_result,
         )
 
         return final_result
@@ -605,6 +609,85 @@ class EnsemblePredictor:
             "explanation": explanation,
         }
 
+    def _analyze_multi_timeframe(
+        self, latest: pd.Series, df: pd.DataFrame
+    ) -> Dict[str, Any]:
+        """多时间框架趋势确认
+
+        短期(5日)、中期(20日)、长期(60日)趋势一致性检查
+        只有多时间框架趋势一致时才给出高置信度信号
+        """
+        if len(df) < 60:
+            return {
+                "direction": "NEUTRAL",
+                "strength": 0.5,
+                "short_trend": "NEUTRAL",
+                "medium_trend": "NEUTRAL",
+                "long_trend": "NEUTRAL",
+                "consensus": 0,
+                "explanation": "数据不足，无法进行多时间框架分析",
+            }
+
+        # 短期趋势(5日): 5日动量
+        momentum_5 = latest.get("momentum_5", 0)
+        if pd.isna(momentum_5):
+            momentum_5 = 0
+        short_trend = (
+            "UP" if momentum_5 > 0.01 else ("DOWN" if momentum_5 < -0.01 else "NEUTRAL")
+        )
+
+        # 中期趋势(20日): 20日动量 + MA20斜率
+        momentum_20 = latest.get("momentum_20", 0)
+        ma_slope_20 = latest.get("ma_slope_20", 0)
+        if pd.isna(momentum_20):
+            momentum_20 = 0
+        if pd.isna(ma_slope_20):
+            ma_slope_20 = 0
+        medium_trend = (
+            "UP"
+            if (momentum_20 > 0.02 or ma_slope_20 > 0.001)
+            else (
+                "DOWN" if (momentum_20 < -0.02 or ma_slope_20 < -0.001) else "NEUTRAL"
+            )
+        )
+
+        # 长期趋势(60日): 价格相对MA60位置
+        ma60 = latest.get("ma_60", None)
+        ma120 = latest.get("ma_120", None)
+        price = latest.get("close", 0)
+        if ma60 is not None and not pd.isna(ma60) and ma60 > 0:
+            long_trend = "UP" if price > ma60 else "DOWN"
+        else:
+            long_trend = "NEUTRAL"
+
+        # 计算共识
+        trends = [short_trend, medium_trend, long_trend]
+        up_count = trends.count("UP")
+        down_count = trends.count("DOWN")
+        neutral_count = trends.count("NEUTRAL")
+
+        if up_count >= 2:
+            direction = "UP"
+            strength = 0.6 + up_count * 0.1
+        elif down_count >= 2:
+            direction = "DOWN"
+            strength = 0.6 + down_count * 0.1
+        else:
+            direction = "NEUTRAL"
+            strength = 0.5
+
+        consensus = up_count - down_count  # -3 to +3
+
+        return {
+            "direction": direction,
+            "strength": min(strength, 0.9),
+            "short_trend": short_trend,
+            "medium_trend": medium_trend,
+            "long_trend": long_trend,
+            "consensus": consensus,
+            "explanation": f"多时间框架: 短期{short_trend} / 中期{medium_trend} / 长期{long_trend}",
+        }
+
     def _combine_predictions(
         self,
         ml_result: Dict[str, Any],
@@ -617,8 +700,14 @@ class EnsemblePredictor:
         strategy_result: Optional[Dict[str, Any]] = None,
         market_regime: Optional[Dict[str, Any]] = None,
         support_resistance: Optional[Dict[str, Any]] = None,
+        multi_tf_result: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """综合多个预测结果"""
+        """综合多个预测结果
+
+        采用多时间框架确认机制:
+        - 只有多时间框架趋势一致时才给出高置信度信号
+        - 单一时间框架信号降低置信度
+        """
 
         # 收集各信号源的方向和权重
         signals = []
@@ -707,6 +796,17 @@ class EnsemblePredictor:
                     "direction": support_resistance["direction"],
                     "weight": 0.05,
                     "confidence": support_resistance["strength"],
+                }
+            )
+
+        # 多时间框架确认信号
+        if multi_tf_result:
+            signals.append(
+                {
+                    "source": "多时间框架",
+                    "direction": multi_tf_result["direction"],
+                    "weight": 0.10,
+                    "confidence": multi_tf_result["strength"],
                 }
             )
 
@@ -842,6 +942,23 @@ class EnsemblePredictor:
             elif support_resistance["direction"] == "DOWN":
                 bearish_factors.append(support_resistance["explanation"])
 
+        # 从多时间框架获取因素
+        if multi_tf_result:
+            if (
+                multi_tf_result["direction"] == "UP"
+                and multi_tf_result["consensus"] >= 2
+            ):
+                bullish_factors.append(multi_tf_result["explanation"])
+            elif (
+                multi_tf_result["direction"] == "DOWN"
+                and multi_tf_result["consensus"] <= -2
+            ):
+                bearish_factors.append(multi_tf_result["explanation"])
+
+        # 高置信度过滤: 如果信号不明确，降低置信度
+        if len(bullish_factors) <= 2 and len(bearish_factors) <= 2:
+            confidence = max(confidence - 0.10, 0.3)
+
         return {
             "direction": direction,
             "confidence": confidence,
@@ -926,6 +1043,22 @@ class EnsemblePredictor:
                     "confidence": support_resistance["strength"]
                     if support_resistance
                     else 0.5,
+                },
+                "multi_timeframe": {
+                    "direction": multi_tf_result["direction"]
+                    if multi_tf_result
+                    else "NEUTRAL",
+                    "confidence": multi_tf_result["strength"]
+                    if multi_tf_result
+                    else 0.5,
+                    "consensus": multi_tf_result["consensus"] if multi_tf_result else 0,
+                    "short": multi_tf_result["short_trend"]
+                    if multi_tf_result
+                    else "N/A",
+                    "medium": multi_tf_result["medium_trend"]
+                    if multi_tf_result
+                    else "N/A",
+                    "long": multi_tf_result["long_trend"] if multi_tf_result else "N/A",
                 },
             },
         }

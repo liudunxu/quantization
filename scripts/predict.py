@@ -66,7 +66,7 @@ def parse_args():
         "--train-days", type=int, default=365, help="训练天数 (默认: 365)"
     )
     parser.add_argument(
-        "--threshold", type=float, default=0.005, help="涨跌阈值 (默认: 0.005, 即0.5%%)"
+        "--threshold", type=float, default=0.008, help="涨跌阈值 (默认: 0.008, 即0.8%)"
     )
     parser.add_argument(
         "--output",
@@ -77,13 +77,16 @@ def parse_args():
     parser.add_argument("--refresh", action="store_true", help="强制刷新数据缓存")
     parser.add_argument("--verbose", action="store_true", help="详细输出")
     parser.add_argument(
-        "--ml-weight", type=float, default=0.5, help="ML模型权重 (默认: 0.5)"
+        "--ml-weight", type=float, default=0.35, help="ML模型权重 (默认: 0.35)"
     )
     parser.add_argument(
-        "--technical-weight", type=float, default=0.3, help="技术分析权重 (默认: 0.3)"
+        "--technical-weight", type=float, default=0.25, help="技术分析权重 (默认: 0.25)"
     )
     parser.add_argument(
-        "--momentum-weight", type=float, default=0.2, help="动量分析权重 (默认: 0.2)"
+        "--momentum-weight", type=float, default=0.15, help="动量分析权重 (默认: 0.15)"
+    )
+    parser.add_argument(
+        "--min-confidence", type=float, default=0.65, help="最低置信度阈值 (默认: 0.65)"
     )
     return parser.parse_args()
 
