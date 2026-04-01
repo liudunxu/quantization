@@ -31,7 +31,7 @@ import pandas as pd
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.utils import get_cache, get_config, StockInfoResolver
+from src.utils import get_cache, get_config, get_param_manager, StockInfoResolver
 from src.pipelines import DataPipeline, ModelPipeline
 from src.predictors import EnsemblePredictor
 from src.display import PredictionFormatter
@@ -116,6 +116,25 @@ def main():
     cache = get_cache(config.get("data.cache_dir", "cache"))
     data_pipeline = DataPipeline(cache, config)
     model_pipeline = ModelPipeline(config)
+
+    # 2.1 读取优化后的参数（如果有）
+    param_manager = get_param_manager()
+    optimized_params = param_manager.get_strategy_params(
+        "prediction", market, stock_code
+    )
+
+    if optimized_params:
+        print(f"\n  Using optimized parameters for {stock_code}:")
+        print(f"    threshold: {optimized_params.get('threshold', args.threshold)}")
+        # Override args with optimized params
+        if "threshold" in optimized_params:
+            args.threshold = optimized_params["threshold"]
+        if "ml_weight" in optimized_params:
+            args.ml_weight = optimized_params["ml_weight"]
+        if "technical_weight" in optimized_params:
+            args.technical_weight = optimized_params["technical_weight"]
+        if "momentum_weight" in optimized_params:
+            args.momentum_weight = optimized_params["momentum_weight"]
 
     # 3. 获取数据
     print("\n  Fetching data...")
