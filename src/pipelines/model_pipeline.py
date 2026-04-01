@@ -124,10 +124,21 @@ class ModelPipeline:
         else:
             sell_prob, hold_prob, buy_prob = 0.33, 0.34, 0.33
 
-        # 确定方向
-        if result["action"] == "BUY" or buy_prob > sell_prob:
+        # 确定方向 - 使用更平衡的逻辑
+        # 只要buy_prob和sell_prob有明显差异，就给出方向
+        prob_diff = buy_prob - sell_prob
+
+        if prob_diff > 0.05:  # buy比sell高5%以上
             direction = "UP"
-        elif result["action"] == "SELL" or sell_prob > buy_prob:
+        elif prob_diff < -0.05:  # sell比buy高5%以上
+            direction = "DOWN"
+        elif result["action"] == "BUY":
+            direction = "UP"
+        elif result["action"] == "SELL":
+            direction = "DOWN"
+        elif buy_prob > hold_prob and buy_prob > sell_prob:
+            direction = "UP"
+        elif sell_prob > hold_prob and sell_prob > buy_prob:
             direction = "DOWN"
         else:
             direction = "NEUTRAL"
@@ -267,8 +278,8 @@ class ModelPipeline:
 
         logger.info(
             f"Evaluation: accuracy={accuracy:.2%}, "
-            f"UP: P={precision_up:.2%}, R={recall_up:.2%}, F1={f1_up:.2%}, "
-            f"DOWN: P={precision_down:.2%}, R={recall_down:.2%}, F1={f1_down:.2%}"
+            f"UP: P={precision_up:.2%}, R={recall_up:.2%}, F1={f1_up:.2%} (tp={tp_up}, fp={fp_up}, fn={fn_up}), "
+            f"DOWN: P={precision_down:.2%}, R={recall_down:.2%}, F1={f1_down:.2%} (tp={tp_down}, fp={fp_down}, fn={fn_down})"
         )
 
         return {
