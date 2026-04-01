@@ -645,20 +645,33 @@ def main():
     print("=" * 60)
 
     if all_best_metrics:
-        print(f"\n  {'Strategy':<25} {'Return':>10} {'Sharpe':>10} {'Win Rate':>10}")
-        print(f"  {'-' * 25} {'-' * 10} {'-' * 10} {'-' * 10}")
+        if args.scenario == "prediction":
+            # Prediction scenario - show accuracy
+            print(f"\n  {'Scenario':<25} {'Accuracy':>10} {'Threshold':>10}")
+            print(f"  {'-' * 25} {'-' * 10} {'-' * 10}")
 
-        for strategy_name, metrics in sorted(
-            all_best_metrics.items(),
-            key=lambda x: x[1].get("composite_score", 0),
-            reverse=True,
-        ):
+            for name, metrics in all_best_metrics.items():
+                accuracy = metrics.get("accuracy", 0)
+                threshold = all_best_params.get(name, {}).get("threshold", 0)
+                print(f"  {name:<25} {accuracy:>9.1%} {threshold:>10.3f}")
+        else:
+            # Decision scenario - show return, sharpe, win rate
             print(
-                f"  {strategy_name:<25} "
-                f"{metrics.get('total_return', 0):>9.2%} "
-                f"{metrics.get('sharpe_ratio', 0):>10.2f} "
-                f"{metrics.get('win_rate', 0):>9.2%}"
+                f"\n  {'Strategy':<25} {'Return':>10} {'Sharpe':>10} {'Win Rate':>10}"
             )
+            print(f"  {'-' * 25} {'-' * 10} {'-' * 10} {'-' * 10}")
+
+            for strategy_name, metrics in sorted(
+                all_best_metrics.items(),
+                key=lambda x: x[1].get("composite_score", 0),
+                reverse=True,
+            ):
+                print(
+                    f"  {strategy_name:<25} "
+                    f"{metrics.get('total_return', 0):>9.2%} "
+                    f"{metrics.get('sharpe_ratio', 0):>10.2f} "
+                    f"{metrics.get('win_rate', 0):>9.2%}"
+                )
 
     print(f"\n{'=' * 60}")
     print(" EXPLORATION COMPLETE")
