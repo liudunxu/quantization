@@ -107,6 +107,8 @@ class PredictionFormatter:
                     "momentum": "动量分析",
                     "trend": "趋势强度",
                     "alpha": "超额收益",
+                    "strategy": "策略叠加",
+                    "support_resistance": "支撑阻力",
                 }
                 label = source_labels.get(source_name, source_name)
                 direction = source_info.get("direction", "NEUTRAL")
@@ -116,7 +118,11 @@ class PredictionFormatter:
                     "DOWN": "↓ 看跌",
                     "NEUTRAL": "→ 中性",
                 }.get(direction, "?")
-                lines.append(f"  {label:<12} : {direction_symbol} (置信度: {conf:.1%})")
+                votes = source_info.get("votes", "")
+                vote_text = f" [{votes}]" if votes else ""
+                lines.append(
+                    f"  {label:<12} : {direction_symbol} (置信度: {conf:.1%}){vote_text}"
+                )
 
         # 添加看涨因素
         bullish_factors = p.get("bullish_factors", [])
@@ -163,8 +169,13 @@ class PredictionFormatter:
                 f"  +DI/-DI                : {p.get('plus_di', 0):.1f} / {p.get('minus_di', 0):.1f}",
                 f"  均线排列 (MA Arrangement): {p.get('ma_arrangement', 'neutral')}",
                 f"  Alpha超额收益          : {p.get('alpha', 0):.2%}",
+                f"  市场状态 (Market Regime): {p.get('market_regime', 'unknown')}",
+                f"  支撑位 (Support)       : {p.get('support', 0):.2f}",
+                f"  阻力位 (Resistance)    : {p.get('resistance', 0):.2f}",
                 f"  看涨信号数 (Bullish)   : {p.get('bullish_count', 0)}",
                 f"  看跌信号数 (Bearish)   : {p.get('bearish_count', 0)}",
+                f"  策略看涨票数           : {p.get('strategy_bullish_votes', 0)}",
+                f"  策略看跌票数           : {p.get('strategy_bearish_votes', 0)}",
             ]
         )
 

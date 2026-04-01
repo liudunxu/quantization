@@ -173,6 +173,42 @@ class TechnicalSignalGenerator:
         else:
             neutral_factors.append(vp_div_explanation)
 
+        # 15. Ichimoku云信号
+        ichimoku_signal, ichimoku_explanation = self._check_ichimoku(latest)
+        if ichimoku_signal == "BULLISH":
+            bullish_factors.append(ichimoku_explanation)
+        elif ichimoku_signal == "BEARISH":
+            bearish_factors.append(ichimoku_explanation)
+        else:
+            neutral_factors.append(ichimoku_explanation)
+
+        # 16. Williams %R信号
+        willr_signal, willr_explanation = self._check_williams_r(latest)
+        if willr_signal == "BULLISH":
+            bullish_factors.append(willr_explanation)
+        elif willr_signal == "BEARISH":
+            bearish_factors.append(willr_explanation)
+        else:
+            neutral_factors.append(willr_explanation)
+
+        # 17. OBV量能信号
+        obv_signal, obv_explanation = self._check_obv(latest, df)
+        if obv_signal == "BULLISH":
+            bullish_factors.append(obv_explanation)
+        elif obv_signal == "BEARISH":
+            bearish_factors.append(obv_explanation)
+        else:
+            neutral_factors.append(obv_explanation)
+
+        # 18. 连续涨跌信号
+        streak_signal, streak_explanation = self._check_streak(latest)
+        if streak_signal == "BULLISH":
+            bullish_factors.append(streak_explanation)
+        elif streak_signal == "BEARISH":
+            bearish_factors.append(streak_explanation)
+        else:
+            neutral_factors.append(streak_explanation)
+
         # 综合判断
         bullish_count = len(bullish_factors)
         bearish_count = len(bearish_factors)
@@ -587,3 +623,83 @@ class TechnicalSignalGenerator:
             )
 
         return "NEUTRAL", "量价关系正常"
+
+    def _check_ichimoku(self, latest: pd.Series) -> Tuple[str, str]:
+        """检查Ichimoku云信号 - 使用已有指标模拟"""
+        # Ichimoku参数: 转换线(9), 基准线(26), 先行带A(26), 先行带B(52)
+        # 使用均线近似: MA5 ~ 转换线, MA20 ~ 基准线
+        price = latest.get("close", 0)
+        ma5 = latest.get("ma_5", None)
+        ma10 = latest.get("ma_10", None)
+        ma20 = latest.get("ma_20", None)
+        ma60 = latest.get("ma_60", None)
+
+        if ma5 is None or ma20 is None:
+            return "NEUTRAL", "Ichimoku数据不足"
+
+        # 价格在云层上方 (多头)
+        if ma10 is not None and ma60 is not None:
+            cloud_top = max(ma10, ma60)  # 模拟先行带上沿
+            cloud_bottom = min(ma10, ma60)  # 模拟先行带下沿
+
+            if price > cloud_top and ma5 > ma20:
+                return "BULLISH", f"价格在云层上方 (价格>{cloud_top:.2f}>云层)"
+            elif price < cloud_bottom and ma5 < ma20:
+                return "BEARISH", f"价格在云层下方 (价格<{cloud_bottom:.2f}<云层)"
+
+        # 转换线与基准线交叉
+        if ma5 > ma20:
+            return "BULLISH", f"Ichimoku多头 (转换线>{ma5:.2f}>基准线>{ma20:.2f})"
+        elif ma5 < ma20:
+            return "BEARISH", f"Ichimoku空头 (转换线<{ma5:.2f}<基准线<{ma20:.2f})"
+
+        return "NEUTRAL", "Ichimoku中性"
+
+    def _check_williams_r(self, latest: pd.Series) -> Tuple[str, str]:
+        """检查Williams %R信号 - 使用RSI和KDJ近似"""
+        # Williams %R: -100到0, 超卖<-80, 超买>-20
+        # 使用stoch_k近似: willr = stoch_k - 100
+        stoch_k = latest.get("stoch_k", None)
+        if stoch_k is None:
+            return "NEUTRAL", "Williams %R数据不足"
+
+        willr = stoch_k - 100  # 转换为Williams %R范围
+
+        if willr < -80:
+            return "BULLISH", f"Williams %R超卖 ({willr:.0f}<-80)"
+        elif willr > -20:
+            return "BEARISH", f"Williams %R超买 ({willr:.0f}>-20)"
+        elif willr < -50:
+            return "BULLISH", f"Williams %R偏弱 ({willr:.0f})"
+        elif willr > -50:
+            return "BEARISH", f"Williams %R偏强 ({willr:.0f})"
+
+        return "NEUTRAL", f"Williams %R中性 ({willr:.0f})"
+
+    def _check_obv(self, latest: pd.Series, df: pd.DataFrame) -> Tuple[str, str]:
+        """检查OBV量能信号 - 通过A/D线判断"""
+        ad_oscillator = latest.get("ad_oscillator", None)
+        if ad_oscillator is None:
+            return "NEUTRAL", "OBV数据不足"
+
+        if pd.isna(ad_oscillator):
+            return "NEUTRAL", "OBV数据不足"
+
+        if ad_oscillator > 0:
+            return "BULLISH", f"OBV/A-D线向上 (资金流入)"
+        elif ad_oscillator < 0:
+            return "BEARISH", f"OBV/A-D线向下 (资金流出)"
+
+        return "NEUTRAL", "OBV/A-D线中性"
+
+    def _check_streak(self, latest: pd.Series) -> Tuple[str, str]:
+        """检查连续涨跌信号"""
+        streak_up_3 = latest.get("streak_up_3", 0)
+        streak_down_3 = latest.get("streak_down_3", 0)
+
+        if streak_up_3 == 1:
+            return "BEARISH", "连续3日上涨，可能回调"
+        elif streak_down_3 == 1:
+            return "BULLISH", "连续3日下跌，可能反弹"
+
+        return "NEUTRAL", "无明显连续涨跌"

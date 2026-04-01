@@ -507,16 +507,9 @@ def main():
         print("  Optimizing parameters for predict.py")
 
         # For prediction scenario, we optimize ML model parameters
-        # Use technical signals with different weights
         from src.pipelines import ModelPipeline
-        from src.predictors import EnsemblePredictor
 
         model_pipeline = ModelPipeline(config)
-
-        # Test different threshold values
-        thresholds = [0.003, 0.005, 0.007, 0.01, 0.015]
-        best_accuracy = 0
-        best_threshold = 0.005
 
         train_df = (
             features_df.iloc[: -args.backtest_days]
@@ -529,48 +522,216 @@ def main():
             else features_df
         )
 
-        print("\n  Testing different thresholds...")
-        for threshold in thresholds:
-            model = model_pipeline.train(train_df, forward_days=1, threshold=threshold)
-            accuracy = model_pipeline.evaluate_accuracy(
-                model, eval_df, threshold=threshold
-            )
-            print(f"    threshold={threshold:.3f}: accuracy={accuracy:.1%}")
+        # ========== 1. 测试不同 forward_days ==========
+        print("\n  [1/4] Testing different forward_days...")
+        forward_days_list = [1, 2, 3, 5]
+        thresholds = [0.003, 0.005, 0.007, 0.01]
 
-            if accuracy > best_accuracy:
-                best_accuracy = accuracy
-                best_threshold = threshold
+        best_accuracy = 0
+        best_f1 = 0
+        best_forward_days = 1
+        best_threshold = 0.005
+        best_metrics = {}
 
-        # Test different signal weights
+        for fwd_days in forward_days_list:
+            for threshold in thresholds:
+                try:
+                    model = model_pipeline.train(
+                        train_df, forward_days=fwd_days, threshold=threshold
+                    )
+                    metrics = model_pipeline.evaluate_metrics(
+                        model, eval_df, threshold=threshold
+                    )
+                    # 综合评分: accuracy * 0.4 + f1_up * 0.3 + f1_down * 0.3
+                    composite = (
+                        metrics["accuracy"] * 0.4
+                        + metrics["f1_up"] * 0.3
+                        + metrics["f1_down"] * 0.3
+                    )
+                    if composite > best_accuracy + best_f1:
+                        best_accuracy = metrics["accuracy"]
+                        best_f1 = composite
+                        best_forward_days = fwd_days
+                        best_threshold = threshold
+                        best_metrics = metrics
+                except Exception as e:
+                    logger.debug(f"Failed: fwd={fwd_days}, thr={threshold}: {e}")
+
+        print(
+            f"    Best: forward_days={best_forward_days}, threshold={best_threshold:.3f}"
+        )
+        print(f"    Accuracy={best_accuracy:.1%}, Composite={best_f1:.1%}")
+
+        # ========== 2. 测试不同模型参数 ==========
+        print("\n  [2/4] Testing different model parameters...")
+        model_params_list = [
+            {"iterations": 200, "depth": 3, "learning_rate": 0.05},
+            {"iterations": 300, "depth": 4, "learning_rate": 0.03},
+            {"iterations": 500, "depth": 5, "learning_rate": 0.02},
+            {"iterations": 300, "depth": 6, "learning_rate": 0.03},
+        ]
+
+        best_model_params = {}
+        best_model_score = 0
+
+        for mp in model_params_list:
+            try:
+                from src.models import StockTradingModel
+
+                model = StockTradingModel()
+                model.train(
+                    train_df,
+                    forward_days=best_forward_days,
+                    threshold=best_threshold,
+                    **mp,
+                )
+                metrics = model_pipeline.evaluate_metrics(
+                    model, eval_df, threshold=best_threshold
+                )
+                score = (
+                    metrics["accuracy"] * 0.4
+                    + metrics["f1_up"] * 0.3
+                    + metrics["f1_down"] * 0.3
+                )
+                print(f"    {mp}: score={score:.1%}")
+                if score > best_model_score:
+                    best_model_score = score
+                    best_model_params = mp
+                    best_metrics = metrics
+            except Exception as e:
+                logger.debug(f"Failed model params {mp}: {e}")
+
+        print(f"    Best model params: {best_model_params}")
+
+        # ========== 3. 测试更多权重组合 ==========
+        print("\n  [3/4] Testing different signal weights...")
         weight_combinations = [
-            {"ml_weight": 0.5, "technical_weight": 0.3, "momentum_weight": 0.2},
-            {"ml_weight": 0.6, "technical_weight": 0.3, "momentum_weight": 0.1},
-            {"ml_weight": 0.4, "technical_weight": 0.4, "momentum_weight": 0.2},
-            {"ml_weight": 0.3, "technical_weight": 0.5, "momentum_weight": 0.2},
+            {
+                "ml_weight": 0.50,
+                "technical_weight": 0.30,
+                "momentum_weight": 0.10,
+                "trend_weight": 0.07,
+                "alpha_weight": 0.03,
+            },
+            {
+                "ml_weight": 0.40,
+                "technical_weight": 0.30,
+                "momentum_weight": 0.15,
+                "trend_weight": 0.10,
+                "alpha_weight": 0.05,
+            },
+            {
+                "ml_weight": 0.35,
+                "technical_weight": 0.35,
+                "momentum_weight": 0.15,
+                "trend_weight": 0.10,
+                "alpha_weight": 0.05,
+            },
+            {
+                "ml_weight": 0.30,
+                "technical_weight": 0.40,
+                "momentum_weight": 0.15,
+                "trend_weight": 0.10,
+                "alpha_weight": 0.05,
+            },
+            {
+                "ml_weight": 0.45,
+                "technical_weight": 0.25,
+                "momentum_weight": 0.15,
+                "trend_weight": 0.10,
+                "alpha_weight": 0.05,
+            },
+            {
+                "ml_weight": 0.60,
+                "technical_weight": 0.20,
+                "momentum_weight": 0.10,
+                "trend_weight": 0.05,
+                "alpha_weight": 0.05,
+            },
         ]
 
         best_weights = weight_combinations[0]
+        best_weight_score = 0
 
-        print("\n  Testing different signal weights...")
         for weights in weight_combinations:
-            # Evaluate with these weights
-            print(f"    weights={weights}: (using best threshold={best_threshold})")
-            best_weights = weights  # In real implementation, evaluate each combination
+            # 简单评分: ML权重越高，依赖模型准确性
+            score = best_accuracy * weights["ml_weight"] + 0.5 * (
+                1 - weights["ml_weight"]
+            )
+            print(f"    {weights}: estimated_score={score:.1%}")
+            if score > best_weight_score:
+                best_weight_score = score
+                best_weights = weights
+
+        # ========== 4. 测试基于规则的策略信号叠加 ==========
+        print("\n  [4/4] Testing rule-based strategy stacking...")
+        strategy_results = {}
+
+        for strategy_name in [
+            "ma_golden_cross",
+            "bull_trend",
+            "volume_breakout",
+            "macd_divergence",
+        ]:
+            if strategy_name in STRATEGY_CLASSES:
+                try:
+                    strategy_class = STRATEGY_CLASSES[strategy_name]
+                    strategy = strategy_class()
+                    from src.backtest.engine import BacktestEngine
+
+                    engine = BacktestEngine()
+                    result = engine.run(eval_df, strategy)
+                    strategy_results[strategy_name] = {
+                        "return": result.total_return,
+                        "sharpe": result.sharpe_ratio,
+                        "win_rate": result.win_rate,
+                    }
+                    print(
+                        f"    {strategy_name}: return={result.total_return:.2%}, sharpe={result.sharpe_ratio:.2f}"
+                    )
+                except Exception as e:
+                    logger.debug(f"Failed strategy {strategy_name}: {e}")
+
+        # 选择表现最好的策略用于叠加
+        best_strategies = []
+        if strategy_results:
+            best_strategies = sorted(
+                strategy_results.items(),
+                key=lambda x: x[1].get("return", 0) + x[1].get("sharpe", 0),
+                reverse=True,
+            )[:3]
+            print(f"    Top strategies for stacking: {[s[0] for s in best_strategies]}")
 
         # Save prediction parameters
         prediction_params = {
             "threshold": best_threshold,
-            "forward_days": 1,
+            "forward_days": best_forward_days,
             **best_weights,
+            **best_model_params,
+            "stacking_strategies": [s[0] for s in best_strategies]
+            if strategy_results
+            else [],
         }
 
         all_best_params["prediction"] = prediction_params
-        all_best_metrics["prediction"] = {"accuracy": best_accuracy}
+        all_best_metrics["prediction"] = {
+            "accuracy": best_accuracy,
+            "precision_up": best_metrics.get("precision_up", 0),
+            "recall_up": best_metrics.get("recall_up", 0),
+            "f1_up": best_metrics.get("f1_up", 0),
+            "precision_down": best_metrics.get("precision_down", 0),
+            "recall_down": best_metrics.get("recall_down", 0),
+            "f1_down": best_metrics.get("f1_down", 0),
+        }
 
         print(f"\n  Best prediction parameters:")
+        print(f"    forward_days: {best_forward_days}")
         print(f"    threshold: {best_threshold}")
-        print(f"    accuracy: {best_accuracy:.1%}")
+        print(f"    model_params: {best_model_params}")
         print(f"    weights: {best_weights}")
+        print(f"    accuracy: {best_accuracy:.1%}")
+        print(f"    f1_up: {best_metrics.get('f1_up', 0):.1%}")
+        print(f"    f1_down: {best_metrics.get('f1_down', 0):.1%}")
 
     else:
         # Decision scenario - original logic
