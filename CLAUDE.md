@@ -231,6 +231,9 @@ See `requirements.txt`
 - [ ] Add Docker support for deployment
 
 ### Completed Features
+- [x] Enhanced prediction with 14 technical signals (ADX, MFI, CCI, DMI, RSI divergence, volume-price divergence)
+- [x] Ensemble prediction with 5 signal sources (ML, Technical, Momentum, Trend, Alpha)
+- [x] Precision/Recall/F1 evaluation for prediction model
 - [x] Real-time price support
 - [x] Position sizing optimization (ATR-based)
 - [x] Market-specific parameters

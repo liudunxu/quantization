@@ -27,10 +27,14 @@ class EnsemblePredictor:
         self.config = config or {}
         self.technical_generator = TechnicalSignalGenerator()
 
-        # 默认权重配置
-        self.ml_weight = self.config.get("ml_weight", 0.5)  # ML模型权重
-        self.technical_weight = self.config.get("technical_weight", 0.3)  # 技术信号权重
-        self.momentum_weight = self.config.get("momentum_weight", 0.2)  # 动量权重
+        # 默认权重配置 - 优化后权重分配
+        self.ml_weight = self.config.get("ml_weight", 0.40)  # ML模型权重
+        self.technical_weight = self.config.get(
+            "technical_weight", 0.30
+        )  # 技术信号权重
+        self.momentum_weight = self.config.get("momentum_weight", 0.15)  # 动量权重
+        self.trend_weight = self.config.get("trend_weight", 0.10)  # 趋势强度权重
+        self.alpha_weight = self.config.get("alpha_weight", 0.05)  # 超额收益权重
 
     def predict(
         self,
@@ -66,13 +70,21 @@ class EnsemblePredictor:
         # 4. 市场情绪分析
         sentiment_result = self._analyze_sentiment(latest)
 
-        # 5. 综合判断
+        # 5. 趋势强度分析 (新增)
+        trend_result = self._analyze_trend_strength(latest, df)
+
+        # 6. 超额收益分析 (新增)
+        alpha_result = self._analyze_alpha(latest, df)
+
+        # 7. 综合判断
         final_result = self._combine_predictions(
             ml_result,
             technical_result,
             momentum_result,
             sentiment_result,
             current_price,
+            trend_result,
+            alpha_result,
         )
 
         return final_result
@@ -172,6 +184,103 @@ class EnsemblePredictor:
             "explanation": explanation,
         }
 
+    def _analyze_trend_strength(
+        self, latest: pd.Series, df: pd.DataFrame
+    ) -> Dict[str, Any]:
+        """分析趋势强度 - 基于ADX和均线排列"""
+        adx = latest.get("adx", 0)
+        plus_di = latest.get("dmi_plus_di", 0)
+        minus_di = latest.get("dmi_minus_di", 0)
+
+        # 多头排列检查
+        ma5 = latest.get("ma_5", 0)
+        ma10 = latest.get("ma_10", 0)
+        ma20 = latest.get("ma_20", 0)
+
+        if pd.isna(ma5) or pd.isna(ma10) or pd.isna(ma20):
+            ma5 = ma10 = ma20 = 0
+
+        ma_bullish = ma5 > ma10 > ma20
+        ma_bearish = ma5 < ma10 < ma20
+
+        # ADX趋势强度判断
+        if pd.isna(adx):
+            adx = 20  # 默认值
+
+        if pd.isna(plus_di):
+            plus_di = 0
+        if pd.isna(minus_di):
+            minus_di = 0
+
+        # 趋势方向
+        if adx > 25 and plus_di > minus_di and ma_bullish:
+            direction = "UP"
+            strength = min(adx / 50, 1.0)
+            explanation = f"强势上升趋势 (ADX={adx:.0f}, 多头排列)"
+        elif adx > 25 and minus_di > plus_di and ma_bearish:
+            direction = "DOWN"
+            strength = min(adx / 50, 1.0)
+            explanation = f"强势下降趋势 (ADX={adx:.0f}, 空头排列)"
+        elif ma_bullish:
+            direction = "UP"
+            strength = 0.6
+            explanation = "温和上升趋势 (多头排列)"
+        elif ma_bearish:
+            direction = "DOWN"
+            strength = 0.6
+            explanation = "温和下降趋势 (空头排列)"
+        else:
+            direction = "NEUTRAL"
+            strength = 0.4
+            explanation = f"震荡整理 (ADX={adx:.0f})"
+
+        return {
+            "direction": direction,
+            "strength": strength,
+            "adx": adx,
+            "plus_di": plus_di,
+            "minus_di": minus_di,
+            "ma_arrangement": "bullish"
+            if ma_bullish
+            else ("bearish" if ma_bearish else "neutral"),
+            "explanation": explanation,
+        }
+
+    def _analyze_alpha(self, latest: pd.Series, df: pd.DataFrame) -> Dict[str, Any]:
+        """分析超额收益 - 个股相对市场的表现"""
+        alpha = latest.get("alpha", 0)
+        beta = latest.get("beta", 1.0)
+        corr = latest.get("corr", 0)
+
+        if pd.isna(alpha):
+            alpha = 0
+        if pd.isna(beta):
+            beta = 1.0
+        if pd.isna(corr):
+            corr = 0
+
+        if alpha > 0.02:
+            direction = "UP"
+            strength = min(abs(alpha) * 10, 1.0)
+            explanation = f"显著超额收益 (alpha={alpha:.2%})"
+        elif alpha < -0.02:
+            direction = "DOWN"
+            strength = min(abs(alpha) * 10, 1.0)
+            explanation = f"明显跑输市场 (alpha={alpha:.2%})"
+        else:
+            direction = "NEUTRAL"
+            strength = 0.5
+            explanation = f"与市场同步 (alpha={alpha:.2%})"
+
+        return {
+            "direction": direction,
+            "strength": strength,
+            "alpha": alpha,
+            "beta": beta,
+            "correlation": corr,
+            "explanation": explanation,
+        }
+
     def _combine_predictions(
         self,
         ml_result: Dict[str, Any],
@@ -179,6 +288,8 @@ class EnsemblePredictor:
         momentum_result: Dict[str, Any],
         sentiment_result: Dict[str, Any],
         current_price: float,
+        trend_result: Optional[Dict[str, Any]] = None,
+        alpha_result: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """综合多个预测结果"""
 
@@ -219,6 +330,28 @@ class EnsemblePredictor:
                 "confidence": momentum_result["strength"],
             }
         )
+
+        # 趋势强度信号 (新增)
+        if trend_result:
+            signals.append(
+                {
+                    "source": "趋势强度",
+                    "direction": trend_result["direction"],
+                    "weight": self.trend_weight,
+                    "confidence": trend_result["strength"],
+                }
+            )
+
+        # 超额收益信号 (新增)
+        if alpha_result:
+            signals.append(
+                {
+                    "source": "超额收益",
+                    "direction": alpha_result["direction"],
+                    "weight": self.alpha_weight,
+                    "confidence": alpha_result["strength"],
+                }
+            )
 
         # 计算加权投票
         up_score = sum(
@@ -302,6 +435,14 @@ class EnsemblePredictor:
             "momentum_5": momentum_result.get("momentum_5", 0),
             "momentum_10": momentum_result.get("momentum_10", 0),
             "sentiment_score": sentiment_result.get("score", 0),
+            "adx": trend_result.get("adx", 0) if trend_result else 0,
+            "plus_di": trend_result.get("plus_di", 0) if trend_result else 0,
+            "minus_di": trend_result.get("minus_di", 0) if trend_result else 0,
+            "ma_arrangement": trend_result.get("ma_arrangement", "neutral")
+            if trend_result
+            else "neutral",
+            "alpha": alpha_result.get("alpha", 0) if alpha_result else 0,
+            "beta": alpha_result.get("beta", 1.0) if alpha_result else 1.0,
             "signal_sources": {
                 "ml": {
                     "direction": ml_direction,
@@ -314,6 +455,18 @@ class EnsemblePredictor:
                 "momentum": {
                     "direction": momentum_result["direction"],
                     "confidence": momentum_result["strength"],
+                },
+                "trend": {
+                    "direction": trend_result["direction"]
+                    if trend_result
+                    else "NEUTRAL",
+                    "confidence": trend_result["strength"] if trend_result else 0.5,
+                },
+                "alpha": {
+                    "direction": alpha_result["direction"]
+                    if alpha_result
+                    else "NEUTRAL",
+                    "confidence": alpha_result["strength"] if alpha_result else 0.5,
                 },
             },
         }

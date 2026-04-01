@@ -117,6 +117,62 @@ class TechnicalSignalGenerator:
         else:
             neutral_factors.append(atr_explanation)
 
+        # 9. ADX趋势强度信号
+        adx_signal, adx_explanation = self._check_adx(latest)
+        if adx_signal == "BULLISH":
+            bullish_factors.append(adx_explanation)
+        elif adx_signal == "BEARISH":
+            bearish_factors.append(adx_explanation)
+        else:
+            neutral_factors.append(adx_explanation)
+
+        # 10. MFI资金流信号
+        mfi_signal, mfi_explanation = self._check_mfi(latest)
+        if mfi_signal == "BULLISH":
+            bullish_factors.append(mfi_explanation)
+        elif mfi_signal == "BEARISH":
+            bearish_factors.append(mfi_explanation)
+        else:
+            neutral_factors.append(mfi_explanation)
+
+        # 11. CCI信号
+        cci_signal, cci_explanation = self._check_cci(latest)
+        if cci_signal == "BULLISH":
+            bullish_factors.append(cci_explanation)
+        elif cci_signal == "BEARISH":
+            bearish_factors.append(cci_explanation)
+        else:
+            neutral_factors.append(cci_explanation)
+
+        # 12. DMI信号
+        dmi_signal, dmi_explanation = self._check_dmi(latest)
+        if dmi_signal == "BULLISH":
+            bullish_factors.append(dmi_explanation)
+        elif dmi_signal == "BEARISH":
+            bearish_factors.append(dmi_explanation)
+        else:
+            neutral_factors.append(dmi_explanation)
+
+        # 13. RSI背离信号
+        rsi_div_signal, rsi_div_explanation = self._check_rsi_divergence(latest, df)
+        if rsi_div_signal == "BULLISH":
+            bullish_factors.append(rsi_div_explanation)
+        elif rsi_div_signal == "BEARISH":
+            bearish_factors.append(rsi_div_explanation)
+        else:
+            neutral_factors.append(rsi_div_explanation)
+
+        # 14. 量价背离信号
+        vp_div_signal, vp_div_explanation = self._check_volume_price_divergence(
+            latest, df
+        )
+        if vp_div_signal == "BULLISH":
+            bullish_factors.append(vp_div_explanation)
+        elif vp_div_signal == "BEARISH":
+            bearish_factors.append(vp_div_explanation)
+        else:
+            neutral_factors.append(vp_div_explanation)
+
         # 综合判断
         bullish_count = len(bullish_factors)
         bearish_count = len(bearish_factors)
@@ -191,24 +247,28 @@ class TechnicalSignalGenerator:
             return "NEUTRAL", "均线系统中性"
 
     def _check_rsi(self, latest: pd.Series) -> Tuple[str, str]:
-        """检查RSI信号"""
+        """检查RSI信号 - 优化阈值"""
         rsi = latest.get("rsi", None)
         if rsi is None:
             return "NEUTRAL", "RSI数据不足"
 
-        if rsi < 30:
-            return "BULLISH", f"RSI超卖 ({rsi:.1f} < 30)"
-        elif rsi > 70:
-            return "BEARISH", f"RSI超买 ({rsi:.1f} > 70)"
-        elif rsi < 40:
-            return "BULLISH", f"RSI偏弱有反弹机会 ({rsi:.1f})"
-        elif rsi > 60:
-            return "BEARISH", f"RSI偏强需谨慎 ({rsi:.1f})"
+        if rsi < 25:
+            return "BULLISH", f"RSI极度超卖 ({rsi:.1f}<25)，强反转信号"
+        elif rsi < 35:
+            return "BULLISH", f"RSI超卖 ({rsi:.1f}<35)，反弹概率大"
+        elif rsi > 75:
+            return "BEARISH", f"RSI极度超买 ({rsi:.1f}>75)，回调风险高"
+        elif rsi > 65:
+            return "BEARISH", f"RSI超买 ({rsi:.1f}>65)，需谨慎"
+        elif rsi < 45:
+            return "BULLISH", f"RSI偏低有反弹机会 ({rsi:.1f})"
+        elif rsi > 55:
+            return "BEARISH", f"RSI偏强注意风险 ({rsi:.1f})"
         else:
             return "NEUTRAL", f"RSI中性区域 ({rsi:.1f})"
 
     def _check_macd(self, latest: pd.Series, df: pd.DataFrame) -> Tuple[str, str]:
-        """检查MACD信号"""
+        """检查MACD信号 - 增强背离检测"""
         macd = latest.get("macd", None)
         signal = latest.get("macd_signal", None)
         hist = latest.get("macd_hist", None)
@@ -216,7 +276,7 @@ class TechnicalSignalGenerator:
         if macd is None or signal is None:
             return "NEUTRAL", "MACD数据不足"
 
-        # 金叉死叉
+        # 金叉死叉检测 (检查最近2天)
         if len(df) >= 2:
             prev_hist = df.iloc[-2].get("macd_hist", 0)
             curr_hist = hist if hist else 0
@@ -225,6 +285,16 @@ class TechnicalSignalGenerator:
                 return "BULLISH", f"MACD金叉 (柱状图由负转正)"
             elif prev_hist > 0 and curr_hist < 0:
                 return "BEARISH", f"MACD死叉 (柱状图由正转负)"
+
+        # 柱状图连续放大检测 (趋势确认)
+        if len(df) >= 3 and hist is not None:
+            hist_2d = df.iloc[-2].get("macd_hist", 0)
+            hist_3d = df.iloc[-3].get("macd_hist", 0)
+            if not pd.isna(hist_2d) and not pd.isna(hist_3d):
+                if hist > 0 and hist > hist_2d > hist_3d:
+                    return "BULLISH", f"MACD柱状图连续放大 (DIF={macd:.4f})"
+                elif hist < 0 and hist < hist_2d < hist_3d:
+                    return "BEARISH", f"MACD柱状图连续放大 (DIF={macd:.4f})"
 
         # MACD方向
         if hist is not None:
@@ -258,27 +328,32 @@ class TechnicalSignalGenerator:
         return "NEUTRAL", "布林带位置中性"
 
     def _check_volume(self, latest: pd.Series, df: pd.DataFrame) -> Tuple[str, str]:
-        """检查成交量信号"""
+        """检查成交量信号 - 优化阈值"""
         volume_ratio = latest.get("volume_ratio", None)
         price_change = latest.get("returns", 0) if "returns" in latest else 0
 
         if volume_ratio is None:
             return "NEUTRAL", "成交量数据不足"
 
-        if volume_ratio > 2.0 and price_change > 0:
+        if volume_ratio > 2.5 and price_change > 0.01:
             return (
                 "BULLISH",
-                f"放量上涨 (量比{volume_ratio:.1f}，涨幅{price_change:.1%})",
+                f"放量大涨 (量比{volume_ratio:.1f}，涨幅{price_change:.1%})",
             )
-        elif volume_ratio > 2.0 and price_change < 0:
+        elif volume_ratio > 2.0 and price_change < -0.01:
             return (
                 "BEARISH",
-                f"放量下跌 (量比{volume_ratio:.1f}，跌幅{abs(price_change):.1%})",
+                f"放量大跌 (量比{volume_ratio:.1f}，跌幅{abs(price_change):.1%})",
             )
         elif volume_ratio < 0.5 and price_change < 0:
             return "BULLISH", f"缩量下跌，抛压减轻 (量比{volume_ratio:.1f})"
-        elif volume_ratio > 1.5:
-            return "BULLISH", f"成交量放大 (量比{volume_ratio:.1f})"
+        elif volume_ratio > 1.5 and price_change > 0:
+            return (
+                "BULLISH",
+                f"温和放量上涨 (量比{volume_ratio:.1f}，涨幅{price_change:.1%})",
+            )
+        elif volume_ratio < 0.3:
+            return "NEUTRAL", f"极度缩量，等待变盘 (量比{volume_ratio:.1f})"
 
         return "NEUTRAL", f"成交量正常 (量比{volume_ratio:.1f})"
 
@@ -338,3 +413,177 @@ class TechnicalSignalGenerator:
             return "BEARISH", f"高波动率 (ATR {atr_pct:.1f}%)，风险较高"
 
         return "NEUTRAL", f"波动率正常 (ATR {atr_pct:.1f}%)"
+
+    def _check_adx(self, latest: pd.Series) -> Tuple[str, str]:
+        """检查ADX趋势强度信号"""
+        adx = latest.get("adx", None)
+        plus_di = latest.get("dmi_plus_di", None)
+        minus_di = latest.get("dmi_minus_di", None)
+
+        if adx is None:
+            return "NEUTRAL", "ADX数据不足"
+
+        if adx > 25:
+            if plus_di is not None and minus_di is not None:
+                if plus_di > minus_di:
+                    return (
+                        "BULLISH",
+                        f"ADX趋势强劲 (ADX={adx:.1f}, +DI>{plus_di:.1f}>-DI>{minus_di:.1f})",
+                    )
+                elif minus_di > plus_di:
+                    return (
+                        "BEARISH",
+                        f"ADX趋势强劲 (ADX={adx:.1f}, -DI>{minus_di:.1f}>+DI>{plus_di:.1f})",
+                    )
+            return "NEUTRAL", f"ADX趋势中等 (ADX={adx:.1f})"
+        elif adx < 20:
+            return "NEUTRAL", f"ADX无明确趋势 (ADX={adx:.1f})，观望"
+
+        return "NEUTRAL", f"ADX趋势一般 (ADX={adx:.1f})"
+
+    def _check_mfi(self, latest: pd.Series) -> Tuple[str, str]:
+        """检查MFI资金流信号"""
+        mfi = latest.get("mfi", None)
+
+        if mfi is None:
+            return "NEUTRAL", "MFI数据不足"
+
+        if mfi < 20:
+            return "BULLISH", f"MFI严重超卖 (MFI={mfi:.1f}<20)，资金流出极端"
+        elif mfi < 30:
+            return "BULLISH", f"MFI超卖 (MFI={mfi:.1f})，可能出现反弹"
+        elif mfi > 80:
+            return "BEARISH", f"MFI严重超买 (MFI={mfi:.1f}>80)，资金流入极端"
+        elif mfi > 70:
+            return "BEARISH", f"MFI超买 (MFI={mfi:.1f})，需警惕回调"
+
+        return "NEUTRAL", f"MFI正常 (MFI={mfi:.1f})"
+
+    def _check_cci(self, latest: pd.Series) -> Tuple[str, str]:
+        """检查CCI信号"""
+        cci = latest.get("cci", None)
+
+        if cci is None:
+            return "NEUTRAL", "CCI数据不足"
+
+        if cci < -150:
+            return "BULLISH", f"CCI极度超卖 (CCI={cci:.0f}<-150)，强反转信号"
+        elif cci < -100:
+            return "BULLISH", f"CCI超卖 (CCI={cci:.0f})，关注反弹"
+        elif cci > 150:
+            return "BEARISH", f"CCI极度超买 (CCI={cci:.0f}>150)，注意风险"
+        elif cci > 100:
+            return "BEARISH", f"CCI超买 (CCI={cci:.0f})，需谨慎"
+
+        return "NEUTRAL", f"CCI正常 (CCI={cci:.0f})"
+
+    def _check_dmi(self, latest: pd.Series) -> Tuple[str, str]:
+        """检查DMI方向运动指标信号"""
+        plus_di = latest.get("dmi_plus_di", None)
+        minus_di = latest.get("dmi_minus_di", None)
+
+        if plus_di is None or minus_di is None:
+            return "NEUTRAL", "DMI数据不足"
+
+        diff = plus_di - minus_di
+
+        if diff > 10:
+            return (
+                "BULLISH",
+                f"DMI多头优势 (+DI={plus_di:.1f}, -DI={minus_di:.1f}, 差值={diff:.1f})",
+            )
+        elif diff < -10:
+            return (
+                "BEARISH",
+                f"DMI空头优势 (+DI={plus_di:.1f}, -DI={minus_di:.1f}, 差值={diff:.1f})",
+            )
+        elif diff > 0:
+            return "BULLISH", f"DMI略偏多头 (+DI={plus_di:.1f}>-DI={minus_di:.1f})"
+        elif diff < 0:
+            return "BEARISH", f"DMI略偏空头 (+DI={plus_di:.1f}<-DI={minus_di:.1f})"
+
+        return "NEUTRAL", f"DMI均衡 (+DI={plus_di:.1f}, -DI={minus_di:.1f})"
+
+    def _check_rsi_divergence(
+        self, latest: pd.Series, df: pd.DataFrame
+    ) -> Tuple[str, str]:
+        """检查RSI背离信号 - 价格新低但RSI未创新低"""
+        if len(df) < 20:
+            return "NEUTRAL", "RSI背离检测数据不足"
+
+        rsi = latest.get("rsi", None)
+        if rsi is None:
+            return "NEUTRAL", "RSI数据不足"
+
+        # 查找近20日的价格和RSI最低点
+        recent = df.iloc[-20:]
+        price_min_idx = recent["close"].idxmin()
+        price_min = recent["close"].min()
+
+        current_price = latest["close"]
+
+        # 底背离：价格接近新低但RSI明显高于之前的RSI低点
+        if current_price <= price_min * 1.02:  # 价格在低点附近2%内
+            # 找到价格低点时的RSI
+            rsi_at_low = recent.loc[price_min_idx, "rsi"]
+            if not pd.isna(rsi_at_low) and rsi > rsi_at_low + 5:
+                return (
+                    "BULLISH",
+                    f"RSI底背离 (RSI={rsi:.1f} > 低点RSI={rsi_at_low:.1f})",
+                )
+
+        # 顶背离：价格接近新高但RSI未创新高
+        price_max_idx = recent["close"].idxmax()
+        price_max = recent["close"].max()
+
+        if current_price >= price_max * 0.98:  # 价格在高点附近2%内
+            rsi_at_high = recent.loc[price_max_idx, "rsi"]
+            if not pd.isna(rsi_at_high) and rsi < rsi_at_high - 5:
+                return (
+                    "BEARISH",
+                    f"RSI顶背离 (RSI={rsi:.1f} < 高点RSI={rsi_at_high:.1f})",
+                )
+
+        return "NEUTRAL", f"RSI无明显背离 (RSI={rsi:.1f})"
+
+    def _check_volume_price_divergence(
+        self, latest: pd.Series, df: pd.DataFrame
+    ) -> Tuple[str, str]:
+        """检查量价背离信号 - 价格涨但量缩，或价格跌但量缩"""
+        if len(df) < 5:
+            return "NEUTRAL", "量价背离检测数据不足"
+
+        price_change_5d = (latest["close"] - df["close"].iloc[-5]) / df["close"].iloc[
+            -5
+        ]
+        vol_ratio = latest.get("volume_ratio", None)
+
+        if vol_ratio is None:
+            return "NEUTRAL", "成交量数据不足"
+
+        # 价涨量缩 - 上涨乏力
+        if price_change_5d > 0.02 and vol_ratio < 0.7:
+            return (
+                "BEARISH",
+                f"量价背离(价涨量缩) - 5日涨{price_change_5d:.1%}但量比仅{vol_ratio:.1f}",
+            )
+        # 价跌量缩 - 抛压减轻
+        elif price_change_5d < -0.02 and vol_ratio < 0.7:
+            return (
+                "BULLISH",
+                f"量价背离(价跌量缩) - 5日跌{abs(price_change_5d):.1%}且量比仅{vol_ratio:.1f}",
+            )
+        # 价跌量增 - 主力出逃
+        elif price_change_5d < -0.02 and vol_ratio > 1.5:
+            return (
+                "BEARISH",
+                f"放量下跌 - 5日跌{abs(price_change_5d):.1%}且量比{vol_ratio:.1f}",
+            )
+        # 价涨量增 - 健康上涨
+        elif price_change_5d > 0.02 and vol_ratio > 1.2:
+            return (
+                "BULLISH",
+                f"价量齐升 - 5日涨{price_change_5d:.1%}且量比{vol_ratio:.1f}",
+            )
+
+        return "NEUTRAL", "量价关系正常"

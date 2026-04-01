@@ -162,10 +162,17 @@ def main():
 
     # 6. 模型评估
     print("\n  Evaluating model...")
-    accuracy = model_pipeline.evaluate_accuracy(
+    eval_metrics = model_pipeline.evaluate_metrics(
         model, eval_df, threshold=args.threshold
     )
-    print(f"  Accuracy: {accuracy:.1%}")
+    accuracy = eval_metrics["accuracy"]
+    print(f"  Accuracy      : {accuracy:.1%}")
+    print(f"  UP Precision  : {eval_metrics['precision_up']:.1%}")
+    print(f"  UP Recall     : {eval_metrics['recall_up']:.1%}")
+    print(f"  UP F1         : {eval_metrics['f1_up']:.1%}")
+    print(f"  DOWN Precision: {eval_metrics['precision_down']:.1%}")
+    print(f"  DOWN Recall   : {eval_metrics['recall_down']:.1%}")
+    print(f"  DOWN F1       : {eval_metrics['f1_down']:.1%}")
 
     # 7. 获取实时价格
     print("\n  Getting real-time price...")
@@ -195,6 +202,12 @@ def main():
         "%Y-%m-%d"
     )
     prediction["model_accuracy"] = accuracy
+    prediction["precision_up"] = eval_metrics["precision_up"]
+    prediction["recall_up"] = eval_metrics["recall_up"]
+    prediction["f1_up"] = eval_metrics["f1_up"]
+    prediction["precision_down"] = eval_metrics["precision_down"]
+    prediction["recall_down"] = eval_metrics["recall_down"]
+    prediction["f1_down"] = eval_metrics["f1_down"]
 
     # 10. 输出结果
     formatter = PredictionFormatter()

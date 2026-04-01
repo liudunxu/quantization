@@ -158,18 +158,50 @@ class ModelPipeline:
         Returns:
             准确率 (0-1)
         """
-        if eval_df.empty or len(eval_df) < 2:
-            return 0.0
+        metrics = self.evaluate_metrics(model, eval_df, threshold)
+        return metrics["accuracy"]
 
+    def evaluate_metrics(
+        self,
+        model: StockTradingModel,
+        eval_df: pd.DataFrame,
+        threshold: float = 0.0,
+    ) -> Dict[str, Any]:
+        """评估模型指标 - 包含accuracy、precision、recall、F1
+
+        Args:
+            model: 训练好的模型
+            eval_df: 评估数据
+            threshold: 涨跌阈值
+
+        Returns:
+            包含各类指标的字典
+        """
+        if eval_df.empty or len(eval_df) < 2:
+            return {
+                "accuracy": 0.0,
+                "precision_up": 0.0,
+                "recall_up": 0.0,
+                "f1_up": 0.0,
+                "precision_down": 0.0,
+                "recall_down": 0.0,
+                "f1_down": 0.0,
+                "total": 0,
+                "correct": 0,
+            }
+
+        # 统计各类别
+        tp_up = 0  # 预测UP，实际UP
+        fp_up = 0  # 预测UP，实际非UP
+        fn_up = 0  # 实际UP，预测非UP
+        tp_down = 0  # 预测DOWN，实际DOWN
+        fp_down = 0  # 预测DOWN，实际非DOWN
+        fn_down = 0  # 实际DOWN，预测非DOWN
         correct = 0
         total = 0
 
-        # 逐行评估，跳过最后一行（因为没有下一天的数据）
         for i in range(len(eval_df) - 1):
-            # 获取当前特征（用于预测）
             row = eval_df.iloc[[i]]
-
-            # 计算实际涨跌（从当前行到下一行）
             current_close = eval_df["close"].iloc[i]
             next_close = eval_df["close"].iloc[i + 1]
             actual_return = (next_close - current_close) / current_close
@@ -182,22 +214,80 @@ class ModelPipeline:
             else:
                 actual_direction = "NEUTRAL"
 
-            # 预测方向
             try:
                 prediction = self.predict_direction(model, row, current_close)
                 predicted_direction = prediction["direction"]
 
-                # 判断预测是否正确
                 if predicted_direction == actual_direction:
                     correct += 1
+
+                # 统计UP类别
+                if predicted_direction == "UP":
+                    if actual_direction == "UP":
+                        tp_up += 1
+                    else:
+                        fp_up += 1
+                elif actual_direction == "UP":
+                    fn_up += 1
+
+                # 统计DOWN类别
+                if predicted_direction == "DOWN":
+                    if actual_direction == "DOWN":
+                        tp_down += 1
+                    else:
+                        fp_down += 1
+                elif actual_direction == "DOWN":
+                    fn_down += 1
+
                 total += 1
-            except Exception as e:
-                logger.debug(f"Prediction error at index {i}: {e}")
+            except Exception:
                 continue
 
         accuracy = correct / total if total > 0 else 0.0
-        logger.info(f"Evaluation accuracy: {accuracy:.2%} ({correct}/{total})")
-        return accuracy
+
+        # 计算UP方向的precision和recall
+        precision_up = tp_up / (tp_up + fp_up) if (tp_up + fp_up) > 0 else 0.0
+        recall_up = tp_up / (tp_up + fn_up) if (tp_up + fn_up) > 0 else 0.0
+        f1_up = (
+            2 * precision_up * recall_up / (precision_up + recall_up)
+            if (precision_up + recall_up) > 0
+            else 0.0
+        )
+
+        # 计算DOWN方向的precision和recall
+        precision_down = (
+            tp_down / (tp_down + fp_down) if (tp_down + fp_down) > 0 else 0.0
+        )
+        recall_down = tp_down / (tp_down + fn_down) if (tp_down + fn_down) > 0 else 0.0
+        f1_down = (
+            2 * precision_down * recall_down / (precision_down + recall_down)
+            if (precision_down + recall_down) > 0
+            else 0.0
+        )
+
+        logger.info(
+            f"Evaluation: accuracy={accuracy:.2%}, "
+            f"UP: P={precision_up:.2%}, R={recall_up:.2%}, F1={f1_up:.2%}, "
+            f"DOWN: P={precision_down:.2%}, R={recall_down:.2%}, F1={f1_down:.2%}"
+        )
+
+        return {
+            "accuracy": accuracy,
+            "precision_up": precision_up,
+            "recall_up": recall_up,
+            "f1_up": f1_up,
+            "precision_down": precision_down,
+            "recall_down": recall_down,
+            "f1_down": f1_down,
+            "total": total,
+            "correct": correct,
+            "tp_up": tp_up,
+            "fp_up": fp_up,
+            "fn_up": fn_up,
+            "tp_down": tp_down,
+            "fp_down": fp_down,
+            "fn_down": fn_down,
+        }
 
     def get_feature_contributions(
         self,

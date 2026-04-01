@@ -105,6 +105,8 @@ class PredictionFormatter:
                     "ml": "ML模型",
                     "technical": "技术分析",
                     "momentum": "动量分析",
+                    "trend": "趋势强度",
+                    "alpha": "超额收益",
                 }
                 label = source_labels.get(source_name, source_name)
                 direction = source_info.get("direction", "NEUTRAL")
@@ -157,12 +159,16 @@ class PredictionFormatter:
                 f"  5日动量 (Momentum 5d)  : {p.get('momentum_5', 0) * 100:+.2f}%",
                 f"  10日动量 (Momentum 10d): {p.get('momentum_10', 0) * 100:+.2f}%",
                 f"  市场情绪 (Sentiment)   : {p.get('sentiment_score', 0):.2f}",
+                f"  ADX趋势强度            : {p.get('adx', 0):.0f}",
+                f"  +DI/-DI                : {p.get('plus_di', 0):.1f} / {p.get('minus_di', 0):.1f}",
+                f"  均线排列 (MA Arrangement): {p.get('ma_arrangement', 'neutral')}",
+                f"  Alpha超额收益          : {p.get('alpha', 0):.2%}",
                 f"  看涨信号数 (Bullish)   : {p.get('bullish_count', 0)}",
                 f"  看跌信号数 (Bearish)   : {p.get('bearish_count', 0)}",
             ]
         )
 
-        # 添加模型性能
+        # 添加模型性能 (包含准召)
         lines.extend(
             [
                 "",
@@ -174,6 +180,23 @@ class PredictionFormatter:
                 f"  ML置信度 (ML Conf)     : {p.get('ml_confidence', 0) * 100:.1f}%",
             ]
         )
+
+        # 添加准召数据
+        if p.get("precision_up", None) is not None:
+            lines.extend(
+                [
+                    "",
+                    "  ── 看涨(UP)方向 ──",
+                    f"  Precision (精准率)  : {p.get('precision_up', 0) * 100:.1f}%",
+                    f"  Recall (召回率)     : {p.get('recall_up', 0) * 100:.1f}%",
+                    f"  F1 Score            : {p.get('f1_up', 0) * 100:.1f}%",
+                    "",
+                    "  ── 看跌(DOWN)方向 ──",
+                    f"  Precision (精准率)  : {p.get('precision_down', 0) * 100:.1f}%",
+                    f"  Recall (召回率)     : {p.get('recall_down', 0) * 100:.1f}%",
+                    f"  F1 Score            : {p.get('f1_down', 0) * 100:.1f}%",
+                ]
+            )
 
         # 添加交易建议
         direction = p.get("direction", "NEUTRAL")
@@ -255,7 +278,15 @@ class PredictionFormatter:
             "bearish_count",
             "momentum_5",
             "sentiment_score",
+            "adx",
+            "alpha",
             "model_accuracy",
+            "precision_up",
+            "recall_up",
+            "f1_up",
+            "precision_down",
+            "recall_down",
+            "f1_down",
         ]
 
         values = []
