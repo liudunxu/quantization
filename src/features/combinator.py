@@ -12,6 +12,7 @@ from .money_flow import MoneyFlowFeatures
 from .sentiment import SentimentFeatures
 from .southbound_flow import SouthboundFlowFeatures
 from .company_events import CompanyEventsFeatures
+from .alpha_features import AlphaFeatures, select_features_by_ic, normalize_features
 
 
 class FeatureCombinator:
@@ -28,6 +29,7 @@ class FeatureCombinator:
             "sentiment": SentimentFeatures(cache),
             "southbound_flow": SouthboundFlowFeatures(cache),
             "company_events": CompanyEventsFeatures(cache),
+            "alpha": AlphaFeatures(cache),
         }
 
     def get_combined_features(
@@ -93,6 +95,17 @@ class FeatureCombinator:
         )
         if not events_df.empty:
             features["company_events"] = events_df
+
+        # Alpha features (Qlib-style) - All markets
+        # 需要先获取technical features中的原始数据
+        if "technical" in features:
+            tech_df = features["technical"]
+            if not tech_df.empty and len(tech_df) >= 60:
+                alpha_df = self.extractors["alpha"].extract(
+                    stock_code, df=tech_df, days=days
+                )
+                if not alpha_df.empty:
+                    features["alpha"] = alpha_df
 
         if not features:
             return pd.DataFrame()
