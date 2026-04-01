@@ -77,6 +77,11 @@ def parse_args():
     parser.add_argument("--refresh", action="store_true", help="强制刷新数据缓存")
     parser.add_argument("--verbose", action="store_true", help="详细输出")
     parser.add_argument(
+        "--multi-model",
+        action="store_true",
+        help="使用多模型集成 (CatBoost + LightGBM + XGBoost)",
+    )
+    parser.add_argument(
         "--ml-weight", type=float, default=0.35, help="ML模型权重 (默认: 0.35)"
     )
     parser.add_argument(
@@ -156,30 +161,63 @@ def main():
 
     # 5. 训练模型
     print("\n  Training model (forward_days=1)...")
-    model = model_pipeline.train(
-        train_df,
-        forward_days=1,
-        threshold=args.threshold,
-        use_composite_labels=True,  # 使用composite labels提高准确性
-        trend_weight=0.30,
-        momentum_weight=0.30,
-        market_weight=0.20,
-    )
+
+    train_result = {}
+    if args.multi_model:
+        print("  Using multi-model ensemble (CatBoost + LightGBM + XGBoost)...")
+        from src.models import MultiModelEnsemble
+
+        ensemble = MultiModelEnsemble()
+        train_result = ensemble.train(
+            train_df,
+            forward_days=1,
+            threshold=args.threshold,
+        )
+        model = ensemble
+        print(f"  Models trained: {train_result.get('models_trained', [])}")
+        print(f"  Average accuracy: {train_result.get('train_accuracy', 0):.1%}")
+    else:
+        model = model_pipeline.train(
+            train_df,
+            forward_days=1,
+            threshold=args.threshold,
+            use_composite_labels=True,
+            trend_weight=0.30,
+            momentum_weight=0.30,
+            market_weight=0.20,
+        )
     print("  Model training completed")
 
     # 6. 模型评估
     print("\n  Evaluating model...")
-    eval_metrics = model_pipeline.evaluate_metrics(
-        model, eval_df, threshold=args.threshold
-    )
-    accuracy = eval_metrics["accuracy"]
-    print(f"  Accuracy      : {accuracy:.1%}")
-    print(f"  UP Precision  : {eval_metrics['precision_up']:.1%}")
-    print(f"  UP Recall     : {eval_metrics['recall_up']:.1%}")
-    print(f"  UP F1         : {eval_metrics['f1_up']:.1%}")
-    print(f"  DOWN Precision: {eval_metrics['precision_down']:.1%}")
-    print(f"  DOWN Recall   : {eval_metrics['recall_down']:.1%}")
-    print(f"  DOWN F1       : {eval_metrics['f1_down']:.1%}")
+    if args.multi_model:
+        # MultiModelEnsemble 使用内置评估
+        accuracy = train_result.get("train_accuracy", 0)
+        eval_metrics = {
+            "accuracy": accuracy,
+            "precision_up": 0,
+            "recall_up": 0,
+            "f1_up": 0,
+            "precision_down": 0,
+            "recall_down": 0,
+            "f1_down": 0,
+        }
+        print(f"  Models trained : {train_result.get('models_trained', [])}")
+        print(f"  Avg Accuracy   : {accuracy:.1%}")
+        for name, result in train_result.get("model_results", {}).items():
+            print(f"  {name} Accuracy : {result.get('train_accuracy', 0):.1%}")
+    else:
+        eval_metrics = model_pipeline.evaluate_metrics(
+            model, eval_df, threshold=args.threshold
+        )
+        accuracy = eval_metrics["accuracy"]
+        print(f"  Accuracy      : {accuracy:.1%}")
+        print(f"  UP Precision  : {eval_metrics['precision_up']:.1%}")
+        print(f"  UP Recall     : {eval_metrics['recall_up']:.1%}")
+        print(f"  UP F1         : {eval_metrics['f1_up']:.1%}")
+        print(f"  DOWN Precision: {eval_metrics['precision_down']:.1%}")
+        print(f"  DOWN Recall   : {eval_metrics['recall_down']:.1%}")
+        print(f"  DOWN F1       : {eval_metrics['f1_down']:.1%}")
 
     # 7. 获取实时价格
     print("\n  Getting real-time price...")

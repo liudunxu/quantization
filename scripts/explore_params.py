@@ -562,19 +562,54 @@ def main():
         )
         print(f"    Accuracy={best_accuracy:.1%}, Composite={best_f1:.1%}")
 
-        # ========== 2. 测试不同模型参数 ==========
-        print("\n  [2/4] Testing different model parameters...")
-        model_params_list = [
+        # ========== 2. 测试不同模型和参数 ==========
+        print("\n  [2/5] Testing different models and parameters...")
+
+        # CatBoost 参数组合
+        catboost_params_list = [
             {"iterations": 200, "depth": 3, "learning_rate": 0.05},
             {"iterations": 300, "depth": 4, "learning_rate": 0.03},
             {"iterations": 500, "depth": 5, "learning_rate": 0.02},
             {"iterations": 300, "depth": 6, "learning_rate": 0.03},
         ]
 
+        # LightGBM 参数组合
+        lgbm_params_list = [
+            {
+                "n_estimators": 100,
+                "max_depth": 4,
+                "learning_rate": 0.1,
+                "num_leaves": 15,
+            },
+            {
+                "n_estimators": 200,
+                "max_depth": 6,
+                "learning_rate": 0.05,
+                "num_leaves": 31,
+            },
+            {
+                "n_estimators": 300,
+                "max_depth": 8,
+                "learning_rate": 0.03,
+                "num_leaves": 63,
+            },
+        ]
+
+        # XGBoost 参数组合
+        xgboost_params_list = [
+            {"n_estimators": 100, "max_depth": 4, "learning_rate": 0.1},
+            {"n_estimators": 200, "max_depth": 6, "learning_rate": 0.05},
+            {"n_estimators": 300, "max_depth": 8, "learning_rate": 0.03},
+        ]
+
+        best_model_type = "catboost"
         best_model_params = {}
         best_model_score = 0
+        model_scores = {}
 
-        for mp in model_params_list:
+        # 测试 CatBoost
+        print("\n    Testing CatBoost...")
+        for mp in catboost_params_list:
             try:
                 from src.models import StockTradingModel
 
@@ -593,18 +628,124 @@ def main():
                     + metrics["f1_up"] * 0.3
                     + metrics["f1_down"] * 0.3
                 )
-                print(f"    {mp}: score={score:.1%}")
+                print(f"      {mp}: score={score:.1%}")
                 if score > best_model_score:
                     best_model_score = score
                     best_model_params = mp
-                    best_metrics = metrics
+                    best_model_type = "catboost"
+                model_scores[f"catboost_{str(mp)}"] = score
             except Exception as e:
-                logger.debug(f"Failed model params {mp}: {e}")
+                logger.debug(f"Failed CatBoost params {mp}: {e}")
 
-        print(f"    Best model params: {best_model_params}")
+        # 测试 LightGBM
+        print("\n    Testing LightGBM...")
+        try:
+            from src.models import LightGBMModel
+
+            for mp in lgbm_params_list:
+                try:
+                    model = LightGBMModel(mp)
+                    model.train(
+                        train_df,
+                        forward_days=best_forward_days,
+                        threshold=best_threshold,
+                    )
+                    metrics = model_pipeline.evaluate_metrics(
+                        model, eval_df, threshold=best_threshold
+                    )
+                    score = (
+                        metrics["accuracy"] * 0.4
+                        + metrics["f1_up"] * 0.3
+                        + metrics["f1_down"] * 0.3
+                    )
+                    print(f"      {mp}: score={score:.1%}")
+                    if score > best_model_score:
+                        best_model_score = score
+                        best_model_params = mp
+                        best_model_type = "lightgbm"
+                    model_scores[f"lightgbm_{str(mp)}"] = score
+                except Exception as e:
+                    logger.debug(f"Failed LightGBM params {mp}: {e}")
+        except ImportError:
+            print("      LightGBM not installed, skipping")
+
+        # 测试 XGBoost
+        print("\n    Testing XGBoost...")
+        try:
+            from src.models import XGBoostModel
+
+            for mp in xgboost_params_list:
+                try:
+                    model = XGBoostModel(mp)
+                    model.train(
+                        train_df,
+                        forward_days=best_forward_days,
+                        threshold=best_threshold,
+                    )
+                    metrics = model_pipeline.evaluate_metrics(
+                        model, eval_df, threshold=best_threshold
+                    )
+                    score = (
+                        metrics["accuracy"] * 0.4
+                        + metrics["f1_up"] * 0.3
+                        + metrics["f1_down"] * 0.3
+                    )
+                    print(f"      {mp}: score={score:.1%}")
+                    if score > best_model_score:
+                        best_model_score = score
+                        best_model_params = mp
+                        best_model_type = "xgboost"
+                    model_scores[f"xgboost_{str(mp)}"] = score
+                except Exception as e:
+                    logger.debug(f"Failed XGBoost params {mp}: {e}")
+        except ImportError:
+            print("      XGBoost not installed, skipping")
+
+        # 测试多模型集成
+        print("\n    Testing Multi-Model Ensemble...")
+        try:
+            from src.models import MultiModelEnsemble
+
+            ensemble = MultiModelEnsemble(
+                {
+                    "catboost": {"iterations": 300, "depth": 4, "learning_rate": 0.03},
+                    "lightgbm": {
+                        "n_estimators": 200,
+                        "max_depth": 6,
+                        "learning_rate": 0.05,
+                    },
+                    "xgboost": {
+                        "n_estimators": 200,
+                        "max_depth": 6,
+                        "learning_rate": 0.05,
+                    },
+                }
+            )
+            train_result = ensemble.train(
+                train_df,
+                forward_days=best_forward_days,
+                threshold=best_threshold,
+            )
+            score = train_result.get("train_accuracy", 0)
+            print(
+                f"      Ensemble: score={score:.1%}, models={train_result.get('models_trained', [])}"
+            )
+            if score > best_model_score:
+                best_model_score = score
+                best_model_params = {
+                    "type": "ensemble",
+                    "models": train_result.get("models_trained", []),
+                }
+                best_model_type = "ensemble"
+            model_scores["ensemble"] = score
+        except Exception as e:
+            logger.debug(f"Failed Multi-Model Ensemble: {e}")
+
+        print(f"\n    Best model: {best_model_type} with score={best_model_score:.1%}")
+        print(f"    Best params: {best_model_params}")
 
         # ========== 3. 测试更多权重组合 ==========
-        print("\n  [3/4] Testing different signal weights...")
+        print("\n  [3/5] Testing different signal weights...")
         weight_combinations = [
             {
                 "ml_weight": 0.50,
@@ -664,7 +805,7 @@ def main():
                 best_weights = weights
 
         # ========== 4. 测试基于规则的策略信号叠加 ==========
-        print("\n  [4/4] Testing rule-based strategy stacking...")
+        print("\n  [4/5] Testing rule-based strategy stacking...")
         strategy_results = {}
 
         for strategy_name in [
@@ -706,16 +847,24 @@ def main():
         prediction_params = {
             "threshold": best_threshold,
             "forward_days": best_forward_days,
+            "model_type": best_model_type,
+            "model_params": best_model_params,
             **best_weights,
-            **best_model_params,
             "stacking_strategies": [s[0] for s in best_strategies]
             if strategy_results
             else [],
+            "model_scores": {
+                k: v
+                for k, v in sorted(
+                    model_scores.items(), key=lambda x: x[1], reverse=True
+                )[:5]
+            },
         }
 
         all_best_params["prediction"] = prediction_params
         all_best_metrics["prediction"] = {
             "accuracy": best_accuracy,
+            "model_score": best_model_score,
             "precision_up": best_metrics.get("precision_up", 0),
             "recall_up": best_metrics.get("recall_up", 0),
             "f1_up": best_metrics.get("f1_up", 0),
@@ -727,11 +876,18 @@ def main():
         print(f"\n  Best prediction parameters:")
         print(f"    forward_days: {best_forward_days}")
         print(f"    threshold: {best_threshold}")
+        print(f"    model_type: {best_model_type}")
         print(f"    model_params: {best_model_params}")
         print(f"    weights: {best_weights}")
+        print(f"    model_score: {best_model_score:.1%}")
         print(f"    accuracy: {best_accuracy:.1%}")
-        print(f"    f1_up: {best_metrics.get('f1_up', 0):.1%}")
-        print(f"    f1_down: {best_metrics.get('f1_down', 0):.1%}")
+
+        # 显示模型排名
+        print(f"\n  Model ranking (top 5):")
+        for i, (name, score) in enumerate(
+            sorted(model_scores.items(), key=lambda x: x[1], reverse=True)[:5]
+        ):
+            print(f"    {i + 1}. {name}: {score:.1%}")
 
     else:
         # Decision scenario - original logic
