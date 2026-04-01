@@ -2,11 +2,18 @@
 """Strategy parameter exploration script.
 
 Search for optimal rule-based strategy parameters for a specific stock.
-Results are saved to SQLite for use in decide.py and backtest.py.
+Results are saved to SQLite for use in decide.py, backtest.py, and predict.py.
 
 Usage:
+    # 决策场景（默认）- 优化 decide.py 相关策略参数
     python scripts/explore_params.py --stock 000001.SZ
     python scripts/explore_params.py --stock 000001.SZ --strategies ma_golden_cross box_oscillation
+
+    # 预测场景 - 优化 predict.py 相关参数
+    python scripts/explore_params.py --stock 000001.SZ --scenario prediction
+    python scripts/explore_params.py --stock 000001.SZ --scenario prediction --metric accuracy
+
+    # 通用参数
     python scripts/explore_params.py --stock 000001.SZ --train-days 200 --backtest-days 60
     python scripts/explore_params.py --stock 000001.SZ --search-method grid --param-samples 5
 """
@@ -115,6 +122,13 @@ def parse_args():
         type=str,
         required=True,
         help="Stock code (e.g., 000001.SZ, 0700.HK, AAPL)",
+    )
+    parser.add_argument(
+        "--scenario",
+        type=str,
+        choices=["decision", "prediction"],
+        default="decision",
+        help="Scenario type: 'decision' for decide.py, 'prediction' for predict.py (default: decision)",
     )
     parser.add_argument(
         "--strategies",
