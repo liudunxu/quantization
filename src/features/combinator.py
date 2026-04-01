@@ -11,6 +11,7 @@ from .industry import IndustryFeatures
 from .money_flow import MoneyFlowFeatures
 from .sentiment import SentimentFeatures
 from .southbound_flow import SouthboundFlowFeatures
+from .company_events import CompanyEventsFeatures
 
 
 class FeatureCombinator:
@@ -26,6 +27,7 @@ class FeatureCombinator:
             "money_flow": MoneyFlowFeatures(cache),
             "sentiment": SentimentFeatures(cache),
             "southbound_flow": SouthboundFlowFeatures(cache),
+            "company_events": CompanyEventsFeatures(cache),
         }
 
     def get_combined_features(
@@ -84,6 +86,13 @@ class FeatureCombinator:
             )
             if not sb_df.empty:
                 features["southbound_flow"] = sb_df
+
+        # Company events features (time series) - All markets
+        events_df = self.extractors["company_events"].get_or_extract(
+            stock_code, force_refresh=force_refresh, days=days
+        )
+        if not events_df.empty:
+            features["company_events"] = events_df
 
         if not features:
             return pd.DataFrame()

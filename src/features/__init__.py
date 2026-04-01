@@ -7,6 +7,7 @@ from .market import MarketFeatures
 from .industry import IndustryFeatures
 from .sentiment import SentimentFeatures
 from .southbound_flow import SouthboundFlowFeatures
+from .company_events import CompanyEventsFeatures
 from .combinator import FeatureCombinator, get_feature_combinator
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "IndustryFeatures",
     "SentimentFeatures",
     "SouthboundFlowFeatures",
+    "CompanyEventsFeatures",
     "FeatureCombinator",
     "get_feature_combinator",
 ]
