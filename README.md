@@ -118,6 +118,56 @@ python scripts/explore_params.py --stock 000001.SZ --metric sharpe_ratio
 python scripts/explore_params.py --stock 000001.SZ --dry-run
 ```
 
+### 4. 涨跌预测
+
+预测股票下个交易日的涨跌方向：
+
+```bash
+# 基础用法
+python scripts/predict.py --stock 000001.SZ
+
+# 港股
+python scripts/predict.py --stock 0700.HK
+
+# 美股
+python scripts/predict.py --stock AAPL
+
+# 自定义参数
+python scripts/predict.py --stock 000001.SZ --train-days 365 --threshold 0.01
+
+# JSON输出（便于程序处理）
+python scripts/predict.py --stock 000001.SZ --output json
+
+# CSV输出（便于批量分析）
+python scripts/predict.py --stock 000001.SZ --output csv
+```
+
+**输出示例：**
+
+```
+============================================================
+  STOCK PREDICTION - 000001.SZ
+============================================================
+
+  Current Price  : 10.50
+  Prediction Date: 2026-03-31
+  Target Date    : 2026-04-01
+
+  === Prediction ===
+  Direction      : UP ↑
+  Signal         : 看涨 (BULLISH)
+  Confidence     : 0.85
+
+  === Probability Distribution ===
+  UP   : 72.3% ██████████████
+  DOWN : 18.5% ███
+  HOLD :  9.2% █
+
+  === Model Performance ===
+  Accuracy       : 68.5%
+============================================================
+```
+
 **可优化的策略：**
 - `ma_golden_cross` - 均线金叉策略
 - `bull_trend` - 趋势跟随策略
@@ -230,6 +280,7 @@ pm.delete_strategy_params('ma_golden_cross', 'hk', '9626.HK')
 quarnt/
 ├── pyproject.toml              # 项目配置和依赖管理 (uv)
 ├── requirements.txt            # pip 依赖文件
+├── ARCHITECTURE.md             # 技术架构文档
 ├── configs/
 │   └── config.yaml             # 全局配置
 ├── cache/
@@ -238,6 +289,14 @@ quarnt/
 ├── data/                       # 原始数据存储
 ├── models/                     # 模型文件
 ├── src/
+│   ├── pipelines/              # 核心流水线（新增）
+│   │   ├── data_pipeline.py    # 数据获取流水线
+│   │   └── model_pipeline.py   # 模型训练/预测流水线
+│   ├── optimization/           # 优化模块（新增）
+│   │   └── scenarios.py        # 场景定义
+│   ├── display/                # 显示模块（新增）
+│   │   ├── formatters.py       # 输出格式化
+│   │   └── prediction_formatter.py # 预测输出格式化
 │   ├── features/               # 特征工程
 │   │   ├── technical.py        # 技术指标
 │   │   ├── fundamental.py      # 基本面数据
@@ -251,6 +310,11 @@ quarnt/
 │   │   ├── engine.py           # 回测引擎核心
 │   │   ├── strategies.py       # 策略配置
 │   │   └── rule_strategies.py  # 基于规则的策略
+│   ├── data_providers/         # 数据源
+│   │   ├── baostock_provider.py
+│   │   ├── akshare_provider.py
+│   │   ├── yfinance_provider.py
+│   │   └── sentiment_provider.py
 │   └── utils/                  # 工具
 │       ├── cache.py            # 特征缓存
 │       ├── config.py           # 配置管理
@@ -259,6 +323,7 @@ quarnt/
 ├── scripts/                    # 入口脚本
 │   ├── decide.py               # 交易决策脚本
 │   ├── backtest.py             # 回测脚本
+│   ├── predict.py              # 涨跌预测脚本（新增）
 │   └── explore_params.py       # 参数优化脚本
 └── tests/                      # 测试
 ```

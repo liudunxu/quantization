@@ -8,6 +8,7 @@ from .formatters import (
     print_strategy_comparison,
     print_final_recommendation,
 )
+from .prediction_formatter import PredictionFormatter
 
 __all__ = [
     "print_section",
@@ -16,4 +17,5 @@ __all__ = [
     "print_backtest_results",
     "print_strategy_comparison",
     "print_final_recommendation",
+    "PredictionFormatter",
 ]
