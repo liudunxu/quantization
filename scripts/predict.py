@@ -157,6 +157,10 @@ def main():
         train_df,
         forward_days=1,
         threshold=args.threshold,
+        use_composite_labels=True,  # 使用composite labels提高准确性
+        trend_weight=0.30,
+        momentum_weight=0.30,
+        market_weight=0.20,
     )
     print("  Model training completed")
 

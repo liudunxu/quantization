@@ -430,6 +430,54 @@ class EnsemblePredictor:
                 explanations.append("CCI超买")
             total_votes += 1
 
+        # 11. 缩量回调策略 (借鉴decide.py的ShrinkPullbackStrategy)
+        volume_ratio = latest.get("volume_ratio", None)
+        ma20_ratio = latest.get("ma_20_ratio", None)
+        if volume_ratio is not None and ma20_ratio is not None:
+            if volume_ratio < 0.7 and 0.95 < ma20_ratio < 1.05:
+                bullish_votes += 1
+                explanations.append("缩量回调(接近MA20)")
+            total_votes += 1
+
+        # 12. 底部放量策略 (借鉴decide.py的BottomVolumeStrategy)
+        price_position = latest.get("price_position", None)
+        if volume_ratio is not None and price_position is not None:
+            if volume_ratio > 2.5 and price_position < 0.25:
+                bullish_votes += 1
+                explanations.append("底部放量")
+            total_votes += 1
+
+        # 13. 放量突破策略 (借鉴decide.py的VolumeBreakoutStrategy)
+        breakout_up = latest.get("breakout_up", 0)
+        if volume_ratio is not None and breakout_up:
+            if volume_ratio > 1.5:
+                bullish_votes += 1
+                explanations.append("放量突破")
+            total_votes += 1
+
+        # 14. Aroon趋势策略
+        aroon_up = latest.get("aroon_up", None)
+        aroon_down = latest.get("aroon_down", None)
+        if aroon_up is not None and aroon_down is not None:
+            if aroon_up > 70 and aroon_down < 30:
+                bullish_votes += 1
+                explanations.append("Aroon强多头")
+            elif aroon_down > 70 and aroon_up < 30:
+                bearish_votes += 1
+                explanations.append("Aroon强空头")
+            total_votes += 1
+
+        # 15. 趋势评分策略 (借鉴decide.py)
+        trend_score = latest.get("trend_score", None)
+        if trend_score is not None:
+            if trend_score > 0.5:
+                bullish_votes += 1
+                explanations.append("趋势评分偏多")
+            elif trend_score < -0.5:
+                bearish_votes += 1
+                explanations.append("趋势评分偏空")
+            total_votes += 1
+
         # 计算结果
         if total_votes == 0:
             return {
@@ -706,11 +754,42 @@ class EnsemblePredictor:
         elif signal_strength > 0.2:
             confidence = min(confidence + 0.10, 0.90)
 
-        # 信号一致性检查
+        # 信号一致性检查 (借鉴decide.py的共识机制)
         agreement_count = sum(1 for s in signals if s["direction"] == direction)
         total_active = sum(1 for s in signals if s["direction"] != "NEUTRAL")
-        if total_active > 0 and agreement_count / total_active > 0.7:
-            confidence = min(confidence + 0.05, 0.95)
+        if total_active > 0:
+            agreement_ratio = agreement_count / total_active
+            # 共识加成: 如果>=3个信号源同意，增强置信度
+            if agreement_count >= 3:
+                confidence = min(confidence + 0.10, 0.95)
+            elif agreement_ratio > 0.7:
+                confidence = min(confidence + 0.05, 0.95)
+
+        # Top3投票机制 (借鉴decide.py)
+        # 按权重排序，选择前3个信号源投票
+        sorted_signals = sorted(signals, key=lambda x: x["weight"], reverse=True)
+        top3_signals = sorted_signals[:3]
+        top3_up = sum(1 for s in top3_signals if s["direction"] == "UP")
+        top3_down = sum(1 for s in top3_signals if s["direction"] == "DOWN")
+        top3_neutral = sum(1 for s in top3_signals if s["direction"] == "NEUTRAL")
+
+        # Top3投票加成
+        if top3_up >= 2 and direction == "UP":
+            confidence = min(confidence + 0.08, 0.95)
+        elif top3_down >= 2 and direction == "DOWN":
+            confidence = min(confidence + 0.08, 0.95)
+
+        # 市场状态过滤 (借鉴decide.py的require_bull_market_for_buy)
+        if market_regime:
+            # 震荡市场中，降低非趋势信号的置信度
+            if market_regime["regime"] == "ranging":
+                if direction == "UP" and technical_result.get("signal_strength", 0) < 2:
+                    confidence = max(confidence - 0.10, 0.3)
+                elif (
+                    direction == "DOWN"
+                    and technical_result.get("signal_strength", 0) < 2
+                ):
+                    confidence = max(confidence - 0.10, 0.3)
 
         # 收集所有解释因素
         bullish_factors = []
