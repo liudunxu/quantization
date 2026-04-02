@@ -13,6 +13,7 @@ from .sentiment import SentimentFeatures
 from .southbound_flow import SouthboundFlowFeatures
 from .company_events import CompanyEventsFeatures
 from .alpha_features import AlphaFeatures, select_features_by_ic, normalize_features
+from .us_market_sentiment import USMarketSentimentFeatures
 
 
 class FeatureCombinator:
@@ -30,6 +31,7 @@ class FeatureCombinator:
             "southbound_flow": SouthboundFlowFeatures(cache),
             "company_events": CompanyEventsFeatures(cache),
             "alpha": AlphaFeatures(cache),
+            "us_market_sentiment": USMarketSentimentFeatures(cache),
         }
 
     def get_combined_features(
@@ -107,6 +109,14 @@ class FeatureCombinator:
                 if not alpha_df.empty:
                     features["alpha"] = alpha_df
 
+        # US market sentiment features - US stocks only
+        if not stock_code.endswith((".SZ", ".SH", ".HK")):
+            us_sent_df = self.extractors["us_market_sentiment"].get_or_extract(
+                stock_code, force_refresh=force_refresh, days=days
+            )
+            if not us_sent_df.empty:
+                features["us_market_sentiment"] = us_sent_df
+
         if not features:
             return pd.DataFrame()
 
@@ -165,6 +175,23 @@ class FeatureCombinator:
                 on="date",
                 how="left",
                 suffixes=("", "_sentiment"),
+            )
+
+        # Merge US market sentiment features
+        if (
+            "us_market_sentiment" in features
+            and not features["us_market_sentiment"].empty
+        ):
+            us_sent_cols = [
+                c
+                for c in features["us_market_sentiment"].columns
+                if c not in ["stock_code", "date"]
+            ]
+            combined = combined.merge(
+                features["us_market_sentiment"][["date"] + us_sent_cols],
+                on="date",
+                how="left",
+                suffixes=("", "_us_sentiment"),
             )
 
         # Merge fundamental features (broadcast to all rows)

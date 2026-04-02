@@ -318,20 +318,20 @@ def main():
     # 9. 添加元数据
     prediction["stock_code"] = stock_code
     prediction["market"] = market
-    prediction["prediction_date"] = datetime.now().strftime("%Y-%m-%d")
 
-    # 使用最后一个交易日的下一个交易日作为目标日期
+    # 使用数据最后一个交易日作为预测基准日期
     if "date" in df.columns and not df.empty:
         last_date = pd.to_datetime(df["date"].max())
-        # 简单处理：加1天，如果是周末则跳到周一
+        prediction["prediction_date"] = last_date.strftime("%Y-%m-%d")
+        # 计算下一个交易日（跳过周末）
         target = last_date + pd.Timedelta(days=1)
         while target.weekday() >= 5:  # 5=周六, 6=周日
             target += pd.Timedelta(days=1)
         prediction["target_date"] = target.strftime("%Y-%m-%d")
     else:
-        prediction["target_date"] = (
-            pd.Timestamp.today() + pd.Timedelta(days=1)
-        ).strftime("%Y-%m-%d")
+        now = pd.Timestamp.now()
+        prediction["prediction_date"] = now.strftime("%Y-%m-%d")
+        prediction["target_date"] = (now + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
 
     prediction["model_accuracy"] = accuracy
     prediction["precision_up"] = eval_metrics["precision_up"]
