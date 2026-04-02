@@ -712,12 +712,18 @@ class EnsemblePredictor:
         # 收集各信号源的方向和权重
         signals = []
 
-        # ML信号
-        ml_direction = (
-            "UP"
-            if ml_result["action"] == "BUY"
-            else ("DOWN" if ml_result["action"] == "SELL" else "NEUTRAL")
-        )
+        # ML信号 - 使用概率和action综合判断
+        if ml_result["action"] == "BUY":
+            ml_direction = "UP"
+        elif ml_result["action"] == "SELL":
+            ml_direction = "DOWN"
+        elif ml_result["up_prob"] > ml_result["down_prob"] + 0.1:
+            ml_direction = "UP"
+        elif ml_result["down_prob"] > ml_result["up_prob"] + 0.1:
+            ml_direction = "DOWN"
+        else:
+            ml_direction = "NEUTRAL"
+
         signals.append(
             {
                 "source": "ML模型",

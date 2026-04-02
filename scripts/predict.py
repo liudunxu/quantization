@@ -126,22 +126,26 @@ def main():
     model_pipeline = ModelPipeline(config)
 
     # 2.1 读取优化后的参数（如果有）
+    # 只有当用户没有显式指定参数时才使用优化参数
     param_manager = get_param_manager()
     optimized_params = param_manager.get_strategy_params(
         "prediction", market, stock_code
     )
 
     if optimized_params:
-        print(f"\n  Using optimized parameters for {stock_code}:")
-        print(f"    threshold: {optimized_params.get('threshold', args.threshold)}")
-        # Override args with optimized params
-        if "threshold" in optimized_params:
+        print(f"\n  Found optimized parameters for {stock_code}")
+        # 只有当用户没有显式指定时才使用优化参数
+        # 检查是否是默认值
+        if args.threshold == 0.008 and "threshold" in optimized_params:
             args.threshold = optimized_params["threshold"]
-        if "ml_weight" in optimized_params:
+            print(f"    Using optimized threshold: {args.threshold}")
+        else:
+            print(f"    Using command-line threshold: {args.threshold}")
+        if args.ml_weight == 0.35 and "ml_weight" in optimized_params:
             args.ml_weight = optimized_params["ml_weight"]
-        if "technical_weight" in optimized_params:
+        if args.technical_weight == 0.25 and "technical_weight" in optimized_params:
             args.technical_weight = optimized_params["technical_weight"]
-        if "momentum_weight" in optimized_params:
+        if args.momentum_weight == 0.15 and "momentum_weight" in optimized_params:
             args.momentum_weight = optimized_params["momentum_weight"]
 
     # 3. 获取数据

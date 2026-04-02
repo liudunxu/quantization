@@ -184,12 +184,18 @@ class AlphaFeatures(BaseFeatureExtractor):
             close < close.shift(1)
         ).astype(int)
 
-        # 23. 特征标准化 (Z-score)
+        # 23. 特征标准化 (Z-score) - 避免DataFrame碎片化
+        zscore_cols = {}
         for col in [c for c in result.columns if c not in ["date", "stock_code"]]:
             if result[col].dtype in [np.float64, np.float32]:
                 mean = result[col].rolling(60, min_periods=20).mean()
                 std = result[col].rolling(60, min_periods=20).std()
-                result[f"{col}_zscore"] = (result[col] - mean) / (std + 1e-10)
+                zscore_cols[f"{col}_zscore"] = (result[col] - mean) / (std + 1e-10)
+
+        # 一次性添加所有zscore列
+        if zscore_cols:
+            zscore_df = pd.DataFrame(zscore_cols, index=result.index)
+            result = pd.concat([result, zscore_df], axis=1)
 
         # 填充空值
         result = result.ffill().bfill().fillna(0)
