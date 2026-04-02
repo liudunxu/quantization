@@ -531,13 +531,25 @@ def main():
                 if len(excluded_dates) > 5:
                     print(f"    ... and {len(excluded_dates) - 5} more")
 
-            # Filter data
-            features_df["date_str"] = pd.to_datetime(features_df["date"]).dt.strftime(
+            # Filter data (direct comparison, no temporary column)
+            features_df_dates = pd.to_datetime(features_df["date"]).dt.strftime(
                 "%Y-%m-%d"
             )
-            features_df = features_df[~features_df["date_str"].isin(excluded_dates)]
-            features_df = features_df.drop(columns=["date_str"])
+            mask = ~features_df_dates.isin(excluded_dates)
+            features_df = features_df[mask].reset_index(drop=True)
             print(f"  Remaining samples after filtering: {len(features_df)}")
+
+            # Validate sufficient data after filtering
+            if len(features_df) < 30:
+                print(
+                    "  Warning: Insufficient data after filtering, disabling date exclusion"
+                )
+                features_df = combinator.get_combined_features(
+                    stock_code=stock_code,
+                    days=total_days,
+                    force_refresh=False,
+                )
+                excluded_dates = []
         else:
             print("  No extreme volatility dates detected")
 
