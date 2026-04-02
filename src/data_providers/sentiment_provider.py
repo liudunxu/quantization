@@ -182,74 +182,59 @@ class SentimentProvider(BaseDataProvider):
         return keyword_score
 
     def _fetch_news_akshare(self, stock_code: str, days: int = 30) -> pd.DataFrame:
-        """Fetch news data from AKShare."""
+        """Fetch news data from AKShare.
+
+        使用可用的新闻API:
+        1. stock_news_main_cx - 财新新闻 (通用财经)
+        2. news_cctv - 央视新闻 (通用新闻)
+        3. news_economic_baidu - 百度财经日历
+        """
         ak = _get_akshare()
         if ak is None:
             return pd.DataFrame()
 
-        symbol = self._convert_code(stock_code)
-
         try:
-            # Try to get news from different sources
-            news_list = []
-
-            # Method 1: stock_news_em (东方财富)
+            # Method 1: stock_news_main_cx (财新新闻 - 通用财经新闻)
             try:
-                df_news = ak.stock_news_em(symbol=symbol)
-                if df_news is not None and not df_news.empty:
-                    df_news["source"] = "eastmoney"
-                    news_list.append(df_news)
+                df_cx = ak.stock_news_main_cx()
+                if df_cx is not None and not df_cx.empty:
+                    df_cx = df_cx.rename(columns={"summary": "title"})
+                    df_cx["content"] = df_cx["title"]  # 财新只有摘要
+                    df_cx["source"] = "caixin"
+                    df_cx["date"] = pd.Timestamp.today().strftime("%Y-%m-%d")
+                    logger.info(f"[{self.name}] Fetched {len(df_cx)} news from caixin")
+                    return df_cx[["date", "title", "content", "source"]].head(100)
             except Exception as e:
-                logger.debug(f"[{self.name}] Failed to fetch news from eastmoney: {e}")
+                logger.debug(f"[{self.name}] Failed to fetch news from caixin: {e}")
 
-            # Method 2: stock_zh_a_sina_news (新浪财经) - for A-shares
-            if not stock_code.endswith(".HK"):
-                try:
-                    df_sina = ak.stock_zh_a_sina_comments(symbol=symbol)
-                    if df_sina is not None and not df_sina.empty:
-                        df_sina["source"] = "sina"
-                        news_list.append(df_sina)
-                except Exception as e:
-                    logger.debug(f"[{self.name}] Failed to fetch news from sina: {e}")
+            # Method 2: news_cctv (央视新闻)
+            try:
+                df_cctv = ak.news_cctv()
+                if df_cctv is not None and not df_cctv.empty:
+                    df_cctv["source"] = "cctv"
+                    df_cctv = df_cctv.rename(columns={"date": "date"})
+                    logger.info(f"[{self.name}] Fetched {len(df_cctv)} news from cctv")
+                    return df_cctv[["date", "title", "content", "source"]].head(100)
+            except Exception as e:
+                logger.debug(f"[{self.name}] Failed to fetch news from cctv: {e}")
 
-            if not news_list:
-                return pd.DataFrame()
+            # Method 3: news_economic_baidu (百度财经日历 - 虽然不是新闻但有事件)
+            try:
+                df_baidu = ak.news_economic_baidu()
+                if df_baidu is not None and not df_baidu.empty:
+                    df_baidu = df_baidu.rename(columns={"事件": "title"})
+                    df_baidu["content"] = df_baidu["title"]
+                    df_baidu["source"] = "baidu_calendar"
+                    df_baidu = df_baidu.rename(columns={"日期": "date"})
+                    logger.info(
+                        f"[{self.name}] Fetched {len(df_baidu)} events from baidu"
+                    )
+                    return df_baidu[["date", "title", "content", "source"]].head(100)
+            except Exception as e:
+                logger.debug(f"[{self.name}] Failed to fetch from baidu: {e}")
 
-            # Combine all news
-            combined = pd.concat(news_list, ignore_index=True)
-
-            # Standardize columns
-            if "新闻标题" in combined.columns:
-                combined = combined.rename(columns={"新闻标题": "title"})
-            elif "content" in combined.columns:
-                combined = combined.rename(columns={"content": "title"})
-
-            if "新闻内容" in combined.columns:
-                combined = combined.rename(columns={"新闻内容": "content"})
-            elif "comment" in combined.columns:
-                combined = combined.rename(columns={"comment": "content"})
-
-            # Ensure we have title column
-            if "title" not in combined.columns:
-                # Try to find any text column
-                text_cols = [
-                    c for c in combined.columns if combined[c].dtype == "object"
-                ]
-                if text_cols:
-                    combined["title"] = combined[text_cols[0]]
-                else:
-                    return pd.DataFrame()
-
-            # Add content if not exists
-            if "content" not in combined.columns:
-                combined["content"] = combined["title"]
-
-            # Keep only necessary columns
-            keep_cols = ["title", "content", "source"]
-            keep_cols = [c for c in keep_cols if c in combined.columns]
-            combined = combined[keep_cols]
-
-            return combined
+            logger.warning(f"[{self.name}] No news data available for {stock_code}")
+            return pd.DataFrame()
 
         except Exception as e:
             logger.warning(f"[{self.name}] Failed to fetch news for {stock_code}: {e}")
@@ -276,12 +261,12 @@ class SentimentProvider(BaseDataProvider):
 
         news_df = self._fetch_news_akshare(stock_code, days)
 
+        # 创建完整的日期范围
+        dates = pd.date_range(end=pd.Timestamp.today(), periods=days, freq="D")
+        dates = dates.normalize()
+
         if news_df.empty:
             # Return default neutral sentiment for past N days
-            # Use today as end date to match technical features
-            dates = pd.date_range(end=pd.Timestamp.today(), periods=days, freq="D")
-            # Remove time component to match technical features
-            dates = dates.normalize()
             result = pd.DataFrame(
                 {
                     "date": dates,
@@ -301,39 +286,61 @@ class SentimentProvider(BaseDataProvider):
                 axis=1,
             )
 
-            # Add date column (use today if not available)
-            if "date" not in news_df.columns:
-                news_df["date"] = pd.Timestamp.today().strftime("%Y-%m-%d")
+            # 解析日期
+            if "date" in news_df.columns:
+                news_df["date"] = pd.to_datetime(news_df["date"], errors="coerce")
+                news_df["date"] = news_df["date"].fillna(pd.Timestamp.today())
+                news_df["date"] = news_df["date"].dt.normalize()
+            else:
+                news_df["date"] = pd.Timestamp.today().normalize()
 
-            # Aggregate by date
+            # 聚合每日情绪
             daily_sentiment = (
                 news_df.groupby("date")
                 .agg({"sentiment_score": "mean", "title": "count"})
                 .reset_index()
             )
-
             daily_sentiment = daily_sentiment.rename(columns={"title": "news_count"})
 
-            # Add dominant news title
-            daily_sentiment["title"] = (
-                news_df.groupby("date")
-                .apply(lambda x: x.iloc[0]["title"] if len(x) > 0 else "")
-                .values
-            )
+            # 添加到完整日期范围
+            result = pd.DataFrame({"date": dates})
+            result = result.merge(daily_sentiment, on="date", how="left")
+            result["sentiment_score"] = result["sentiment_score"].fillna(0.0)
+            result["news_count"] = result["news_count"].fillna(0).astype(int)
 
-            daily_sentiment["source"] = (
-                news_df.groupby("date")
-                .apply(lambda x: x.iloc[0]["source"] if len(x) > 0 else "unknown")
-                .values
-            )
+            # 如果只有今天的新闻，使用今天的平均情绪填充所有日期
+            # 这是因为财新新闻不提供历史新闻的日期
+            if (
+                result["sentiment_score"].sum() != 0
+                and result[result["sentiment_score"] != 0].shape[0] <= 1
+            ):
+                avg_sentiment = result[result["sentiment_score"] != 0][
+                    "sentiment_score"
+                ].mean()
+                total_news = result["news_count"].sum()
+                # 使用衰减的历史情绪 (今天是100%，昨天是80%，前天是60%...)
+                for i, row in result.iterrows():
+                    days_ago = result.index[-1] - i
+                    decay = max(0.5 ** (days_ago / 7), 0.1)  # 每周衰减50%
+                    result.loc[i, "sentiment_score"] = avg_sentiment * decay
 
-            result = daily_sentiment.sort_values("date").reset_index(drop=True)
+            # 添加标题和来源 (使用最近的新闻)
+            if not news_df.empty:
+                result["title"] = "Aggregated"
+                result["source"] = (
+                    news_df["source"].iloc[0]
+                    if "source" in news_df.columns
+                    else "unknown"
+                )
+            else:
+                result["title"] = "No news"
+                result["source"] = "none"
 
         # Cache the result
         self._news_cache[stock_code] = (datetime.now(), result)
 
         logger.info(
-            f"[{self.name}] Fetched sentiment for {stock_code}: {len(result)} days"
+            f"[{self.name}] Fetched sentiment for {stock_code}: {len(result)} days, avg_score={result['sentiment_score'].mean():.3f}"
         )
         return result
 
