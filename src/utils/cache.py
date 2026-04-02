@@ -13,10 +13,14 @@ import io
 class SQLiteFeatureCache:
     """SQLite-based feature cache with fine-grained control."""
 
-    def __init__(self, cache_dir: str = "cache"):
+    # Default cache expiration in hours (24 hours = 1 day)
+    DEFAULT_TTL_HOURS = 24
+
+    def __init__(self, cache_dir: str = "cache", ttl_hours: Optional[int] = None):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.cache_dir / "feature_cache.db"
+        self.ttl_hours = ttl_hours or self.DEFAULT_TTL_HOURS
         self._init_db()
 
     def _init_db(self) -> None:
@@ -91,10 +95,37 @@ class SQLiteFeatureCache:
     def get(
         self, stock_code: str, feature_type: str, params: Optional[Dict] = None
     ) -> Optional[pd.DataFrame]:
-        """Get cached features for a stock."""
+        """Get cached features for a stock.
+
+        Returns None if cache is expired (older than ttl_hours).
+        """
         cache_key = self._compute_key(stock_code, feature_type, params)
 
         with sqlite3.connect(self.db_path) as conn:
+            # Check if cache is expired
+            cursor = conn.execute(
+                "SELECT updated_at FROM cache_metadata WHERE stock_code = ? AND feature_type = ? AND cache_key = ?",
+                (stock_code, feature_type, cache_key),
+            )
+            meta_row = cursor.fetchone()
+
+            if meta_row is not None:
+                updated_at = pd.to_datetime(meta_row[0])
+                age_hours = (pd.Timestamp.now() - updated_at).total_seconds() / 3600
+                if age_hours > self.ttl_hours:
+                    # Cache expired, delete it
+                    conn.execute(
+                        "DELETE FROM cache_data WHERE stock_code = ? AND feature_type = ? AND cache_key = ?",
+                        (stock_code, feature_type, cache_key),
+                    )
+                    conn.execute(
+                        "DELETE FROM cache_metadata WHERE stock_code = ? AND feature_type = ? AND cache_key = ?",
+                        (stock_code, feature_type, cache_key),
+                    )
+                    conn.commit()
+                    return None
+
+            # Get cached data
             cursor = conn.execute(
                 "SELECT data FROM cache_data WHERE stock_code = ? AND feature_type = ? AND cache_key = ?",
                 (stock_code, feature_type, cache_key),
