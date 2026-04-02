@@ -166,8 +166,8 @@ python scripts/predict.py --stock AAPL
 # 自定义参数
 python scripts/predict.py --stock 000001.SZ --train-days 365 --threshold 0.01
 
-# 使用多模型集成 (CatBoost + LightGBM + XGBoost)
-python scripts/predict.py --stock 000001.SZ --multi-model
+# 使用单模型（多模型集成默认开启）
+python scripts/predict.py --stock 000001.SZ --single-model
 
 # 排除极端波动日期（降低异常值影响）
 python scripts/predict.py --stock 000001.SZ --exclude-dates

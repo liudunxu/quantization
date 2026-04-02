@@ -85,7 +85,13 @@ def parse_args():
     parser.add_argument(
         "--multi-model",
         action="store_true",
-        help="使用多模型集成 (CatBoost + LightGBM + XGBoost)",
+        default=True,
+        help="使用多模型集成 (CatBoost + LightGBM + XGBoost) (默认开启)",
+    )
+    parser.add_argument(
+        "--single-model",
+        action="store_true",
+        help="仅使用单个 CatBoost 模型",
     )
     parser.add_argument(
         "--ml-weight", type=float, default=0.35, help="ML模型权重 (默认: 0.35)"
@@ -199,17 +205,24 @@ def main():
 
         if excluded_dates:
             print(f"  Found {len(excluded_dates)} extreme volatility dates to exclude")
-            if logger.isEnabledFor(logging.INFO):
-                for d in excluded_dates[:5]:  # Show first 5
-                    print(f"    - {d}")
-                if len(excluded_dates) > 5:
-                    print(f"    ... and {len(excluded_dates) - 5} more")
+            for d in excluded_dates[:5]:  # Show first 5
+                print(f"    - {d}")
+            if len(excluded_dates) > 5:
+                print(f"    ... and {len(excluded_dates) - 5} more")
 
-            # 过滤数据
-            df["date_str"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
-            df = df[~df["date_str"].isin(excluded_dates)]
-            df = df.drop(columns=["date_str"])
+            # 过滤数据（直接比较日期，避免创建临时列）
+            df_dates = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
+            mask = ~df_dates.isin(excluded_dates)
+            df = df[mask].reset_index(drop=True)
             print(f"  Remaining samples after filtering: {len(df)}")
+
+            # 验证过滤后数据量是否足够
+            if len(df) < 50:
+                print(
+                    "  Warning: Insufficient data after filtering, disabling date exclusion"
+                )
+                df = data_pipeline.fetch_features(stock_code, total_days, args.refresh)
+                excluded_dates = []
         else:
             print("  No extreme volatility dates detected")
 
@@ -222,8 +235,11 @@ def main():
     # 5. 训练模型
     print("\n  Training model (forward_days=1)...")
 
+    # --single-model 覆盖默认的多模型设置
+    use_multi_model = args.multi_model and not args.single_model
+
     train_result = {}
-    if args.multi_model:
+    if use_multi_model:
         print("  Using multi-model ensemble (CatBoost + LightGBM + XGBoost)...")
         from src.models import MultiModelEnsemble
 
@@ -237,6 +253,7 @@ def main():
         print(f"  Models trained: {train_result.get('models_trained', [])}")
         print(f"  Average accuracy: {train_result.get('train_accuracy', 0):.1%}")
     else:
+        print("  Using single CatBoost model...")
         model = model_pipeline.train(
             train_df,
             forward_days=1,
@@ -250,22 +267,31 @@ def main():
 
     # 6. 模型评估
     print("\n  Evaluating model...")
-    if args.multi_model:
+    if use_multi_model:
         # MultiModelEnsemble 使用内置评估
         accuracy = train_result.get("train_accuracy", 0)
+        # 尝试从训练结果中获取各模型的评估指标
+        model_results = train_result.get("model_results", {})
+        # 取第一个模型的结果作为参考（多模型集成没有统一的precision/recall）
+        first_result = next(iter(model_results.values()), {}) if model_results else {}
         eval_metrics = {
             "accuracy": accuracy,
-            "precision_up": 0,
-            "recall_up": 0,
-            "f1_up": 0,
-            "precision_down": 0,
-            "recall_down": 0,
-            "f1_down": 0,
+            "precision_up": first_result.get("precision_up", 0),
+            "recall_up": first_result.get("recall_up", 0),
+            "f1_up": first_result.get("f1_up", 0),
+            "precision_down": first_result.get("precision_down", 0),
+            "recall_down": first_result.get("recall_down", 0),
+            "f1_down": first_result.get("f1_down", 0),
         }
         print(f"  Models trained : {train_result.get('models_trained', [])}")
         print(f"  Avg Accuracy   : {accuracy:.1%}")
         for name, result in train_result.get("model_results", {}).items():
-            print(f"  {name} Accuracy : {result.get('train_accuracy', 0):.1%}")
+            acc = result.get("train_accuracy", 0)
+            f1_up = result.get("f1_up", 0)
+            f1_down = result.get("f1_down", 0)
+            print(
+                f"  {name} Accuracy: {acc:.1%}, F1 UP: {f1_up:.1%}, F1 DOWN: {f1_down:.1%}"
+            )
     else:
         eval_metrics = model_pipeline.evaluate_metrics(
             model, eval_df, threshold=args.threshold
