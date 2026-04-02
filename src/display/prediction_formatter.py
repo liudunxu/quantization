@@ -110,7 +110,17 @@ class PredictionFormatter:
                     "strategy": "策略叠加",
                     "support_resistance": "支撑阻力",
                 }
+                source_descriptions = {
+                    "ml": "机器学习模型(CatBoost)的直接预测结果",
+                    "technical": "基于技术指标(MA、RSI、MACD等)的信号汇总",
+                    "momentum": "价格动量(5日/10日/20日变化率)的强度判断",
+                    "trend": "ADX趋势指标的强弱评估",
+                    "alpha": "Alpha因子的异常收益信号",
+                    "strategy": "多个交易策略的投票结果",
+                    "support_resistance": "关键价位突破的信号",
+                }
                 label = source_labels.get(source_name, source_name)
+                description = source_descriptions.get(source_name, "")
                 direction = source_info.get("direction", "NEUTRAL")
                 conf = source_info.get("confidence", 0)
                 direction_symbol = {
@@ -123,6 +133,8 @@ class PredictionFormatter:
                 lines.append(
                     f"  {label:<12} : {direction_symbol} (置信度: {conf:.1%}){vote_text}"
                 )
+                if description:
+                    lines.append(f"  {'':12}   {description}")
 
         # 添加看涨因素
         bullish_factors = p.get("bullish_factors", [])

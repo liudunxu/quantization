@@ -179,10 +179,10 @@ class AKShareProvider(BaseDataProvider):
             return pd.DataFrame()
 
         try:
-            # 获取沪港通-港股通(沪)数据
-            df_sh = akshare_lib.stock_hsgt_hist_em(symbol="港股通(沪)")
-            # 获取深港通-港股通(深)数据
-            df_sz = akshare_lib.stock_hsgt_hist_em(symbol="港股通(深)")
+            # 获取沪港通-港股通沪数据
+            df_sh = akshare_lib.stock_hsgt_hist_em(symbol="港股通沪")
+            # 获取深港通-港股通深数据
+            df_sz = akshare_lib.stock_hsgt_hist_em(symbol="港股通深")
 
             if df_sh is None or df_sh.empty:
                 logger.warning("[akshare] No southbound flow data (港股通沪)")
