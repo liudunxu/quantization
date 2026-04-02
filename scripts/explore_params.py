@@ -32,7 +32,13 @@ import numpy as np
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.utils import get_cache, get_config, get_param_manager, StockInfoResolver
+from src.utils import (
+    get_cache,
+    get_config,
+    get_param_manager,
+    StockInfoResolver,
+    get_important_dates_manager,
+)
 from src.features import get_feature_combinator
 from src.backtest import BacktestEngine
 from src.backtest.rule_strategies import (
@@ -190,6 +196,17 @@ def parse_args():
         "--verbose",
         action="store_true",
         help="Verbose output",
+    )
+    parser.add_argument(
+        "--exclude-dates",
+        action="store_true",
+        help="Exclude extreme volatility dates to reduce outlier impact",
+    )
+    parser.add_argument(
+        "--exclude-threshold",
+        type=float,
+        default=2.0,
+        help="Extreme volatility detection threshold (std multiplier, default: 2.0)",
     )
     return parser.parse_args()
 
@@ -478,6 +495,51 @@ def main():
         return
 
     print(f"  Total samples: {len(features_df)}")
+
+    # Process important dates if enabled
+    excluded_dates = []
+    if args.exclude_dates:
+        print("\n  Processing important dates...")
+        dates_manager = get_important_dates_manager()
+
+        # Get date range
+        start_date = (
+            features_df["date"].min().strftime("%Y-%m-%d")
+            if "date" in features_df.columns
+            else None
+        )
+        end_date = (
+            features_df["date"].max().strftime("%Y-%m-%d")
+            if "date" in features_df.columns
+            else None
+        )
+
+        # Get or detect important dates
+        excluded_dates = dates_manager.get_or_detect_dates(
+            df=features_df,
+            market=market,
+            start_date=start_date,
+            end_date=end_date,
+            auto_detect=True,
+        )
+
+        if excluded_dates:
+            print(f"  Found {len(excluded_dates)} extreme volatility dates to exclude")
+            if args.verbose:
+                for d in excluded_dates[:5]:  # Show first 5
+                    print(f"    - {d}")
+                if len(excluded_dates) > 5:
+                    print(f"    ... and {len(excluded_dates) - 5} more")
+
+            # Filter data
+            features_df["date_str"] = pd.to_datetime(features_df["date"]).dt.strftime(
+                "%Y-%m-%d"
+            )
+            features_df = features_df[~features_df["date_str"].isin(excluded_dates)]
+            features_df = features_df.drop(columns=["date_str"])
+            print(f"  Remaining samples after filtering: {len(features_df)}")
+        else:
+            print("  No extreme volatility dates detected")
 
     # Split into train and backtest periods
     train_df = (

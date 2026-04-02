@@ -24,7 +24,7 @@ src/
 ├── features/        # Feature engineering (one file per feature type)
 ├── models/          # ML model training/prediction
 ├── backtest/        # Backtesting engine and strategies
-└── utils/           # Utilities (cache, config, stock_info)
+└── utils/           # Utilities (cache, config, stock_info, important_dates)
 ```
 
 ### Naming Conventions
@@ -58,8 +58,11 @@ src/
 |------|---------|
 | `scripts/decide.py` | Main entry point for trading decisions |
 | `scripts/backtest.py` | Strategy comparison and backtesting |
+| `scripts/predict.py` | Stock price prediction with ML |
+| `scripts/explore_params.py` | Parameter optimization |
 | `src/backtest/engine.py` | Core backtesting engine with risk control |
 | `src/models/trainer.py` | CatBoost model training with ensemble |
+| `src/utils/important_dates.py` | Important dates management for extreme volatility filtering |
 | `configs/config.yaml` | All configuration parameters |
 
 ## Testing
@@ -72,6 +75,15 @@ python -m pytest tests/ -v
 ### Test Specific Stock
 ```bash
 python scripts/decide.py --stock 000001.SZ --train-days 100 --backtest-days 20
+```
+
+### Test with Extreme Date Filtering
+```bash
+# Predict with extreme date filtering
+python scripts/predict.py --stock 000001.SZ --exclude-dates
+
+# Optimize parameters with extreme date filtering
+python scripts/explore_params.py --stock 000001.SZ --exclude-dates
 ```
 
 ### Test Different Markets
@@ -128,6 +140,11 @@ model:
 3. **Low trading frequency**
    - Adjust `confidence_threshold` in config
    - Check market-specific parameters
+
+4. **Extreme date filtering not working**
+   - Check if `cache/important_dates.db` exists
+   - Verify data has required columns (date, open, high, low, close)
+   - Lower `--exclude-threshold` to detect more dates
 
 ## Git Workflow
 

@@ -31,7 +31,13 @@ import pandas as pd
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.utils import get_cache, get_config, get_param_manager, StockInfoResolver
+from src.utils import (
+    get_cache,
+    get_config,
+    get_param_manager,
+    StockInfoResolver,
+    get_important_dates_manager,
+)
 from src.pipelines import DataPipeline, ModelPipeline
 from src.predictors import EnsemblePredictor
 from src.display import PredictionFormatter
@@ -92,6 +98,17 @@ def parse_args():
     )
     parser.add_argument(
         "--min-confidence", type=float, default=0.65, help="最低置信度阈值 (默认: 0.65)"
+    )
+    parser.add_argument(
+        "--exclude-dates",
+        action="store_true",
+        help="排除极端波动日期以降低异常值影响",
+    )
+    parser.add_argument(
+        "--exclude-threshold",
+        type=float,
+        default=2.0,
+        help="极端波动检测阈值(标准差倍数, 默认: 2.0)",
     )
     return parser.parse_args()
 
@@ -156,6 +173,45 @@ def main():
     if df.empty or len(df) < 50:
         print("  Error: Insufficient data")
         return
+
+    # 3.1 处理重要日期（如果启用）
+    excluded_dates = []
+    if args.exclude_dates:
+        print("\n  Processing important dates...")
+        dates_manager = get_important_dates_manager()
+
+        # 获取日期范围
+        start_date = (
+            df["date"].min().strftime("%Y-%m-%d") if "date" in df.columns else None
+        )
+        end_date = (
+            df["date"].max().strftime("%Y-%m-%d") if "date" in df.columns else None
+        )
+
+        # 获取或检测重要日期
+        excluded_dates = dates_manager.get_or_detect_dates(
+            df=df,
+            market=market,
+            start_date=start_date,
+            end_date=end_date,
+            auto_detect=True,
+        )
+
+        if excluded_dates:
+            print(f"  Found {len(excluded_dates)} extreme volatility dates to exclude")
+            if logger.isEnabledFor(logging.INFO):
+                for d in excluded_dates[:5]:  # Show first 5
+                    print(f"    - {d}")
+                if len(excluded_dates) > 5:
+                    print(f"    ... and {len(excluded_dates) - 5} more")
+
+            # 过滤数据
+            df["date_str"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
+            df = df[~df["date_str"].isin(excluded_dates)]
+            df = df.drop(columns=["date_str"])
+            print(f"  Remaining samples after filtering: {len(df)}")
+        else:
+            print("  No extreme volatility dates detected")
 
     # 4. 划分数据
     train_df, eval_df = data_pipeline.split_train_eval(df, backtest_days=30)

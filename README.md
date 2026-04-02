@@ -10,6 +10,7 @@
 - **回测系统**：支持多种策略对比（9种规则策略 + 4种ML策略）
 - **参数优化**：支持为特定股票寻找最优策略参数
 - **跨市场支持**：A股（000001.SZ）、港股（0700.HK）、美股（AAPL）
+- **极端日期过滤**：自动检测并排除高波动日期，降低异常值对模型的影响
 
 ## 快速开始
 
@@ -116,6 +117,9 @@ python scripts/explore_params.py --stock 000001.SZ --train-days 365 --backtest-d
 # 指定优化指标
 python scripts/explore_params.py --stock 000001.SZ --metric sharpe_ratio
 
+# 排除极端波动日期（降低异常值影响）
+python scripts/explore_params.py --stock 000001.SZ --exclude-dates
+
 # 试运行（不保存结果）
 python scripts/explore_params.py --stock 000001.SZ --dry-run
 ```
@@ -164,6 +168,9 @@ python scripts/predict.py --stock 000001.SZ --train-days 365 --threshold 0.01
 
 # 使用多模型集成 (CatBoost + LightGBM + XGBoost)
 python scripts/predict.py --stock 000001.SZ --multi-model
+
+# 排除极端波动日期（降低异常值影响）
+python scripts/predict.py --stock 000001.SZ --exclude-dates
 
 # JSON输出（便于程序处理）
 python scripts/predict.py --stock 000001.SZ --output json
@@ -414,7 +421,8 @@ quarnt/
 │       ├── cache.py            # 特征缓存
 │       ├── config.py           # 配置管理
 │       ├── stock_info.py       # 股票信息
-│       └── strategy_params.py  # 策略参数管理
+│       ├── strategy_params.py  # 策略参数管理
+│       └── important_dates.py  # 重要日期管理（新增）
 ├── scripts/                    # 入口脚本
 │   ├── decide.py               # 交易决策脚本
 │   ├── backtest.py             # 回测脚本
@@ -597,6 +605,83 @@ backtest:
   initial_cash: 100000
   commission: 0.001      # 手续费
   slippage: 0.001        # 滑点
+```
+
+## 极端日期过滤
+
+系统支持自动检测并排除高波动日期，降低极端行情对模型训练的负面影响。
+
+### 功能说明
+
+**目的：**
+- 识别历史数据中的极端波动日期（如暴跌、暴涨、熔断等）
+- 在训练和参数优化时排除这些日期，避免模型学习到异常模式
+- 提高模型在正常市场条件下的预测稳定性
+
+**检测方法：**
+- **日涨跌幅**：超过均值 + N倍标准差的日期
+- **日内振幅**：(最高价 - 最低价) / 开盘价 异常的日期
+- **跳空缺口**：开盘价与前收盘价差异超过2%的日期
+
+### 使用方式
+
+```bash
+# predict.py - 预测时排除极端日期
+python scripts/predict.py --stock 000001.SZ --exclude-dates
+
+# explore_params.py - 参数优化时排除极端日期
+python scripts/explore_params.py --stock 000001.SZ --exclude-dates
+
+# 自定义检测阈值（默认2.0倍标准差）
+python scripts/predict.py --stock 000001.SZ --exclude-dates --exclude-threshold 2.5
+```
+
+### 输出示例
+
+```
+  Processing important dates...
+  Found 8 extreme volatility dates to exclude
+    - 2025-06-03
+    - 2025-06-26
+    - 2025-06-27
+    - 2025-07-04
+    - 2025-07-10
+    ... and 3 more
+  Remaining samples after filtering: 222
+```
+
+### 数据存储
+
+检测到的极端日期会自动保存到 `cache/important_dates.db`，避免重复检测：
+
+```sql
+-- 查看已记录的极端日期
+SELECT date, market, description 
+FROM important_dates 
+WHERE event_type = 'high_volatility'
+ORDER BY date DESC;
+```
+
+### API 使用
+
+```python
+from src.utils import get_important_dates_manager
+
+manager = get_important_dates_manager()
+
+# 获取某市场的极端日期
+dates = manager.get_dates_as_list(market='a_share')
+
+# 手动添加重要日期
+manager.add_date(
+    date='2024-02-05',
+    market='a_share',
+    event_type='crisis',
+    description='量化危机引发的异常下跌'
+)
+
+# 从数据自动检测
+detected = manager.detect_high_volatility_dates(df, market='a_share')
 ```
 
 ## License
