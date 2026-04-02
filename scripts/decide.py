@@ -5,6 +5,7 @@ Usage:
     python scripts/decide.py --stock 000001.SZ
     python scripts/decide.py --stock 0700.HK
     python scripts/decide.py --stock AAPL
+    python scripts/decide.py --stock 000001.SZ --exclude-dates
 """
 
 import argparse
@@ -16,7 +17,12 @@ import numpy as np
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.utils import get_cache, get_config, StockInfoResolver
+from src.utils import (
+    get_cache,
+    get_config,
+    StockInfoResolver,
+    get_important_dates_manager,
+)
 from src.features import get_feature_combinator, SentimentFeatures
 from src.models import StockTradingModel, get_model
 from src.backtest import (
@@ -43,6 +49,17 @@ def parse_args():
     )
     parser.add_argument(
         "--train-days", type=int, default=365, help="Number of days for training"
+    )
+    parser.add_argument(
+        "--exclude-dates",
+        action="store_true",
+        help="Exclude extreme volatility dates to reduce outlier impact",
+    )
+    parser.add_argument(
+        "--exclude-threshold",
+        type=float,
+        default=2.0,
+        help="Extreme volatility detection threshold (std multiplier, default: 2.0)",
     )
     return parser.parse_args()
 
@@ -1059,6 +1076,7 @@ def main():
     # Resolve stock info
     try:
         stock_info = StockInfoResolver.resolve(stock_code)
+        market = stock_info.market.replace("_share", "")
         print(f"  Market    : {stock_info.market}")
         print(f"  Exchange  : {stock_info.exchange}")
     except ValueError as e:
@@ -1091,6 +1109,56 @@ def main():
     except Exception as e:
         print(f"  Error fetching data: {e}")
         sys.exit(1)
+
+    # Process important dates if enabled
+    excluded_dates = []
+    if args.exclude_dates:
+        print("\n  Processing important dates...")
+        dates_manager = get_important_dates_manager()
+
+        start_date = (
+            features_df["date"].min().strftime("%Y-%m-%d")
+            if "date" in features_df.columns
+            else None
+        )
+        end_date = (
+            features_df["date"].max().strftime("%Y-%m-%d")
+            if "date" in features_df.columns
+            else None
+        )
+
+        excluded_dates = dates_manager.get_or_detect_dates(
+            df=features_df,
+            market=market,
+            start_date=start_date,
+            end_date=end_date,
+            auto_detect=True,
+        )
+
+        if excluded_dates:
+            print(f"  Found {len(excluded_dates)} extreme volatility dates to exclude")
+            for d in excluded_dates[:5]:
+                print(f"    - {d}")
+            if len(excluded_dates) > 5:
+                print(f"    ... and {len(excluded_dates) - 5} more")
+
+            features_df_dates = pd.to_datetime(features_df["date"]).dt.strftime(
+                "%Y-%m-%d"
+            )
+            mask = ~features_df_dates.isin(excluded_dates)
+            features_df = features_df[mask].reset_index(drop=True)
+            print(f"  Remaining samples after filtering: {len(features_df)}")
+
+            if len(features_df) < 30:
+                print(
+                    "  Warning: Insufficient data after filtering, disabling date exclusion"
+                )
+                features_df = combinator.get_combined_features(
+                    stock_code, days=args.train_days, force_refresh=args.refresh
+                )
+                excluded_dates = []
+        else:
+            print("  No extreme volatility dates detected")
 
     # Try to get real-time price for latest data point
     try:
