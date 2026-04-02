@@ -268,30 +268,19 @@ def main():
     # 6. 模型评估
     print("\n  Evaluating model...")
     if use_multi_model:
-        # MultiModelEnsemble 使用内置评估
-        accuracy = train_result.get("train_accuracy", 0)
-        # 尝试从训练结果中获取各模型的评估指标
-        model_results = train_result.get("model_results", {})
-        # 取第一个模型的结果作为参考（多模型集成没有统一的precision/recall）
-        first_result = next(iter(model_results.values()), {}) if model_results else {}
-        eval_metrics = {
-            "accuracy": accuracy,
-            "precision_up": first_result.get("precision_up", 0),
-            "recall_up": first_result.get("recall_up", 0),
-            "f1_up": first_result.get("f1_up", 0),
-            "precision_down": first_result.get("precision_down", 0),
-            "recall_down": first_result.get("recall_down", 0),
-            "f1_down": first_result.get("f1_down", 0),
-        }
+        # 多模型也使用eval_df进行完整评估
+        eval_metrics = model_pipeline.evaluate_metrics(
+            model, eval_df, threshold=args.threshold
+        )
+        accuracy = eval_metrics["accuracy"]
         print(f"  Models trained : {train_result.get('models_trained', [])}")
-        print(f"  Avg Accuracy   : {accuracy:.1%}")
-        for name, result in train_result.get("model_results", {}).items():
-            acc = result.get("train_accuracy", 0)
-            f1_up = result.get("f1_up", 0)
-            f1_down = result.get("f1_down", 0)
-            print(
-                f"  {name} Accuracy: {acc:.1%}, F1 UP: {f1_up:.1%}, F1 DOWN: {f1_down:.1%}"
-            )
+        print(f"  Eval Accuracy  : {accuracy:.1%}")
+        print(f"  UP Precision   : {eval_metrics['precision_up']:.1%}")
+        print(f"  UP Recall      : {eval_metrics['recall_up']:.1%}")
+        print(f"  UP F1          : {eval_metrics['f1_up']:.1%}")
+        print(f"  DOWN Precision : {eval_metrics['precision_down']:.1%}")
+        print(f"  DOWN Recall    : {eval_metrics['recall_down']:.1%}")
+        print(f"  DOWN F1        : {eval_metrics['f1_down']:.1%}")
     else:
         eval_metrics = model_pipeline.evaluate_metrics(
             model, eval_df, threshold=args.threshold
@@ -330,9 +319,20 @@ def main():
     prediction["stock_code"] = stock_code
     prediction["market"] = market
     prediction["prediction_date"] = datetime.now().strftime("%Y-%m-%d")
-    prediction["target_date"] = (pd.Timestamp.today() + pd.Timedelta(days=1)).strftime(
-        "%Y-%m-%d"
-    )
+
+    # 使用最后一个交易日的下一个交易日作为目标日期
+    if "date" in df.columns and not df.empty:
+        last_date = pd.to_datetime(df["date"].max())
+        # 简单处理：加1天，如果是周末则跳到周一
+        target = last_date + pd.Timedelta(days=1)
+        while target.weekday() >= 5:  # 5=周六, 6=周日
+            target += pd.Timedelta(days=1)
+        prediction["target_date"] = target.strftime("%Y-%m-%d")
+    else:
+        prediction["target_date"] = (
+            pd.Timestamp.today() + pd.Timedelta(days=1)
+        ).strftime("%Y-%m-%d")
+
     prediction["model_accuracy"] = accuracy
     prediction["precision_up"] = eval_metrics["precision_up"]
     prediction["recall_up"] = eval_metrics["recall_up"]

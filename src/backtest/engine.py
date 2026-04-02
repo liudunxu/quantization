@@ -672,16 +672,7 @@ class BacktestEngine:
 
         # Calculate dollar risk amount
         account_value = cash + (position * avg_cost * 100)  # Rough estimate
-        risk_amount = max(
-            account_value * risk_per_trade_pct,
-            500,  # Min $500 risk
-        )
-
-        # Calculate dollar risk amount
-        account_value = cash + (position * avg_cost * 100)  # Rough estimate
-        risk_amount = max(
-            account_value * risk_per_trade_pct, 1000
-        )  # Min $1000 risk (reduced from $2000)
+        risk_amount = max(account_value * risk_per_trade_pct, 1000)  # Min $1000 risk
 
         # Maximum position based on ATR stop distance
         atr_stop_distance = atr * atr_multiplier

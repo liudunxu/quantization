@@ -601,10 +601,10 @@ def main():
         forward_days_list = [1, 2, 3, 5]
         thresholds = [0.003, 0.005, 0.007, 0.01]
 
-        best_accuracy = 0
-        best_f1 = 0
         best_forward_days = 1
         best_threshold = 0.005
+        best_accuracy = 0
+        best_composite = 0
         best_metrics = {}
 
         for fwd_days in forward_days_list:
@@ -622,9 +622,9 @@ def main():
                         + metrics["f1_up"] * 0.3
                         + metrics["f1_down"] * 0.3
                     )
-                    if composite > best_accuracy + best_f1:
+                    if composite > best_composite:
                         best_accuracy = metrics["accuracy"]
-                        best_f1 = composite
+                        best_composite = composite
                         best_forward_days = fwd_days
                         best_threshold = threshold
                         best_metrics = metrics
@@ -634,7 +634,7 @@ def main():
         print(
             f"    Best: forward_days={best_forward_days}, threshold={best_threshold:.3f}"
         )
-        print(f"    Accuracy={best_accuracy:.1%}, Composite={best_f1:.1%}")
+        print(f"    Accuracy={best_accuracy:.1%}, Composite={best_composite:.1%}")
 
         # ========== 2. 测试不同模型和参数 ==========
         print("\n  [2/5] Testing different models and parameters...")

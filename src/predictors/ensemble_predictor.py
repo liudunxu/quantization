@@ -828,6 +828,15 @@ class EnsemblePredictor:
         )
         neutral_score = sum(s["weight"] for s in signals if s["direction"] == "NEUTRAL")
 
+        # 信号数量加成: 当某方向信号数量明显多于另一方时给予加成
+        up_count = sum(1 for s in signals if s["direction"] == "UP")
+        down_count = sum(1 for s in signals if s["direction"] == "DOWN")
+        count_diff = up_count - down_count
+        # 每个信号差异给予0.02的加成(避免微弱加权差异导致方向错误)
+        score_bonus = count_diff * 0.02
+        up_score += max(score_bonus, 0)
+        down_score += max(-score_bonus, 0)
+
         # 降低中性信号权重，让UP/DOWN信号更容易胜出
         neutral_score *= 0.3
 

@@ -174,14 +174,14 @@ class ModelPipeline:
 
     def evaluate_metrics(
         self,
-        model: StockTradingModel,
+        model,
         eval_df: pd.DataFrame,
         threshold: float = 0.0,
     ) -> Dict[str, Any]:
         """评估模型指标 - 包含accuracy、precision、recall、F1
 
         Args:
-            model: 训练好的模型
+            model: 训练好的模型 (StockTradingModel or MultiModelEnsemble)
             eval_df: 评估数据
             threshold: 涨跌阈值
 
@@ -226,8 +226,15 @@ class ModelPipeline:
                 actual_direction = "NEUTRAL"
 
             try:
-                prediction = self.predict_direction(model, row, current_close)
-                predicted_direction = prediction["direction"]
+                # 处理MultiModelEnsemble
+                model_name = getattr(model, "model_name", "")
+                if model_name == "MultiModelEnsemble":
+                    action, confidence = model.predict(row)
+                    action_map = {"BUY": "UP", "SELL": "DOWN", "HOLD": "NEUTRAL"}
+                    predicted_direction = action_map.get(action, "NEUTRAL")
+                else:
+                    prediction = self.predict_direction(model, row, current_close)
+                    predicted_direction = prediction["direction"]
 
                 if predicted_direction == actual_direction:
                     correct += 1
