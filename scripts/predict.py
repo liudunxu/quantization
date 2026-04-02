@@ -238,6 +238,7 @@ def main():
             "ml_weight": args.ml_weight,
             "technical_weight": args.technical_weight,
             "momentum_weight": args.momentum_weight,
+            "model_accuracy": accuracy,  # 传递模型准确率用于置信度校准
         }
     )
 

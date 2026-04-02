@@ -37,6 +37,9 @@ class EnsemblePredictor:
         self.alpha_weight = self.config.get("alpha_weight", 0.05)  # 超额收益权重
         self.strategy_weight = self.config.get("strategy_weight", 0.10)  # 规则策略权重
 
+        # 模型准确率用于置信度校准
+        self.model_accuracy = self.config.get("model_accuracy", 0.5)
+
         # 策略叠加配置
         self.stacking_strategies = self.config.get("stacking_strategies", [])
 
@@ -913,6 +916,29 @@ class EnsemblePredictor:
             ):
                 if direction != "NEUTRAL":
                     confidence = max(confidence - 0.05, 0.40)
+
+        # ========== 置信度校准 ==========
+        # 使用模型准确率来校准置信度，避免过度自信
+        # 如果模型准确率只有20%，置信度不应该超过50%
+        if self.model_accuracy > 0:
+            # 将置信度映射到模型准确率的合理范围内
+            # 最低保真度 = model_accuracy * 0.8
+            # 最高置信度 = min(model_accuracy * 2, 0.85)
+            min_confidence = max(self.model_accuracy * 0.8, 0.35)
+            max_confidence = min(self.model_accuracy * 2.0, 0.85)
+
+            # 将原始置信度映射到校准范围
+            if confidence > 0.5:
+                # 高置信度部分需要更多压缩
+                calibrated = min_confidence + (confidence - 0.5) * 2 * (
+                    max_confidence - min_confidence
+                )
+            else:
+                calibrated = min_confidence + confidence * (
+                    max_confidence - min_confidence
+                )
+
+            confidence = max(min_confidence, min(calibrated, max_confidence))
 
         # 收集所有解释因素
         bullish_factors = []
