@@ -231,13 +231,19 @@ See `requirements.txt`
 - [ ] Add Docker support for deployment
 
 ### Completed Features
-- [x] Multi-strategy stacking (10 rule-based strategies voting)
+- [x] Confidence calibration based on model accuracy
+- [x] Company events features (earnings season, dividends, month-end effects)
+- [x] Qlib-style Alpha features (70+ features with Z-score normalization)
+- [x] IC-based feature selection
+- [x] Multi-model integration (CatBoost + LightGBM + XGBoost)
+- [x] Southbound capital flow features for HK stocks
+- [x] Multi-strategy stacking (15 rule-based strategies voting)
 - [x] Market regime detection (trending vs ranging)
 - [x] Support/resistance analysis
-- [x] Enhanced prediction with 18 technical signals (ADX, MFI, CCI, DMI, RSI divergence, volume-price divergence, Ichimoku, Williams %R, OBV, streak)
-- [x] Ensemble prediction with 7 signal sources (ML, Technical, Momentum, Trend, Alpha, Strategy, Support/Resistance)
+- [x] Enhanced prediction with 18 technical signals
+- [x] Ensemble prediction with 7 signal sources
+- [x] Multi-timeframe trend confirmation (5/20/60 day)
 - [x] Precision/Recall/F1 evaluation for prediction model
-- [x] Explore params prediction scenario (forward_days, model_params, weights, strategy stacking)
 - [x] Real-time price support
 - [x] Position sizing optimization (ATR-based)
 - [x] Market-specific parameters
