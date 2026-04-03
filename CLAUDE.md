@@ -230,6 +230,13 @@ See `requirements.txt`
 - [ ] Create REST API for external integration
 - [ ] Add Docker support for deployment
 
+### Completed (v1.8 - Index Prediction)
+- [x] A-share index prediction support (--index flag in predict.py)
+- [x] Index data fetching via AKShare (stock_zh_index_daily)
+- [x] Index feature extraction (technical + alpha + company events)
+- [x] Support for 12 major A-share indices (上证指数, 沪深300, 深证成指, 创业板指, etc.)
+- [x] Index prediction tests (7 new tests, 70 total)
+
 ### Completed (v1.7 - Technical Debt Sprint)
 - [x] Economic calendar web scraping (FOMC, China policy, NFP, earnings)
 - [x] Performance monitoring utilities (Timer, PerformanceTracker)
