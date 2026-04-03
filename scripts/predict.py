@@ -32,6 +32,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.display import PredictionFormatter
+from src.features.index_features import extract_index_features, get_index_name
 from src.pipelines import DataPipeline, ModelPipeline
 from src.predictors import EnsemblePredictor
 from src.utils import (
@@ -65,8 +66,12 @@ def parse_args():
     parser.add_argument(
         "--stock",
         type=str,
-        required=True,
         help="股票代码 (如 000001.SZ, 0700.HK, AAPL)",
+    )
+    parser.add_argument(
+        "--index",
+        type=str,
+        help="A股指数代码 (如 000001=上证指数, 000300=沪深300, 399001=深证成指, 399006=创业板指)",
     )
     parser.add_argument(
         "--train-days", type=int, default=365, help="训练天数 (默认: 365)"
@@ -123,62 +128,79 @@ def main():
     """Main function."""
     args = parse_args()
 
-    # 创建日志目录
+    if not args.stock and not args.index:
+        print("  Error: Please specify --stock or --index")
+        return
+    if args.stock and args.index:
+        print("  Error: Please specify only one of --stock or --index")
+        return
+
+    is_index = args.index is not None
+    code = args.index if is_index else args.stock
+
     Path("logs").mkdir(exist_ok=True)
 
     print("=" * 60)
     print("  STOCK PREDICTION SYSTEM (Enhanced)")
     print("=" * 60)
 
-    # 1. 解析股票信息
-    stock_code = args.stock
-    try:
-        stock_info = StockInfoResolver.resolve(stock_code)
-        market = stock_info.market.replace("_share", "")
-    except ValueError as e:
-        print(f"  Error: {e}")
-        return
-
-    print(f"  Stock Code : {stock_code}")
-    print(f"  Market     : {market}")
+    if is_index:
+        index_name = get_index_name(code)
+        print(f"  Index Code   : {code}")
+        print(f"  Index Name   : {index_name}")
+        market = "a_share"
+    else:
+        try:
+            stock_info = StockInfoResolver.resolve(code)
+            market = stock_info.market.replace("_share", "")
+        except ValueError as e:
+            print(f"  Error: {e}")
+            return
+        print(f"  Stock Code : {code}")
+        print(f"  Market     : {market}")
 
     # 2. 初始化流水线
     config = get_config()
     cache = get_cache(config.get("data.cache_dir", "cache"))
-    data_pipeline = DataPipeline(cache, config)
-    model_pipeline = ModelPipeline(config)
 
-    # 2.1 读取优化后的参数（如果有）
-    # 只有当用户没有显式指定参数时才使用优化参数
-    param_manager = get_param_manager()
-    optimized_params = param_manager.get_strategy_params(
-        "prediction", market, stock_code
-    )
+    if is_index:
+        # Use simplified index feature extraction
+        print(f"\n  Fetching index data for {code}...")
+        total_days = args.train_days + 30
+        df = extract_index_features(code, days=total_days)
+        if df.empty or len(df) < 50:
+            print("  Error: Insufficient index data")
+            return
+    else:
+        data_pipeline = DataPipeline(cache, config)
+        model_pipeline = ModelPipeline(config)
 
-    if optimized_params:
-        print(f"\n  Found optimized parameters for {stock_code}")
-        # 只有当用户没有显式指定时才使用优化参数
-        # 检查是否是默认值
-        if args.threshold == 0.008 and "threshold" in optimized_params:
-            args.threshold = optimized_params["threshold"]
-            print(f"    Using optimized threshold: {args.threshold}")
-        else:
-            print(f"    Using command-line threshold: {args.threshold}")
-        if args.ml_weight == 0.35 and "ml_weight" in optimized_params:
-            args.ml_weight = optimized_params["ml_weight"]
-        if args.technical_weight == 0.25 and "technical_weight" in optimized_params:
-            args.technical_weight = optimized_params["technical_weight"]
-        if args.momentum_weight == 0.15 and "momentum_weight" in optimized_params:
-            args.momentum_weight = optimized_params["momentum_weight"]
+        # 2.1 读取优化后的参数（如果有）
+        param_manager = get_param_manager()
+        optimized_params = param_manager.get_strategy_params("prediction", market, code)
 
-    # 3. 获取数据
-    print("\n  Fetching data...")
-    total_days = args.train_days + 30  # 额外30天用于评估
-    df = data_pipeline.fetch_features(stock_code, total_days, args.refresh)
+        if optimized_params:
+            print(f"\n  Found optimized parameters for {code}")
+            if args.threshold == 0.008 and "threshold" in optimized_params:
+                args.threshold = optimized_params["threshold"]
+                print(f"    Using optimized threshold: {args.threshold}")
+            else:
+                print(f"    Using command-line threshold: {args.threshold}")
+            if args.ml_weight == 0.35 and "ml_weight" in optimized_params:
+                args.ml_weight = optimized_params["ml_weight"]
+            if args.technical_weight == 0.25 and "technical_weight" in optimized_params:
+                args.technical_weight = optimized_params["technical_weight"]
+            if args.momentum_weight == 0.15 and "momentum_weight" in optimized_params:
+                args.momentum_weight = optimized_params["momentum_weight"]
 
-    if df.empty or len(df) < 50:
-        print("  Error: Insufficient data")
-        return
+        # 3. 获取数据
+        print("\n  Fetching data...")
+        total_days = args.train_days + 30
+        df = data_pipeline.fetch_features(code, total_days, args.refresh)
+
+        if df.empty or len(df) < 50:
+            print("  Error: Insufficient data")
+            return
 
     # 3.1 处理重要日期（如果启用）
     excluded_dates = []
@@ -186,7 +208,6 @@ def main():
         print("\n  Processing important dates...")
         dates_manager = get_important_dates_manager()
 
-        # 获取日期范围
         start_date = (
             df["date"].min().strftime("%Y-%m-%d") if "date" in df.columns else None
         )
@@ -194,7 +215,6 @@ def main():
             df["date"].max().strftime("%Y-%m-%d") if "date" in df.columns else None
         )
 
-        # 获取或检测重要日期
         excluded_dates = dates_manager.get_or_detect_dates(
             df=df,
             market=market,
@@ -205,29 +225,34 @@ def main():
 
         if excluded_dates:
             print(f"  Found {len(excluded_dates)} extreme volatility dates to exclude")
-            for d in excluded_dates[:5]:  # Show first 5
+            for d in excluded_dates[:5]:
                 print(f"    - {d}")
             if len(excluded_dates) > 5:
                 print(f"    ... and {len(excluded_dates) - 5} more")
 
-            # 过滤数据（直接比较日期，避免创建临时列）
             df_dates = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
             mask = ~df_dates.isin(excluded_dates)
             df = df[mask].reset_index(drop=True)
             print(f"  Remaining samples after filtering: {len(df)}")
 
-            # 验证过滤后数据量是否足够
             if len(df) < 50:
                 print(
                     "  Warning: Insufficient data after filtering, disabling date exclusion"
                 )
-                df = data_pipeline.fetch_features(stock_code, total_days, args.refresh)
+                if is_index:
+                    df = extract_index_features(code, days=total_days)
+                else:
+                    df = data_pipeline.fetch_features(code, total_days, args.refresh)
                 excluded_dates = []
         else:
             print("  No extreme volatility dates detected")
 
     # 4. 划分数据
-    train_df, eval_df = data_pipeline.split_train_eval(df, backtest_days=30)
+    if is_index:
+        train_df = df.iloc[:-30]
+        eval_df = df.iloc[-30:]
+    else:
+        train_df, eval_df = data_pipeline.split_train_eval(df, backtest_days=30)
     print(f"  Total samples  : {len(df)}")
     print(f"  Training samples: {len(train_df)}")
     print(f"  Eval samples   : {len(eval_df)}")
@@ -296,11 +321,14 @@ def main():
 
     # 7. 获取实时价格
     print("\n  Getting real-time price...")
-    current_price = data_pipeline.get_realtime_price(stock_code)
-
-    if current_price is None:
+    if is_index:
         current_price = df["close"].iloc[-1]
-        print("  (Using last close price)")
+        print("  (Using last close price for index)")
+    else:
+        current_price = data_pipeline.get_realtime_price(code)
+        if current_price is None:
+            current_price = df["close"].iloc[-1]
+            print("  (Using last close price)")
 
     # 8. 使用集成预测器进行综合预测
     print("\n  Running ensemble prediction...")
@@ -309,23 +337,23 @@ def main():
             "ml_weight": args.ml_weight,
             "technical_weight": args.technical_weight,
             "momentum_weight": args.momentum_weight,
-            "model_accuracy": accuracy,  # 传递模型准确率用于置信度校准
+            "model_accuracy": accuracy,
         }
     )
 
     prediction = ensemble_predictor.predict(model, df, current_price)
 
     # 9. 添加元数据
-    prediction["stock_code"] = stock_code
+    prediction["stock_code"] = code
     prediction["market"] = market
+    if is_index:
+        prediction["index_name"] = get_index_name(code)
 
-    # 使用数据最后一个交易日作为预测基准日期
     if "date" in df.columns and not df.empty:
         last_date = pd.to_datetime(df["date"].max())
         prediction["prediction_date"] = last_date.strftime("%Y-%m-%d")
-        # 计算下一个交易日（跳过周末）
         target = last_date + pd.Timedelta(days=1)
-        while target.weekday() >= 5:  # 5=周六, 6=周日
+        while target.weekday() >= 5:
             target += pd.Timedelta(days=1)
         prediction["target_date"] = target.strftime("%Y-%m-%d")
     else:
@@ -355,6 +383,8 @@ def main():
         print(f"  ML weight: {args.ml_weight}")
         print(f"  Technical weight: {args.technical_weight}")
         print(f"  Momentum weight: {args.momentum_weight}")
+        if is_index:
+            print(f"  Index: {code} ({get_index_name(code)})")
 
     print("\n" + "=" * 60)
     print("  PREDICTION COMPLETE")

@@ -210,3 +210,34 @@ def fetch_stock_data(
         DataFrame with stock data or empty DataFrame on failure
     """
     return get_data_fetcher().fetch(stock_code, days=days, providers=providers)
+
+
+# A-share index code mapping
+A_SHARE_INDICES = {
+    "000001": "上证指数",
+    "000002": "上证A股",
+    "000003": "上证B股",
+    "000016": "上证50",
+    "000300": "沪深300",
+    "000905": "中证500",
+    "000852": "中证1000",
+    "399001": "深证成指",
+    "399005": "中小板指",
+    "399006": "创业板指",
+    "399673": "创业板50",
+    "899050": "北证50",
+}
+
+
+def fetch_index_data(index_code: str, days: int = 120) -> pd.DataFrame:
+    """Fetch A-share index data.
+
+    Args:
+        index_code: Index code (e.g., '000001', '000300', '399001', '399006')
+        days: Number of days to fetch
+
+    Returns:
+        DataFrame with index data or empty DataFrame on failure
+    """
+    ak = AKShareProvider()
+    return ak.fetch_index(index_code, days=days)

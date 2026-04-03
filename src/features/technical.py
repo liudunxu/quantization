@@ -127,9 +127,14 @@ class TechnicalFeatures(BaseFeatureExtractor):
     def extract(self, stock_code: str, **kwargs) -> pd.DataFrame:
         """Extract technical features for a stock."""
         days = kwargs.get("days", 120)
-        data = self._fetch_with_incremental(stock_code, days)
-        if data.empty:
-            return pd.DataFrame()
+        preloaded_data = kwargs.get("_preloaded_data")
+
+        if preloaded_data is not None and not preloaded_data.empty:
+            data = preloaded_data
+        else:
+            data = self._fetch_with_incremental(stock_code, days)
+            if data.empty:
+                return pd.DataFrame()
 
         data.columns = [c.lower() for c in data.columns]
         df = self._prepare_base_df(data, stock_code)

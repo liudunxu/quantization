@@ -164,6 +164,86 @@ class AKShareProvider(BaseDataProvider):
         )
         return pd.DataFrame()
 
+    def fetch_index(
+        self,
+        index_code: str,
+        days: int = 120,
+        retry_count: int = 3,
+        retry_delay: float = 1.0,
+    ) -> pd.DataFrame:
+        """Fetch A-share index data from AKShare.
+
+        Args:
+            index_code: Index code (e.g., '000001' for 上证指数, '399001' for 深证成指, '399006' for 创业板指)
+            days: Number of days to fetch
+            retry_count: Number of retry attempts
+            retry_delay: Delay between retries
+
+        Returns:
+            DataFrame with columns: date, open, high, low, close, volume
+        """
+        akshare_lib = _get_akshare()
+        if akshare_lib is None:
+            return pd.DataFrame()
+
+        last_error = None
+
+        for attempt in range(retry_count):
+            try:
+                df = akshare_lib.stock_zh_index_daily(
+                    symbol=f"sh{index_code}"
+                    if index_code.startswith("000") or index_code.startswith("688")
+                    else f"sz{index_code}"
+                )
+                if df is None or df.empty:
+                    last_error = "Empty data returned"
+                    if attempt < retry_count - 1:
+                        time.sleep(retry_delay)
+                        continue
+                    break
+
+                column_mapping = {
+                    "date": "date",
+                    "open": "open",
+                    "high": "high",
+                    "low": "low",
+                    "close": "close",
+                    "volume": "volume",
+                }
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = [col[0] for col in df.columns]
+                df = df.rename(columns=column_mapping)
+
+                required = ["date", "open", "close", "high", "low", "volume"]
+                df = df[[c for c in required if c in df.columns]]
+
+                if not self._validate_data(df):
+                    last_error = "Missing required columns"
+                    if attempt < retry_count - 1:
+                        time.sleep(retry_delay)
+                        continue
+                    break
+
+                df["date"] = pd.to_datetime(df["date"])
+                df = df.sort_values("date").tail(days)
+                logger.info(
+                    f"[{self.name}] Successfully fetched {len(df)} rows for index {index_code}"
+                )
+                return df.reset_index(drop=True)
+
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(
+                    f"[{self.name}] Attempt {attempt + 1}/{retry_count} failed for index {index_code}: {last_error}"
+                )
+                if attempt < retry_count - 1:
+                    time.sleep(retry_delay)
+
+        logger.error(
+            f"[{self.name}] All {retry_count} attempts failed for index {index_code}: {last_error}"
+        )
+        return pd.DataFrame()
+
     def fetch_southbound_flow(self, days: int = 120) -> pd.DataFrame:
         """Fetch southbound capital flow data (港股通资金流向).
 
