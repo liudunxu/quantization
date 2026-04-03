@@ -9,13 +9,17 @@ Usage:
 """
 
 import argparse
+import logging
 import sys
 from pathlib import Path
+from typing import Optional
 import pandas as pd
 import numpy as np
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+logger = logging.getLogger(__name__)
 
 from src.utils import (
     get_cache,
@@ -199,14 +203,15 @@ def calculate_suggested_lots(
     }
 
 
-def _parse_return(return_str: str) -> float:
+def _parse_return(return_str: str) -> Optional[float]:
     """Parse return string like '12.34%' to float 0.1234."""
     if return_str in ("N/A", "ERROR", None):
         return None
     try:
         ret_str = return_str.replace("%", "")
         return float(ret_str) / 100 if "%" in return_str else float(ret_str)
-    except:
+    except (ValueError, AttributeError) as e:
+        logger.debug(f"Failed to parse return '{return_str}': {e}")
         return None
 
 
@@ -216,7 +221,8 @@ def _parse_sharpe(sharpe_str: str) -> float:
         return 0.0
     try:
         return float(sharpe_str)
-    except:
+    except (ValueError, AttributeError) as e:
+        logger.debug(f"Failed to parse sharpe '{sharpe_str}': {e}")
         return 0.0
 
 
@@ -234,13 +240,15 @@ def _calculate_strategy_score(
     try:
         wr_str = win_rate.replace("%", "") if isinstance(win_rate, str) else "0"
         win_rate_val = float(wr_str) / 100 if "%" in win_rate else float(wr_str)
-    except:
+    except (ValueError, AttributeError) as e:
+        logger.debug(f"Failed to parse win rate '{win_rate}': {e}")
         win_rate_val = 0.0
 
     try:
         dd_str = max_drawdown.replace("%", "") if isinstance(max_drawdown, str) else "0"
         drawdown_val = float(dd_str) / 100 if "%" in max_drawdown else float(dd_str)
-    except:
+    except (ValueError, AttributeError) as e:
+        logger.debug(f"Failed to parse drawdown '{max_drawdown}': {e}")
         drawdown_val = 0.0
 
     # Risk-adjusted return: avoid division by very small drawdown
@@ -1177,8 +1185,7 @@ def main():
                 features_df.loc[last_idx, "low"] = realtime_price
             print(f"  Realtime price  : {realtime_price:.2f} (was {old_close:.2f})")
     except Exception as e:
-        # Silently fall back to historical data
-        pass
+        logger.debug(f"Failed to fetch realtime price, using historical data: {e}")
 
     # Train model
     print_section(" TRAINING MODEL")

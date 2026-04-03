@@ -1,12 +1,15 @@
 """Technical indicator features."""
 
 from typing import Optional, Dict, Any
+import logging
 import pandas as pd
 import numpy as np
 from ..utils.cache import FeatureCache
 from ..utils.config import get_config
 from .base import BaseFeatureExtractor
 from ..data_providers import fetch_stock_data
+
+logger = logging.getLogger(__name__)
 
 
 class TechnicalFeatures(BaseFeatureExtractor):

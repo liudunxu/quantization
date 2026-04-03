@@ -7,12 +7,17 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 from .base import BaseDataProvider
+from ..features.enhanced_sentiment import (
+    NewsSentimentAnalyzer,
+    SocialMediaAnalyzer,
+    SearchTrendAnalyzer,
+    CombinedSentiment,
+)
 
 logger = logging.getLogger(__name__)
 
 # Lazy imports for optional dependencies
 akshare = None
-snownlp = None
 
 
 def _get_akshare():
@@ -29,22 +34,6 @@ def _get_akshare():
             )
             return None
     return akshare
-
-
-def _get_snownlp():
-    """Lazy load snownlp for Chinese sentiment analysis."""
-    global snownlp
-    if snownlp is None:
-        try:
-            from snownlp import SnowNLP
-
-            snownlp = SnowNLP
-        except ImportError:
-            logger.warning(
-                "[sentiment] snownlp not installed. Install with: pip install snownlp"
-            )
-            return None
-    return snownlp
 
 
 # Chinese sentiment keywords
@@ -158,8 +147,9 @@ class SentimentProvider(BaseDataProvider):
         Returns:
             float: Sentiment score between -1 (negative) and 1 (positive)
         """
-        SnowNLP = _get_snownlp()
-        if SnowNLP is None:
+        try:
+            from snownlp import SnowNLP
+        except ImportError:
             return 0.0
 
         try:
@@ -168,7 +158,8 @@ class SentimentProvider(BaseDataProvider):
             s = SnowNLP(text)
             # SnowNLP returns 0-1, convert to -1 to 1
             return (s.sentiments - 0.5) * 2
-        except Exception:
+        except (AttributeError, ValueError, TypeError) as e:
+            logger.debug(f"SnowNLP analysis failed: {e}")
             return 0.0
 
     def _analyze_sentiment(self, text: str, use_snownlp: bool = True) -> float:

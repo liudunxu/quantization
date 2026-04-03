@@ -65,8 +65,8 @@ def fetch_realtime_price(stock_code: str) -> Optional[float]:
                     f"[Realtime] Got price {price} for {stock_code} from fast_info"
                 )
                 return float(price)
-        except:
-            pass
+        except (AttributeError, TypeError, KeyError) as e:
+            logger.debug(f"fast_info fallback failed for {stock_code}: {e}")
 
         logger.warning(f"[Realtime] No price found for {stock_code}")
         return None

@@ -1,6 +1,8 @@
 """Feature combinator that merges all features."""
 
 from typing import Optional, List, Dict, Any
+from functools import reduce
+import gc
 import pandas as pd
 import numpy as np
 from ..utils.cache import FeatureCache
@@ -123,61 +125,39 @@ class FeatureCombinator:
         # Start with technical features
         combined = features["technical"].copy()
 
-        # Merge market features
+        # Build list of DataFrames to merge (memory efficient: select only needed columns first)
+        merge_frames = []
+
         if "market" in features and not features["market"].empty:
             market_cols = [
                 c for c in features["market"].columns if c not in ["stock_code", "date"]
             ]
-            combined = combined.merge(
-                features["market"][["date"] + market_cols],
-                on="date",
-                how="left",
-                suffixes=("", "_market"),
-            )
+            merge_frames.append(features["market"][["date"] + market_cols].copy())
 
-        # Merge industry features
         if "industry" in features and not features["industry"].empty:
             industry_cols = [
                 c
                 for c in features["industry"].columns
                 if c not in ["stock_code", "date", "sector", "industry"]
             ]
-            combined = combined.merge(
-                features["industry"][["date"] + industry_cols],
-                on="date",
-                how="left",
-                suffixes=("", "_industry"),
-            )
+            merge_frames.append(features["industry"][["date"] + industry_cols].copy())
 
-        # Merge money flow features
         if "money_flow" in features and not features["money_flow"].empty:
             mf_cols = [
                 c
                 for c in features["money_flow"].columns
                 if c not in ["stock_code", "date"]
             ]
-            combined = combined.merge(
-                features["money_flow"][["date"] + mf_cols],
-                on="date",
-                how="left",
-                suffixes=("", "_mf"),
-            )
+            merge_frames.append(features["money_flow"][["date"] + mf_cols].copy())
 
-        # Merge sentiment features
         if "sentiment" in features and not features["sentiment"].empty:
             sentiment_cols = [
                 c
                 for c in features["sentiment"].columns
                 if c not in ["stock_code", "date"]
             ]
-            combined = combined.merge(
-                features["sentiment"][["date"] + sentiment_cols],
-                on="date",
-                how="left",
-                suffixes=("", "_sentiment"),
-            )
+            merge_frames.append(features["sentiment"][["date"] + sentiment_cols].copy())
 
-        # Merge US market sentiment features
         if (
             "us_market_sentiment" in features
             and not features["us_market_sentiment"].empty
@@ -187,12 +167,21 @@ class FeatureCombinator:
                 for c in features["us_market_sentiment"].columns
                 if c not in ["stock_code", "date"]
             ]
-            combined = combined.merge(
-                features["us_market_sentiment"][["date"] + us_sent_cols],
-                on="date",
-                how="left",
-                suffixes=("", "_us_sentiment"),
+            merge_frames.append(
+                features["us_market_sentiment"][["date"] + us_sent_cols].copy()
             )
+
+        # Batch merge all time-series features at once
+        suffixes = ["", "_market", "_industry", "_mf", "_sentiment", "_us_sentiment"]
+        for i, frame in enumerate(merge_frames):
+            suffix = suffixes[i] if i < len(suffixes) else f"_f{i}"
+            combined = combined.merge(
+                frame, on="date", how="left", suffixes=("", suffix)
+            )
+
+        # Clean up merge frames to free memory
+        del merge_frames
+        gc.collect()
 
         # Merge fundamental features (broadcast to all rows)
         if "fundamental" in features and not features["fundamental"].empty:
@@ -208,6 +197,10 @@ class FeatureCombinator:
         if "industry" in features and not features["industry"].empty:
             combined["sector"] = features["industry"]["sector"].iloc[0]
             combined["industry"] = features["industry"]["industry"].iloc[0]
+
+        # Clean up source DataFrames to free memory
+        del features
+        gc.collect()
 
         # ========== Relative performance features (相对表现) ==========
         # Stock vs market (Alpha)

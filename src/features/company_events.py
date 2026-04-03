@@ -155,8 +155,10 @@ class CompanyEventsFeatures(BaseFeatureExtractor):
                         df["date"] <= deadline + pd.Timedelta(days=5)
                     )
                     df.loc[mask, "is_near_earnings"] = 1
-                except:
-                    pass
+                except (ValueError, TypeError) as e:
+                    logger.debug(
+                        f"Failed to process earnings date for {year}-{month}-{day}: {e}"
+                    )
 
         # ========== 3. 月末/月初特征 ==========
         df["is_month_end"] = (df["date"].dt.day >= 25).astype(int)

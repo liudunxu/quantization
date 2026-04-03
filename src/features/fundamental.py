@@ -17,7 +17,7 @@ class FundamentalFeatures(BaseFeatureExtractor):
 
     @property
     def feature_type(self) -> str:
-        return 'fundamental'
+        return "fundamental"
 
     def extract(self, stock_code: str, **kwargs) -> pd.DataFrame:
         """Extract fundamental features for a stock."""
@@ -27,8 +27,10 @@ class FundamentalFeatures(BaseFeatureExtractor):
         try:
             ticker = yf.Ticker(stock_code)
             info = ticker.info or {}
-        except Exception:
-            pass
+        except (Exception, ValueError, KeyError) as e:
+            logger.debug(
+                f"Failed to fetch fundamental data from yfinance for {stock_code}: {e}"
+            )
 
         if not info or len(info) < 5:
             # Return empty DataFrame for now if no fundamental data
@@ -36,63 +38,65 @@ class FundamentalFeatures(BaseFeatureExtractor):
             return pd.DataFrame()
 
         df = pd.DataFrame(index=[0])
-        df['stock_code'] = stock_code
-        df['date'] = pd.Timestamp.today()
+        df["stock_code"] = stock_code
+        df["date"] = pd.Timestamp.today()
 
         # Valuation metrics
-        df['pe_ratio'] = info.get('trailingPE', np.nan)
-        df['forward_pe'] = info.get('forwardPE', np.nan)
-        df['peg_ratio'] = info.get('pegRatio', np.nan)
-        df['pb_ratio'] = info.get('priceToBook', np.nan)
-        df['ps_ratio'] = info.get('priceToSalesTrailing12Months', np.nan)
+        df["pe_ratio"] = info.get("trailingPE", np.nan)
+        df["forward_pe"] = info.get("forwardPE", np.nan)
+        df["peg_ratio"] = info.get("pegRatio", np.nan)
+        df["pb_ratio"] = info.get("priceToBook", np.nan)
+        df["ps_ratio"] = info.get("priceToSalesTrailing12Months", np.nan)
 
         # Profitability
-        df['roe'] = info.get('returnOnEquity', np.nan)
-        df['roa'] = info.get('returnOnAssets', np.nan)
-        df['gross_margin'] = info.get('grossMargins', np.nan)
-        df['operating_margin'] = info.get('operatingMargins', np.nan)
-        df['net_margin'] = info.get('profitMargins', np.nan)
+        df["roe"] = info.get("returnOnEquity", np.nan)
+        df["roa"] = info.get("returnOnAssets", np.nan)
+        df["gross_margin"] = info.get("grossMargins", np.nan)
+        df["operating_margin"] = info.get("operatingMargins", np.nan)
+        df["net_margin"] = info.get("profitMargins", np.nan)
 
         # Growth
-        df['revenue_growth'] = info.get('revenueGrowth', np.nan)
-        df['earnings_growth'] = info.get('earningsGrowth', np.nan)
-        df['earnings_quarterly_growth'] = info.get('earningsQuarterlyGrowth', np.nan)
+        df["revenue_growth"] = info.get("revenueGrowth", np.nan)
+        df["earnings_growth"] = info.get("earningsGrowth", np.nan)
+        df["earnings_quarterly_growth"] = info.get("earningsQuarterlyGrowth", np.nan)
 
         # Financial health
-        df['debt_to_equity'] = info.get('debtToEquity', np.nan)
-        df['current_ratio'] = info.get('currentRatio', np.nan)
-        df['quick_ratio'] = info.get('quickRatio', np.nan)
+        df["debt_to_equity"] = info.get("debtToEquity", np.nan)
+        df["current_ratio"] = info.get("currentRatio", np.nan)
+        df["quick_ratio"] = info.get("quickRatio", np.nan)
 
         # Dividends
-        df['dividend_yield'] = info.get('dividendYield', np.nan)
-        df['dividend_rate'] = info.get('dividendRate', np.nan)
-        df['payout_ratio'] = info.get('payoutRatio', np.nan)
+        df["dividend_yield"] = info.get("dividendYield", np.nan)
+        df["dividend_rate"] = info.get("dividendRate", np.nan)
+        df["payout_ratio"] = info.get("payoutRatio", np.nan)
 
         # Share structure
-        df['shares_outstanding'] = info.get('sharesOutstanding', np.nan)
-        df['market_cap'] = info.get('marketCap', np.nan)
-        df['enterprise_value'] = info.get('enterpriseValue', np.nan)
+        df["shares_outstanding"] = info.get("sharesOutstanding", np.nan)
+        df["market_cap"] = info.get("marketCap", np.nan)
+        df["enterprise_value"] = info.get("enterpriseValue", np.nan)
 
         # Analyst recommendations
-        df['recommendation_key'] = info.get('recommendationKey', np.nan)
-        df['number_of_analyst_recommendations'] = info.get('numberOfAnalystRecommendations', np.nan)
+        df["recommendation_key"] = info.get("recommendationKey", np.nan)
+        df["number_of_analyst_recommendations"] = info.get(
+            "numberOfAnalystRecommendations", np.nan
+        )
 
         # Price targets
-        df['target_mean_price'] = info.get('targetMeanPrice', np.nan)
-        df['target_high_price'] = info.get('targetHighPrice', np.nan)
-        df['target_low_price'] = info.get('targetLowPrice', np.nan)
-        df['current_price'] = info.get('currentPrice', np.nan)
+        df["target_mean_price"] = info.get("targetMeanPrice", np.nan)
+        df["target_high_price"] = info.get("targetHighPrice", np.nan)
+        df["target_low_price"] = info.get("targetLowPrice", np.nan)
+        df["current_price"] = info.get("currentPrice", np.nan)
 
         # Valuation vs target
-        if df['current_price'].notna().any() and df['target_mean_price'].notna().any():
-            df['price_to_target'] = df['current_price'] / df['target_mean_price']
+        if df["current_price"].notna().any() and df["target_mean_price"].notna().any():
+            df["price_to_target"] = df["current_price"] / df["target_mean_price"]
 
         # 52-week
-        df['week_52_high'] = info.get('fiftyTwoWeekHigh', np.nan)
-        df['week_52_low'] = info.get('fiftyTwoWeekLow', np.nan)
-        df['week_52_high_ratio'] = df['current_price'] / df['week_52_high']
-        df['week_52_low_ratio'] = df['current_price'] / df['week_52_low']
+        df["week_52_high"] = info.get("fiftyTwoWeekHigh", np.nan)
+        df["week_52_low"] = info.get("fiftyTwoWeekLow", np.nan)
+        df["week_52_high_ratio"] = df["current_price"] / df["week_52_high"]
+        df["week_52_low_ratio"] = df["current_price"] / df["week_52_low"]
 
-        df = df.dropna(subset=['pe_ratio', 'pb_ratio'], how='all')
+        df = df.dropna(subset=["pe_ratio", "pb_ratio"], how="all")
 
         return df

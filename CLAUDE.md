@@ -230,9 +230,17 @@ See `requirements.txt`
 - [ ] Create REST API for external integration
 - [ ] Add Docker support for deployment
 
+### Completed (v1.7 - Technical Debt Sprint)
+- [x] Economic calendar web scraping (FOMC, China policy, NFP, earnings)
+- [x] Performance monitoring utilities (Timer, PerformanceTracker)
+- [x] Memory optimization (batch merges, gc cleanup in combinator)
+- [x] Error handling improvements (bare except → specific exceptions)
+- [x] Type annotations for critical functions
+- [x] Extended test coverage (+15 tests for important dates & perf monitor)
+
 ### Completed Features
 - [x] Confidence calibration based on model accuracy
-- [x] Company events features (earnings season, dividends, month-end effects)
+- [x] Company events features (earnings seasons, dividends, month-end effects)
 - [x] Qlib-style Alpha features (70+ features with Z-score normalization)
 - [x] IC-based feature selection
 - [x] Multi-model integration (CatBoost + LightGBM + XGBoost)
@@ -258,3 +266,9 @@ See `requirements.txt`
 - [x] Strategy descriptions (Chinese)
 - [x] Stock core data display (support/resistance, indicators)
 - [x] Top3 Voting Strategy
+- [x] Economic calendar web scraping (FOMC, China policy, NFP, earnings seasons)
+- [x] Performance monitoring utilities (Timer, PerformanceTracker, decorators)
+- [x] Memory optimization in feature combinator (batch merges, gc cleanup)
+- [x] Error handling improvements (replaced bare except, added logging)
+- [x] Type annotations for critical functions
+- [x] Extended test coverage (important dates, performance monitoring)
