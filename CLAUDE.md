@@ -234,9 +234,12 @@ See `requirements.txt`
 - [x] Economic calendar web scraping (FOMC, China policy, NFP, earnings)
 - [x] Performance monitoring utilities (Timer, PerformanceTracker)
 - [x] Memory optimization (batch merges, gc cleanup in combinator)
-- [x] Error handling improvements (bare except → specific exceptions)
+- [x] Error handling improvements (replaced bare except, added logging)
 - [x] Type annotations for critical functions
-- [x] Extended test coverage (+15 tests for important dates & perf monitor)
+- [x] Extended test coverage (+38 tests for important dates & perf monitor)
+- [x] Enhanced sentiment analysis (news, social media, search trends, combined scoring)
+- [x] Refactored technical.py extract() from 673 lines to 36 focused methods
+- [x] Refactored decide.py main() from 439 lines to 6 focused functions
 
 ### Completed Features
 - [x] Confidence calibration based on model accuracy

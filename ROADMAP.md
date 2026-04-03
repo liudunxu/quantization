@@ -112,16 +112,18 @@
 ## 📊 技术债务
 
 ### 已改进 ✅
-- [x] 增加单元测试覆盖率 (+15 tests)
+- [x] 增加单元测试覆盖率 (+38 tests)
 - [x] 优化内存使用（FeatureCombinator 批量合并 + gc）
 - [x] 改进错误处理和日志（替换 bare except）
 - [x] 添加性能监控（Timer, PerformanceTracker）
+- [x] 增强情绪分析（新闻、社交媒体、搜索趋势、综合评分）
+- [x] 重构长函数：technical.py extract() 673行 → 36个方法
+- [x] 重构长函数：decide.py main() 439行 → 6个函数
 
 ### 仍需改进
 - [ ] 统一代码风格
 - [ ] 添加更多类型注解
 - [ ] 完善 docstring
-- [ ] 重构长函数 (>50 行)
 
 ---
 
