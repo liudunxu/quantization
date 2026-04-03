@@ -1074,111 +1074,72 @@ def print_stock_core_data(
         print(f"  综合评价       : {perf_rating}")
 
 
-def main():
-    args = parse_args()
-    stock_code = args.stock
-
-    print_section(f" STOCK TRADING DECISION SYSTEM")
-    print(f"\n  Stock Code: {stock_code}")
-
-    # Resolve stock info
-    try:
-        stock_info = StockInfoResolver.resolve(stock_code)
-        market = stock_info.market.replace("_share", "")
-        print(f"  Market    : {stock_info.market}")
-        print(f"  Exchange  : {stock_info.exchange}")
-    except ValueError as e:
-        print(f"  Error: {e}")
-        sys.exit(1)
-
-    # Get config
-    config = get_config()
-    cache = get_cache(config.get("data.cache_dir", "cache"))
-
-    # Initialize feature combinator
-    combinator = get_feature_combinator(cache)
-
-    # Extract and combine features
-    print_section(" FETCHING & PROCESSING DATA")
-
-    print(f"\n  Training period : {args.train_days} days")
-    print(f"  Backtest period : {args.backtest_days} days")
-    print(f"  Force refresh   : {args.refresh}")
-
-    print("\n  Extracting features...")
-    try:
-        features_df = combinator.get_combined_features(
-            stock_code, days=args.train_days, force_refresh=args.refresh
-        )
-        if features_df.empty:
-            print("  Error: Could not fetch data for this stock")
-            sys.exit(1)
-        print(f"  Total samples   : {len(features_df)}")
-    except Exception as e:
-        print(f"  Error fetching data: {e}")
-        sys.exit(1)
-
-    # Process important dates if enabled
+def _process_important_dates(
+    features_df: pd.DataFrame, market: str, args, config
+) -> list:
+    """Process and filter extreme volatility dates."""
     excluded_dates = []
-    if args.exclude_dates:
-        print("\n  Processing important dates...")
-        dates_manager = get_important_dates_manager()
+    if not args.exclude_dates:
+        return excluded_dates
 
-        start_date = (
-            features_df["date"].min().strftime("%Y-%m-%d")
-            if "date" in features_df.columns
-            else None
-        )
-        end_date = (
-            features_df["date"].max().strftime("%Y-%m-%d")
-            if "date" in features_df.columns
-            else None
-        )
+    print("\n  Processing important dates...")
+    dates_manager = get_important_dates_manager()
+    start_date = (
+        features_df["date"].min().strftime("%Y-%m-%d")
+        if "date" in features_df.columns
+        else None
+    )
+    end_date = (
+        features_df["date"].max().strftime("%Y-%m-%d")
+        if "date" in features_df.columns
+        else None
+    )
 
-        excluded_dates = dates_manager.get_or_detect_dates(
-            df=features_df,
-            market=market,
-            start_date=start_date,
-            end_date=end_date,
-            auto_detect=True,
-        )
+    excluded_dates = dates_manager.get_or_detect_dates(
+        df=features_df,
+        market=market,
+        start_date=start_date,
+        end_date=end_date,
+        auto_detect=True,
+    )
+    if excluded_dates:
+        print(f"  Found {len(excluded_dates)} extreme volatility dates to exclude")
+        for d in excluded_dates[:5]:
+            print(f"    - {d}")
+        if len(excluded_dates) > 5:
+            print(f"    ... and {len(excluded_dates) - 5} more")
 
-        if excluded_dates:
-            print(f"  Found {len(excluded_dates)} extreme volatility dates to exclude")
-            for d in excluded_dates[:5]:
-                print(f"    - {d}")
-            if len(excluded_dates) > 5:
-                print(f"    ... and {len(excluded_dates) - 5} more")
+        features_df_dates = pd.to_datetime(features_df["date"]).dt.strftime("%Y-%m-%d")
+        mask = ~features_df_dates.isin(excluded_dates)
+        features_df.loc[mask].reset_index(drop=True)
+        print(f"  Remaining samples after filtering: {len(features_df)}")
 
-            features_df_dates = pd.to_datetime(features_df["date"]).dt.strftime(
-                "%Y-%m-%d"
+        if len(features_df) < 30:
+            print(
+                "  Warning: Insufficient data after filtering, disabling date exclusion"
             )
-            mask = ~features_df_dates.isin(excluded_dates)
-            features_df = features_df[mask].reset_index(drop=True)
-            print(f"  Remaining samples after filtering: {len(features_df)}")
+            combinator = get_feature_combinator(
+                get_cache(config.get("data.cache_dir", "cache"))
+            )
+            features_df = combinator.get_combined_features(
+                args.stock, days=args.train_days, force_refresh=args.refresh
+            )
+            excluded_dates = []
+    else:
+        print("  No extreme volatility dates detected")
+    return excluded_dates
 
-            if len(features_df) < 30:
-                print(
-                    "  Warning: Insufficient data after filtering, disabling date exclusion"
-                )
-                features_df = combinator.get_combined_features(
-                    stock_code, days=args.train_days, force_refresh=args.refresh
-                )
-                excluded_dates = []
-        else:
-            print("  No extreme volatility dates detected")
 
-    # Try to get real-time price for latest data point
+def _update_realtime_price(features_df: pd.DataFrame, stock_code: str) -> None:
+    """Try to update latest data point with real-time price."""
     try:
         from src.data_providers import fetch_realtime_price
 
         realtime_price = fetch_realtime_price(stock_code)
         if realtime_price is not None:
-            # Update the last row's close price with real-time price
             last_idx = features_df.index[-1]
             old_close = features_df.loc[last_idx, "close"]
             features_df.loc[last_idx, "close"] = realtime_price
-            # Also update high/low if needed
             if realtime_price > features_df.loc[last_idx, "high"]:
                 features_df.loc[last_idx, "high"] = realtime_price
             if realtime_price < features_df.loc[last_idx, "low"]:
@@ -1187,31 +1148,22 @@ def main():
     except Exception as e:
         logger.debug(f"Failed to fetch realtime price, using historical data: {e}")
 
-    # Train model
+
+def _train_model(features_df: pd.DataFrame, args, config) -> StockTradingModel:
+    """Train the ML model and print metrics."""
     print_section(" TRAINING MODEL")
-
     model = StockTradingModel()
-
-    # Get aggressive training params from config
     model_config = config.get_section("model")
     training_config = model_config.get("training", {})
     forward_days = training_config.get("forward_days", 5)
     threshold = training_config.get("threshold", 0.01)
-    min_samples = model_config.get("strategy", {}).get("min_samples", 20)
-    confidence_threshold = model_config.get("strategy", {}).get(
-        "confidence_threshold", 0.25
-    )
-
-    # Composite label parameters
     use_composite_labels = training_config.get("use_composite_labels", True)
     trend_weight = training_config.get("trend_weight", 0.30)
     momentum_weight = training_config.get("momentum_weight", 0.30)
     market_weight = training_config.get("market_weight", 0.20)
 
-    # Split data for training and evaluation
     train_df = features_df.iloc[: -args.backtest_days]
     eval_df = features_df.iloc[-args.backtest_days :]
-
     print(f"\n  Training samples  : {len(train_df)}")
     print(f"  Evaluation samples: {len(eval_df)}")
     print(f"  Forward days      : {forward_days}")
@@ -1237,118 +1189,187 @@ def main():
     except Exception as e:
         print(f"  Error training model: {e}")
         sys.exit(1)
+    return model
 
-    # Get prediction
-    prediction_action = None
-    prediction_confidence = None
-    prediction_proba = None
 
+def _get_prediction(model: StockTradingModel, features_df: pd.DataFrame):
+    """Get model prediction."""
     try:
         prediction_action, prediction_confidence = model.predict(features_df)
         prediction_proba = model.predict_proba(features_df)
+        return prediction_action, prediction_confidence, prediction_proba
     except Exception as e:
         print(f"  Error generating prediction: {e}")
         sys.exit(1)
 
-    # Feature importance
-    print_feature_importance(model, top_n=10)
 
-    # Backtest comparison
+def _run_backtest_comparison(
+    features_df: pd.DataFrame, args, config, stock_info, model
+):
+    """Run backtest and return results."""
     print_section(" BACKTEST COMPARISON")
-
-    # Use only backtest period data
     backtest_df = features_df.iloc[-args.backtest_days :].copy()
-
     if len(backtest_df) < 10:
         print("\n  Not enough data for backtesting")
+        return None, None
+
+    market_map = {
+        "a_share": "a_share",
+        "hk": "hk",
+        "hk_share": "hk",
+        "us": "us",
+        "us_share": "us",
+    }
+    market_key = market_map.get(stock_info.market, "default")
+    print(f"\n  Market config : {market_key}")
+
+    min_samples = config.get_section("model").get("strategy", {}).get("min_samples", 20)
+    strategies = get_market_strategies(
+        model=model,
+        market=market_key,
+        min_samples=min_samples,
+        require_bull_market_for_buy=True,
+    )
+    engine = BacktestEngine(
+        initial_cash=config.get("backtest.initial_cash", 100000),
+        commission=config.get("backtest.commission", 0.001),
+        slippage=config.get("backtest.slippage", 0.001),
+    )
+    results_df = engine.compare_strategies(
+        backtest_df, strategies, full_history_df=features_df
+    )
+    print_backtest_comparison(results_df)
+    return backtest_df, results_df
+
+
+def _print_final_recommendation(
+    results_df,
+    decisions,
+    action_counts,
+    strategies,
+    best_strategy_name,
+    best_return_name,
+    best_return_action,
+    best_return_value,
+    config,
+    backtest_df,
+):
+    """Print final recommendation with position sizing."""
+    final_action = (
+        max(action_counts, key=action_counts.get) if action_counts else "HOLD"
+    )
+    best_confidence = decisions[best_strategy_name]["confidence"]
+
+    # Top3 Voting
+    top3_strategies = results_df.head(3)
+    top3_votes = {"BUY": 0, "HOLD": 0, "SELL": 0}
+    top3_details = []
+    for _, row in top3_strategies.iterrows():
+        strategy_name = row["Strategy"]
+        if strategy_name in decisions:
+            action = decisions[strategy_name]["action"]
+            top3_votes[action] = top3_votes.get(action, 0) + 1
+            top3_details.append(
+                {"name": strategy_name, "return": row["Total Return"], "action": action}
+            )
+
+    top3_action = "HOLD"
+    if top3_votes["BUY"] > 0:
+        top3_action = "BUY"
+    elif top3_votes["SELL"] > 0:
+        top3_action = "SELL"
+    max_votes = max(top3_votes.values())
+    actions_with_max = [a for a, v in top3_votes.items() if v == max_votes]
+    if len(actions_with_max) == 1:
+        top3_action = actions_with_max[0]
+
+    print_stock_core_data(backtest_df, backtest_df.iloc[-len(backtest_df) :].copy())
+
+    if final_action != "HOLD":
+        current_price = backtest_df["close"].iloc[-1]
+        atr_value = (
+            backtest_df["atr"].iloc[-1]
+            if "atr" in backtest_df.columns
+            else current_price * 0.02
+        )
+        initial_cash = config.get("backtest.initial_cash", 100000)
+        suggested = calculate_suggested_lots(
+            action=final_action, price=current_price, atr=atr_value, cash=initial_cash
+        )
+
+        print_section(" FINAL RECOMMENDATION (MAJORITY VOTE)")
+        print(f"\n  === Strategy Votes ===")
+        print(f"  BUY  : {action_counts.get('BUY', 0)} votes")
+        print(f"  HOLD : {action_counts.get('HOLD', 0)} votes")
+        print(f"  SELL : {action_counts.get('SELL', 0)} votes")
+        print(f"\n  Final Action: {final_action} (majority)")
+        print(f"\n  Best Strategy by Score ({best_strategy_name}):")
+        print(f"    Score     : {decisions[best_strategy_name]['score']:.3f}")
+        print(f"    Return    : {decisions[best_strategy_name]['return']}")
+
+        for strategy in strategies:
+            if (
+                strategy.name == best_strategy_name
+                and hasattr(strategy, "description")
+                and strategy.description
+            ):
+                print(f"    Description: {strategy.description}")
+                break
+
+        print(f"\n  Best Strategy by Return ({best_return_name}):")
+        print(f"    Return    : {best_return_value:.2%}")
+        print(f"    Decision  : {best_return_action}")
+        for strategy in strategies:
+            if (
+                strategy.name == best_return_name
+                and hasattr(strategy, "description")
+                and strategy.description
+            ):
+                print(f"    Description: {strategy.description}")
+                break
+
+        print(f"\n  === Top3 Voting Strategy ===")
+        print(f"  Action: {top3_action}")
+        print(
+            f"  Votes: BUY={top3_votes['BUY']}, SELL={top3_votes['SELL']}, HOLD={top3_votes['HOLD']}"
+        )
+        print(f"  Top Strategies:")
+        for detail in top3_details:
+            print(f"    - {detail['name']}: {detail['return']} -> {detail['action']}")
+
+        print(f"\n  === Suggested Position ===")
+        print(f"  Lots          : {suggested['lots']:.1f} 手")
+        print(f"  Shares        : {suggested['shares']} 股")
+        print(f"  Position      : {suggested['position_pct']:.1f}% of capital")
+        print(f"  Est. Cost     : ${suggested['estimated_cost']:,.2f}")
+        sl_pct = abs((current_price - suggested["stop_loss"]) / current_price * 100)
+        tp_pct = abs((suggested["take_profit"] - current_price) / current_price * 100)
+        if final_action == "BUY":
+            print(f"  Stop Loss    : ${suggested['stop_loss']:.2f} (-{sl_pct:.1f}%)")
+            print(f"  Take Profit   : ${suggested['take_profit']:.2f} (+{tp_pct:.1f}%)")
+        else:
+            print(f"  Stop Loss    : ${suggested['stop_loss']:.2f} (+{sl_pct:.1f}%)")
+            print(f"  Take Profit   : ${suggested['take_profit']:.2f} (-{tp_pct:.1f}%)")
     else:
-        # Map stock_info.market to market key
-        market_map = {
-            "a_share": "a_share",
-            "hk": "hk",
-            "hk_share": "hk",
-            "us": "us",
-            "us_share": "us",
-        }
-        market_key = market_map.get(stock_info.market, "default")
+        print_section(" FINAL RECOMMENDATION")
+        print(f"\n  Action       : HOLD (no clear consensus)")
+        print(f"\n  === Strategy Votes ===")
+        print(f"  BUY  : {action_counts.get('BUY', 0)} votes")
+        print(f"  HOLD : {action_counts.get('HOLD', 0)} votes")
+        print(f"  SELL : {action_counts.get('SELL', 0)} votes")
+        print(f"\n  Best Strategy by Return ({best_return_name}):")
+        print(f"    Return    : {best_return_value:.2%}")
+        print(f"    Decision  : {best_return_action}")
+        for strategy in strategies:
+            if (
+                strategy.name == best_return_name
+                and hasattr(strategy, "description")
+                and strategy.description
+            ):
+                print(f"    Description: {strategy.description}")
+                break
 
-        print(f"\n  Market config : {market_key}")
-
-        strategies = get_market_strategies(
-            model=model,
-            market=market_key,
-            min_samples=min_samples,
-            require_bull_market_for_buy=True,
-        )
-
-        engine = BacktestEngine(
-            initial_cash=config.get("backtest.initial_cash", 100000),
-            commission=config.get("backtest.commission", 0.001),
-            slippage=config.get("backtest.slippage", 0.001),
-        )
-
-        results_df = engine.compare_strategies(
-            backtest_df, strategies, full_history_df=features_df
-        )
-        print_backtest_comparison(results_df)
-
-        # Print all strategy decisions and find the best one
-        (
-            decisions,
-            best_strategy_name,
-            best_action,
-            best_confidence,
-            action_counts,
-            best_return_name,
-            best_return_action,
-            best_return_value,
-        ) = print_all_strategy_decisions(
-            strategies, results_df, backtest_df, features_df, model, min_samples
-        )
-
-        # Top3 Voting Strategy: select top 3 strategies by return and vote
-        top3_strategies = results_df.head(3)
-        top3_votes = {"BUY": 0, "HOLD": 0, "SELL": 0}
-        top3_details = []
-
-        for _, row in top3_strategies.iterrows():
-            strategy_name = row["Strategy"]
-            if strategy_name in decisions:
-                action = decisions[strategy_name]["action"]
-                top3_votes[action] = top3_votes.get(action, 0) + 1
-                top3_details.append(
-                    {
-                        "name": strategy_name,
-                        "return": row["Total Return"],
-                        "action": action,
-                    }
-                )
-
-        # Determine Top3 action with priority: BUY > SELL > HOLD
-        top3_action = "HOLD"
-        if top3_votes["BUY"] > 0:
-            top3_action = "BUY"
-        elif top3_votes["SELL"] > 0:
-            top3_action = "SELL"
-
-        # Check if there's a clear majority
-        max_votes = max(top3_votes.values())
-        actions_with_max_votes = [a for a, v in top3_votes.items() if v == max_votes]
-        if len(actions_with_max_votes) == 1:
-            top3_action = actions_with_max_votes[0]
-
-        # Determine final action by majority vote
-        final_action = (
-            max(action_counts, key=action_counts.get) if action_counts else "HOLD"
-        )
-        final_confidence = best_confidence
-        final_strategy = best_strategy_name
-
-        # Print stock core data before final recommendation
-        print_stock_core_data(backtest_df, features_df)
-
-        # Trading decision (moved to end)
-        if final_action != "HOLD":
+        if best_return_action != "HOLD":
             current_price = backtest_df["close"].iloc[-1]
             atr_value = (
                 backtest_df["atr"].iloc[-1]
@@ -1357,157 +1378,140 @@ def main():
             )
             initial_cash = config.get("backtest.initial_cash", 100000)
             suggested = calculate_suggested_lots(
-                action=final_action,
+                action=best_return_action,
                 price=current_price,
                 atr=atr_value,
                 cash=initial_cash,
             )
-
-            print_section(" FINAL RECOMMENDATION (MAJORITY VOTE)")
-            print(f"\n  === Strategy Votes ===")
-            print(f"  BUY  : {action_counts.get('BUY', 0)} votes")
-            print(f"  HOLD : {action_counts.get('HOLD', 0)} votes")
-            print(f"  SELL : {action_counts.get('SELL', 0)} votes")
-            print(f"\n  Final Action: {final_action} (majority)")
-            print(f"\n  Best Strategy by Score ({best_strategy_name}):")
-            print(f"    Score     : {decisions[best_strategy_name]['score']:.3f}")
-            print(f"    Return    : {decisions[best_strategy_name]['return']}")
-
-            # Get best strategy description
-            best_strategy_desc = ""
-            for strategy in strategies:
-                if (
-                    strategy.name == best_strategy_name
-                    and hasattr(strategy, "description")
-                    and strategy.description
-                ):
-                    best_strategy_desc = strategy.description
-                    break
-            if best_strategy_desc:
-                print(f"    Description: {best_strategy_desc}")
-
-            print(f"\n  Best Strategy by Return ({best_return_name}):")
-            print(f"    Return    : {best_return_value:.2%}")
-            print(f"    Decision  : {best_return_action}")
-
-            # Get best return strategy description
-            best_return_desc = ""
-            for strategy in strategies:
-                if (
-                    strategy.name == best_return_name
-                    and hasattr(strategy, "description")
-                    and strategy.description
-                ):
-                    best_return_desc = strategy.description
-                    break
-            if best_return_desc:
-                print(f"    Description: {best_return_desc}")
-
-            # Print Top3 Voting Strategy
-            print(f"\n  === Top3 Voting Strategy ===")
-            print(f"  Action: {top3_action}")
-            print(
-                f"  Votes: BUY={top3_votes['BUY']}, SELL={top3_votes['SELL']}, HOLD={top3_votes['HOLD']}"
-            )
-            print(f"  Top Strategies:")
-            for detail in top3_details:
-                print(
-                    f"    - {detail['name']}: {detail['return']} -> {detail['action']}"
-                )
-
-            print(f"\n  === Suggested Position ===")
+            print(f"\n  === Suggested Position (Based on Best Return) ===")
             print(f"  Lots          : {suggested['lots']:.1f} 手")
             print(f"  Shares        : {suggested['shares']} 股")
             print(f"  Position      : {suggested['position_pct']:.1f}% of capital")
             print(f"  Est. Cost     : ${suggested['estimated_cost']:,.2f}")
-
-            # Calculate stop loss and take profit percentages
             sl_pct = abs((current_price - suggested["stop_loss"]) / current_price * 100)
             tp_pct = abs(
                 (suggested["take_profit"] - current_price) / current_price * 100
             )
-
-            if final_action == "BUY":
+            if best_return_action == "BUY":
                 print(
                     f"  Stop Loss    : ${suggested['stop_loss']:.2f} (-{sl_pct:.1f}%)"
                 )
                 print(
                     f"  Take Profit   : ${suggested['take_profit']:.2f} (+{tp_pct:.1f}%)"
                 )
-            else:  # SELL
+            else:
                 print(
                     f"  Stop Loss    : ${suggested['stop_loss']:.2f} (+{sl_pct:.1f}%)"
                 )
                 print(
                     f"  Take Profit   : ${suggested['take_profit']:.2f} (-{tp_pct:.1f}%)"
                 )
-        else:
-            print_section(" FINAL RECOMMENDATION")
-            print(f"\n  Action       : HOLD (no clear consensus)")
-            print(f"\n  === Strategy Votes ===")
-            print(f"  BUY  : {action_counts.get('BUY', 0)} votes")
-            print(f"  HOLD : {action_counts.get('HOLD', 0)} votes")
-            print(f"  SELL : {action_counts.get('SELL', 0)} votes")
-            print(f"\n  Best Strategy by Return ({best_return_name}):")
-            print(f"    Return    : {best_return_value:.2%}")
-            print(f"    Decision  : {best_return_action}")
 
-            # Get best return strategy description
-            best_return_desc = ""
-            for strategy in strategies:
-                if (
-                    strategy.name == best_return_name
-                    and hasattr(strategy, "description")
-                    and strategy.description
-                ):
-                    best_return_desc = strategy.description
-                    break
-            if best_return_desc:
-                print(f"    Description: {best_return_desc}")
 
-            # Show suggested position based on best return strategy's decision
-            if best_return_action != "HOLD":
-                current_price = backtest_df["close"].iloc[-1]
-                atr_value = (
-                    backtest_df["atr"].iloc[-1]
-                    if "atr" in backtest_df.columns
-                    else current_price * 0.02
-                )
-                initial_cash = config.get("backtest.initial_cash", 100000)
-                suggested = calculate_suggested_lots(
-                    action=best_return_action,
-                    price=current_price,
-                    atr=atr_value,
-                    cash=initial_cash,
-                )
-                print(f"\n  === Suggested Position (Based on Best Return) ===")
-                print(f"  Lots          : {suggested['lots']:.1f} 手")
-                print(f"  Shares        : {suggested['shares']} 股")
-                print(f"  Position      : {suggested['position_pct']:.1f}% of capital")
-                print(f"  Est. Cost     : ${suggested['estimated_cost']:,.2f}")
+def main():
+    args = parse_args()
+    stock_code = args.stock
+    print_section(f" STOCK TRADING DECISION SYSTEM")
+    print(f"\n  Stock Code: {stock_code}")
 
-                # Calculate stop loss and take profit percentages
-                sl_pct = abs(
-                    (current_price - suggested["stop_loss"]) / current_price * 100
-                )
-                tp_pct = abs(
-                    (suggested["take_profit"] - current_price) / current_price * 100
-                )
+    try:
+        stock_info = StockInfoResolver.resolve(stock_code)
+        market = stock_info.market.replace("_share", "")
+        print(f"  Market    : {stock_info.market}")
+        print(f"  Exchange  : {stock_info.exchange}")
+    except ValueError as e:
+        print(f"  Error: {e}")
+        sys.exit(1)
 
-                if best_return_action == "BUY":
-                    print(
-                        f"  Stop Loss    : ${suggested['stop_loss']:.2f} (-{sl_pct:.1f}%)"
-                    )
-                    print(
-                        f"  Take Profit   : ${suggested['take_profit']:.2f} (+{tp_pct:.1f}%)"
-                    )
-                else:  # SELL
-                    print(
-                        f"  Stop Loss    : ${suggested['stop_loss']:.2f} (+{sl_pct:.1f}%)"
-                    )
-                    print(
-                        f"  Take Profit   : ${suggested['take_profit']:.2f} (-{tp_pct:.1f}%)"
-                    )
+    config = get_config()
+    cache = get_cache(config.get("data.cache_dir", "cache"))
+    combinator = get_feature_combinator(cache)
+
+    print_section(" FETCHING & PROCESSING DATA")
+    print(f"\n  Training period : {args.train_days} days")
+    print(f"  Backtest period : {args.backtest_days} days")
+    print(f"  Force refresh   : {args.refresh}")
+    print("\n  Extracting features...")
+    try:
+        features_df = combinator.get_combined_features(
+            stock_code, days=args.train_days, force_refresh=args.refresh
+        )
+        if features_df.empty:
+            print("  Error: Could not fetch data for this stock")
+            sys.exit(1)
+        print(f"  Total samples   : {len(features_df)}")
+    except Exception as e:
+        print(f"  Error fetching data: {e}")
+        sys.exit(1)
+
+    excluded_dates = _process_important_dates(features_df, market, args, config)
+    _update_realtime_price(features_df, stock_code)
+    model = _train_model(features_df, args, config)
+    prediction_action, prediction_confidence, prediction_proba = _get_prediction(
+        model, features_df
+    )
+    print_feature_importance(model, top_n=10)
+
+    backtest_df, results_df = _run_backtest_comparison(
+        features_df, args, config, stock_info, model
+    )
+    if results_df is None:
+        print("\n" + "=" * 60)
+        print(" Decision process completed!")
+        print("=" * 60)
+        return
+
+    min_samples = config.get_section("model").get("strategy", {}).get("min_samples", 20)
+    (
+        decisions,
+        best_strategy_name,
+        best_action,
+        best_confidence,
+        action_counts,
+        best_return_name,
+        best_return_action,
+        best_return_value,
+    ) = print_all_strategy_decisions(
+        get_market_strategies(
+            model=model,
+            market=results_df.get("Market", ["a_share"])[0]
+            if "Market" in results_df.columns
+            else "a_share",
+            min_samples=min_samples,
+            require_bull_market_for_buy=True,
+        ),
+        results_df,
+        backtest_df,
+        features_df,
+        model,
+        min_samples,
+    )
+
+    strategies = get_market_strategies(
+        model=model,
+        market={
+            "a_share": "a_share",
+            "hk_share": "hk",
+            "hk": "hk",
+            "us_share": "us",
+            "us": "us",
+        }.get(stock_info.market, "default"),
+        min_samples=min_samples,
+        require_bull_market_for_buy=True,
+    )
+
+    _print_final_recommendation(
+        results_df,
+        decisions,
+        action_counts,
+        strategies,
+        best_strategy_name,
+        best_return_name,
+        best_return_action,
+        best_return_value,
+        config,
+        backtest_df,
+    )
 
     print("\n" + "=" * 60)
     print(" Decision process completed!")
