@@ -240,6 +240,7 @@ See `requirements.txt`
 - [x] Enhanced sentiment analysis (news, social media, search trends, combined scoring)
 - [x] Refactored technical.py extract() from 673 lines to 36 focused methods
 - [x] Refactored decide.py main() from 439 lines to 6 focused functions
+- [x] Code quality: ruff clean (183 lint fixes, removed duplicates, fixed undefined names)
 
 ### Completed Features
 - [x] Confidence calibration based on model accuracy
