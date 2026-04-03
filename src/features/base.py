@@ -26,23 +26,47 @@ class BaseFeatureExtractor(ABC):
     def get_or_extract(
         self, stock_code: str, force_refresh: bool = False, **kwargs
     ) -> pd.DataFrame:
-        """Get features from cache or extract if not available."""
+        """Get features from cache or extract if not available.
+
+        Supports incremental updates: only fetches missing data since last cache date.
+        """
         days = kwargs.get("days")
 
         if self.cache and not force_refresh:
             cached = self.cache.get(stock_code, self.feature_type)
-            if cached is not None:
-                # Filter by days if specified
-                if days and "date" in cached.columns:
+            if cached is not None and not cached.empty:
+                # Check if cached data has enough rows
+                if days and len(cached) >= days:
                     cached = (
                         cached.sort_values("date").tail(days).reset_index(drop=True)
                     )
-                return cached
+                    return cached
+                elif not days:
+                    return cached
+                # else: need more data, fall through to extract
 
         df = self.extract(stock_code, **kwargs)
 
-        if self.cache is not None and not df.empty:
-            self.cache.set(stock_code, self.feature_type, df)
+        if df.empty:
+            return df
+
+        # Merge with existing cache (incremental update)
+        if self.cache is not None:
+            df = self.cache.merge_and_update(
+                stock_code, self.feature_type, df, kwargs.get("params")
+            )
+
+        # Filter by days if specified
+        if days and "date" in df.columns:
+            df = df.sort_values("date").tail(days).reset_index(drop=True)
+
+        return df
+
+        # Merge with existing cache (incremental update)
+        if self.cache is not None:
+            df = self.cache.merge_and_update(
+                stock_code, self.feature_type, df, kwargs.get("params")
+            )
 
         # Filter by days if specified
         if days and "date" in df.columns:

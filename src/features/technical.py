@@ -27,12 +27,104 @@ class TechnicalFeatures(BaseFeatureExtractor):
     def feature_type(self) -> str:
         return "technical"
 
+    def _fetch_with_incremental(self, stock_code: str, days: int) -> pd.DataFrame:
+        """Fetch stock data with incremental update support.
+
+        Only fetches missing data since last cache date to reduce API calls.
+        """
+        if not self.cache:
+            return fetch_stock_data(stock_code, days=days)
+
+        # Check if we have cached raw data
+        cached_raw = self.cache.get(stock_code, "raw_price_data")
+        if cached_raw is None or cached_raw.empty:
+            # No cache, fetch full data
+            data = fetch_stock_data(stock_code, days=days)
+            if not data.empty and self.cache:
+                self.cache.set(stock_code, "raw_price_data", data)
+            return data
+
+        # Get latest date in cache
+        if "date" not in cached_raw.columns:
+            return fetch_stock_data(stock_code, days=days)
+
+        cached_raw["date"] = pd.to_datetime(cached_raw["date"])
+        cached_raw = cached_raw.sort_values("date").reset_index(drop=True)
+        latest_date = cached_raw["date"].max()
+        today = pd.Timestamp.today().normalize()
+
+        # Check if we need new data (cache is from a previous trading day)
+        needs_new_data = latest_date.date() < today.date()
+
+        # Check if we need more historical data
+        cached_count = len(cached_raw)
+        needs_more_history = cached_count < days
+
+        if not needs_new_data and not needs_more_history:
+            # Cache is up to date and has enough data
+            return cached_raw.tail(days).reset_index(drop=True)
+
+        if needs_new_data:
+            # Fetch only the missing days since last cache date
+            # Add extra days to account for weekends/holidays
+            missing_days = (today - latest_date).days + 5
+            fetch_days = max(missing_days, 10)  # At least 10 days
+
+            logger = __import__("logging").getLogger(__name__)
+            logger.info(
+                f"Incremental fetch: latest={latest_date.date()}, fetching {fetch_days} days"
+            )
+
+            new_data = fetch_stock_data(stock_code, days=fetch_days)
+            if new_data.empty:
+                # Failed to fetch new data, return cached data
+                return cached_raw.tail(days).reset_index(drop=True)
+
+            # Merge new data with cached data
+            new_data["date"] = pd.to_datetime(new_data["date"])
+            combined = pd.concat([cached_raw, new_data], ignore_index=True)
+            combined = combined.drop_duplicates(subset=["date"], keep="last")
+            combined = combined.sort_values("date").reset_index(drop=True)
+
+            # Update cache
+            self.cache.set(stock_code, "raw_price_data", combined)
+
+            return combined.tail(days).reset_index(drop=True)
+
+        elif needs_more_history:
+            # Need more historical data, fetch additional days
+            extra_days = days - cached_count + 10  # Add buffer
+            logger = __import__("logging").getLogger(__name__)
+            logger.info(
+                f"Fetching more history: cached={cached_count}, need={days}, fetching {extra_days} days"
+            )
+
+            # Fetch from an earlier start date
+            total_fetch_days = days + 20  # Add buffer
+            full_data = fetch_stock_data(stock_code, days=total_fetch_days)
+
+            if full_data.empty:
+                return cached_raw.tail(days).reset_index(drop=True)
+
+            # Merge with cached data
+            full_data["date"] = pd.to_datetime(full_data["date"])
+            combined = pd.concat([cached_raw, full_data], ignore_index=True)
+            combined = combined.drop_duplicates(subset=["date"], keep="last")
+            combined = combined.sort_values("date").reset_index(drop=True)
+
+            # Update cache
+            self.cache.set(stock_code, "raw_price_data", combined)
+
+            return combined.tail(days).reset_index(drop=True)
+
+        return cached_raw.tail(days).reset_index(drop=True)
+
     def extract(self, stock_code: str, **kwargs) -> pd.DataFrame:
         """Extract technical features for a stock."""
         days = kwargs.get("days", 120)
 
-        # Use multi-provider data fetcher with fallback
-        data = fetch_stock_data(stock_code, days=days)
+        # Use incremental fetch to reduce API calls
+        data = self._fetch_with_incremental(stock_code, days)
         if data.empty:
             return pd.DataFrame()
 
