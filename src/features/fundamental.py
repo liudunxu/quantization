@@ -1,12 +1,16 @@
 """Fundamental features extractor."""
 
+import logging
 from typing import Optional
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 import yfinance as yf
+
 from ..utils.cache import FeatureCache
-from ..utils.stock_info import StockInfoResolver, StockInfo
 from .base import BaseFeatureExtractor
+
+logger = logging.getLogger(__name__)
 
 
 class FundamentalFeatures(BaseFeatureExtractor):

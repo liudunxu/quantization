@@ -1,20 +1,20 @@
 """Feature combinator that merges all features."""
 
-from typing import Optional, List, Dict, Any
-from functools import reduce
 import gc
+from typing import Any, Dict, Optional
+
 import pandas as pd
-import numpy as np
+
 from ..utils.cache import FeatureCache
-from .technical import TechnicalFeatures
+from .alpha_features import AlphaFeatures
+from .company_events import CompanyEventsFeatures
 from .fundamental import FundamentalFeatures
-from .market import MarketFeatures
 from .industry import IndustryFeatures
+from .market import MarketFeatures
 from .money_flow import MoneyFlowFeatures
 from .sentiment import SentimentFeatures
 from .southbound_flow import SouthboundFlowFeatures
-from .company_events import CompanyEventsFeatures
-from .alpha_features import AlphaFeatures, select_features_by_ic, normalize_features
+from .technical import TechnicalFeatures
 from .us_market_sentiment import USMarketSentimentFeatures
 
 

@@ -20,27 +20,27 @@ Features:
     - 支持多种输出格式：text (默认), json, csv
 """
 
-import sys
 import argparse
 import logging
+import sys
 from pathlib import Path
-from datetime import datetime
+
 import pandas as pd
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.utils import (
-    get_cache,
-    get_config,
-    get_param_manager,
-    StockInfoResolver,
-    get_important_dates_manager,
-)
+from src.display import PredictionFormatter
 from src.pipelines import DataPipeline, ModelPipeline
 from src.predictors import EnsemblePredictor
-from src.display import PredictionFormatter
+from src.utils import (
+    StockInfoResolver,
+    get_cache,
+    get_config,
+    get_important_dates_manager,
+    get_param_manager,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -300,7 +300,7 @@ def main():
 
     if current_price is None:
         current_price = df["close"].iloc[-1]
-        print(f"  (Using last close price)")
+        print("  (Using last close price)")
 
     # 8. 使用集成预测器进行综合预测
     print("\n  Running ensemble prediction...")

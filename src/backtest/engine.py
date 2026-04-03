@@ -1,9 +1,11 @@
 """Backtesting engine for stock trading strategies."""
 
-from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass, field
-import pandas as pd
+from typing import List, Optional
+
 import numpy as np
+import pandas as pd
+
 from ..utils.config import get_config
 
 
@@ -220,7 +222,7 @@ class HybridStrategy(Strategy):
             f"高抛低吸回溯={lookback}日，阈值={threshold:.0%}。"
             f"当两者信号一致时才交易。"
         )
-        super().__init__(f"Hybrid Strategy (ML+HSSLB)", description)
+        super().__init__("Hybrid Strategy (ML+HSSLB)", description)
         self.model = model
         self.min_samples = min_samples
         self.ml_confidence_threshold = ml_confidence_threshold
@@ -893,7 +895,7 @@ class BacktestEngine:
             current_price = prices[i] * (
                 1 + self.slippage if position == 1 else 1 - self.slippage
             )
-            prev_price = prices[i]
+            prices[i]
 
             # Calculate equity
             if position == 1:
@@ -1112,7 +1114,7 @@ class BacktestEngine:
 
         # Calculate returns
         strategy_returns = pd.Series(equity).pct_change().dropna()
-        buy_hold_returns = pd.Series(buy_hold_equity).pct_change().dropna()
+        pd.Series(buy_hold_equity).pct_change().dropna()
 
         # Sharpe ratio (annualized)
         if len(strategy_returns) > 0 and strategy_returns.std() > 0:

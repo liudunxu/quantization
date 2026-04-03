@@ -1,15 +1,12 @@
 """Important dates manager - tracks dates with extreme market impact."""
 
-import json
 import logging
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
+
 import pandas as pd
-import urllib.request
-import urllib.error
-import ssl
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +37,12 @@ class ImportantDatesManager:
             """)
 
             conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_date_market 
+                CREATE INDEX IF NOT EXISTS idx_date_market
                 ON important_dates(date, market)
             """)
 
             conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_market 
+                CREATE INDEX IF NOT EXISTS idx_market
                 ON important_dates(market)
             """)
 
@@ -75,7 +72,7 @@ class ImportantDatesManager:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO important_dates 
+                    INSERT OR REPLACE INTO important_dates
                     (date, market, event_type, description, impact_level, source)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """,
@@ -164,7 +161,7 @@ class ImportantDatesManager:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(
                     """
-                    DELETE FROM important_dates 
+                    DELETE FROM important_dates
                     WHERE date = ? AND market = ? AND event_type = ?
                 """,
                     (date, market, event_type),

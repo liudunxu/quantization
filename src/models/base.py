@@ -1,9 +1,9 @@
 """Base model class for stock trading decisions."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
-import numpy as np
 
 
 class BaseModel(ABC):

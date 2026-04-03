@@ -2,11 +2,13 @@
 
 import logging
 from typing import Optional
-import pandas as pd
+
 import numpy as np
-from .base import BaseFeatureExtractor
-from ..utils.cache import FeatureCache
+import pandas as pd
+
 from ..data_providers.sentiment_provider import SentimentProvider
+from ..utils.cache import FeatureCache
+from .base import BaseFeatureExtractor
 
 logger = logging.getLogger(__name__)
 

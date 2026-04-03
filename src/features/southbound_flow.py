@@ -1,12 +1,13 @@
 """Southbound capital flow features for Hong Kong stocks (南向资金)."""
 
 from typing import Optional
-import pandas as pd
+
 import numpy as np
-from ..utils.cache import FeatureCache
-from ..utils.config import get_config
-from .base import BaseFeatureExtractor
+import pandas as pd
+
 from ..data_providers import AKShareProvider
+from ..utils.cache import FeatureCache
+from .base import BaseFeatureExtractor
 
 
 class SouthboundFlowFeatures(BaseFeatureExtractor):

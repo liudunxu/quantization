@@ -1,7 +1,7 @@
 """Base data provider interface."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
+
 import pandas as pd
 
 

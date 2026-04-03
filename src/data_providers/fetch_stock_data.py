@@ -1,15 +1,17 @@
 """Stock data fetcher with multi-provider fallback."""
 
 import logging
-from typing import Optional, List
+from typing import List, Optional
+
 import pandas as pd
 import yfinance as yf
-from .base import BaseDataProvider
-from .yfinance_provider import YFinanceProvider
+
 from .akshare_provider import AKShareProvider
-from .tushare_provider import TushareProvider
 from .baostock_provider import BaostockProvider
+from .base import BaseDataProvider
 from .openbb_provider import OpenBBProvider
+from .tushare_provider import TushareProvider
+from .yfinance_provider import YFinanceProvider
 
 logger = logging.getLogger(__name__)
 

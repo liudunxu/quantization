@@ -1,11 +1,11 @@
 """Company events and special dates features for stocks (公司事件/特殊日期)."""
 
-from typing import Optional, List, Dict, Any
-import pandas as pd
-import numpy as np
 import logging
+from typing import Optional
+
+import pandas as pd
+
 from ..utils.cache import FeatureCache
-from ..utils.config import get_config
 from .base import BaseFeatureExtractor
 
 logger = logging.getLogger(__name__)

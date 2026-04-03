@@ -8,19 +8,19 @@ Multi-provider stock data fetching with automatic fallback:
 - openbb: Global stocks via OpenBB ODP (multi-source)
 """
 
-from .base import BaseDataProvider
-from .yfinance_provider import YFinanceProvider
 from .akshare_provider import AKShareProvider
-from .tushare_provider import TushareProvider
 from .baostock_provider import BaostockProvider
-from .openbb_provider import OpenBBProvider
-from .sentiment_provider import SentimentProvider
+from .base import BaseDataProvider
 from .fetch_stock_data import (
     StockDataFetcher,
-    get_data_fetcher,
-    fetch_stock_data,
     fetch_realtime_price,
+    fetch_stock_data,
+    get_data_fetcher,
 )
+from .openbb_provider import OpenBBProvider
+from .sentiment_provider import SentimentProvider
+from .tushare_provider import TushareProvider
+from .yfinance_provider import YFinanceProvider
 
 __all__ = [
     "BaseDataProvider",

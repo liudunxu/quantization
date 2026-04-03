@@ -1,13 +1,13 @@
 """Feature caching system with SQLite storage."""
 
-import sqlite3
-import json
 import hashlib
-from pathlib import Path
-from typing import Any, Optional, Dict, List
-import pandas as pd
-from datetime import datetime
 import io
+import json
+import sqlite3
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import pandas as pd
 
 
 class SQLiteFeatureCache:
@@ -91,55 +91,6 @@ class SQLiteFeatureCache:
         """Deserialize bytes to DataFrame."""
         buffer = io.BytesIO(data)
         return pd.read_parquet(buffer)
-
-    def get_latest_date(
-        self, stock_code: str, feature_type: str, params: Optional[Dict] = None
-    ) -> Optional[pd.Timestamp]:
-        """Get the latest date in cached data."""
-        df = self.get(stock_code, feature_type, params)
-        if df is None or df.empty or "date" not in df.columns:
-            return None
-        df["date"] = pd.to_datetime(df["date"])
-        return df["date"].max()
-
-    def merge_and_update(
-        self,
-        stock_code: str,
-        feature_type: str,
-        new_df: pd.DataFrame,
-        params: Optional[Dict] = None,
-    ) -> pd.DataFrame:
-        """Merge new data with cached data, deduplicate, and update cache.
-
-        Args:
-            stock_code: Stock code
-            feature_type: Feature type
-            new_df: New data to merge
-            params: Optional params
-
-        Returns:
-            Merged and deduplicated DataFrame
-        """
-        cached_df = self.get(stock_code, feature_type, params)
-
-        if cached_df is None or cached_df.empty:
-            # No cached data, just cache the new data
-            self.set(stock_code, feature_type, new_df, params)
-            return new_df
-
-        # Merge new data with cached data
-        combined = pd.concat([cached_df, new_df], ignore_index=True)
-
-        # Deduplicate by date (keep latest)
-        if "date" in combined.columns:
-            combined["date"] = pd.to_datetime(combined["date"])
-            combined = combined.drop_duplicates(subset=["date"], keep="last")
-            combined = combined.sort_values("date").reset_index(drop=True)
-
-        # Update cache
-        self.set(stock_code, feature_type, combined, params)
-
-        return combined
 
     def get_latest_date(
         self, stock_code: str, feature_type: str, params: Optional[Dict] = None

@@ -2,11 +2,12 @@
 
 import logging
 from typing import Optional, Tuple
+
 import pandas as pd
 
+from ..data_providers import fetch_realtime_price
 from ..features import get_feature_combinator
 from ..utils import get_cache, get_config
-from ..data_providers import fetch_realtime_price
 
 logger = logging.getLogger(__name__)
 

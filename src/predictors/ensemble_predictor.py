@@ -1,9 +1,9 @@
 """集成预测器 - 结合ML模型、技术信号和多策略进行综合预测"""
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, Optional
+
 import pandas as pd
-import numpy as np
 
 from ..models import StockTradingModel
 from .technical_signals import TechnicalSignalGenerator
@@ -572,8 +572,8 @@ class EnsemblePredictor:
         box_bottom = latest.get("box_bottom", price * 0.95)
         high_20d = latest.get("high_20d", price)
         low_20d = latest.get("low_20d", price)
-        bb_upper = latest.get("bb_upper", price * 1.02)
-        bb_lower = latest.get("bb_lower", price * 0.98)
+        latest.get("bb_upper", price * 1.02)
+        latest.get("bb_lower", price * 0.98)
 
         if pd.isna(box_top):
             box_top = price * 1.05
@@ -656,7 +656,7 @@ class EnsemblePredictor:
 
         # 长期趋势(60日): 价格相对MA60位置
         ma60 = latest.get("ma_60", None)
-        ma120 = latest.get("ma_120", None)
+        latest.get("ma_120", None)
         price = latest.get("close", 0)
         if ma60 is not None and not pd.isna(ma60) and ma60 > 0:
             long_trend = "UP" if price > ma60 else "DOWN"
@@ -667,7 +667,7 @@ class EnsemblePredictor:
         trends = [short_trend, medium_trend, long_trend]
         up_count = trends.count("UP")
         down_count = trends.count("DOWN")
-        neutral_count = trends.count("NEUTRAL")
+        trends.count("NEUTRAL")
 
         if up_count >= 2:
             direction = "UP"
@@ -904,7 +904,7 @@ class EnsemblePredictor:
         top3_signals = sorted_signals[:3]
         top3_up = sum(1 for s in top3_signals if s["direction"] == "UP")
         top3_down = sum(1 for s in top3_signals if s["direction"] == "DOWN")
-        top3_neutral = sum(1 for s in top3_signals if s["direction"] == "NEUTRAL")
+        sum(1 for s in top3_signals if s["direction"] == "NEUTRAL")
 
         # Top3投票加成 - 更激进
         if top3_up >= 2 and direction == "UP":

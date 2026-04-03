@@ -1,9 +1,11 @@
 """OpenBB ODP data provider for global stocks."""
 
-import time
 import logging
+import time
 from typing import Optional
+
 import pandas as pd
+
 from .base import BaseDataProvider
 
 logger = logging.getLogger(__name__)

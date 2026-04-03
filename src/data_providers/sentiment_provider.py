@@ -1,18 +1,14 @@
 """Sentiment data provider for stock news and social media sentiment analysis."""
 
-import time
 import logging
-from typing import Optional, Dict, List, Tuple
+import time
 from datetime import datetime, timedelta
-import pandas as pd
+from typing import Dict, Tuple
+
 import numpy as np
+import pandas as pd
+
 from .base import BaseDataProvider
-from ..features.enhanced_sentiment import (
-    NewsSentimentAnalyzer,
-    SocialMediaAnalyzer,
-    SearchTrendAnalyzer,
-    CombinedSentiment,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +164,7 @@ class SentimentProvider(BaseDataProvider):
         snownlp_score = self._analyze_sentiment_snownlp(text) if use_snownlp else 0.0
 
         # Weighted average: 60% keywords, 40% SnowNLP
-        if use_snownlp and snownlp != 0:
+        if use_snownlp and snownlp_score != 0:
             return keyword_score * 0.6 + snownlp_score * 0.4
         return keyword_score
 
@@ -308,7 +304,7 @@ class SentimentProvider(BaseDataProvider):
                 avg_sentiment = result[result["sentiment_score"] != 0][
                     "sentiment_score"
                 ].mean()
-                total_news = result["news_count"].sum()
+                result["news_count"].sum()
                 # 使用衰减的历史情绪 (今天是100%，昨天是80%，前天是60%...)
                 for i, row in result.iterrows():
                     days_ago = result.index[-1] - i

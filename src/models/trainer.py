@@ -1,13 +1,13 @@
 """CatBoost model for stock trading decisions."""
 
-from typing import Optional, List, Tuple, Dict, Any
-from pathlib import Path
-import pandas as pd
-import numpy as np
-from catboost import CatBoostClassifier
-import joblib
-from ..utils.config import get_config
+from typing import Any, Dict, List, Optional, Tuple
 
+import joblib
+import numpy as np
+import pandas as pd
+from catboost import CatBoostClassifier
+
+from ..utils.config import get_config
 
 # Feature categories for market-aware selection
 FEATURE_CATEGORIES = {

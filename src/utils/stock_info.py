@@ -1,7 +1,6 @@
 """Stock data source utilities."""
 
 import re
-from typing import Tuple
 from dataclasses import dataclass
 
 

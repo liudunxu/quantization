@@ -4,28 +4,27 @@ This module provides a centralized location for all strategy configurations
 to ensure consistency between decide.py and backtest.py.
 """
 
-from typing import List, Optional, Literal
+from typing import List, Literal, Optional
+
+from ..utils import get_param_manager
 from .engine import (
-    Strategy,
     BuyAndHoldStrategy,
     HighSellLowBuyStrategy,
-    MLStrategy,
     HybridStrategy,
-    RollingMLStrategy,
+    MLStrategy,
     RollingHybridStrategy,
+    RollingMLStrategy,
+    Strategy,
 )
 from .rule_strategies import (
-    MAGoldenCrossStrategy,
-    BullTrendStrategy,
-    ShrinkPullbackStrategy,
     BottomVolumeStrategy,
     BoxOscillationStrategy,
-    EmotionCycleStrategy,
-    VolumeBreakoutStrategy,
-    OneYangThreeYinStrategy,
+    BullTrendStrategy,
     MACDDivergenceStrategy,
+    MAGoldenCrossStrategy,
+    ShrinkPullbackStrategy,
+    VolumeBreakoutStrategy,
 )
-from ..utils import get_param_manager
 
 # Legacy market params (for backward compatibility)
 MARKET_PARAMS = {

@@ -1,10 +1,10 @@
 """Output formatters for displaying results."""
 
+from typing import Any, Dict, Optional
+
 import pandas as pd
-from typing import Dict, Any, Optional
 
 from ..models import StockTradingModel
-
 
 # Feature descriptions mapping
 FEATURE_DESCRIPTIONS = {
@@ -202,7 +202,7 @@ def print_stock_core_data(
     print_section(" STOCK CORE DATA")
 
     # Price Info
-    print(f"\n  === Price Info ===")
+    print("\n  === Price Info ===")
     print(f"  Current Price : {latest.get('close', 'N/A'):.2f}")
     print(f"  Open          : {latest.get('open', 'N/A'):.2f}")
     print(f"  High          : {latest.get('high', 'N/A'):.2f}")
@@ -210,7 +210,7 @@ def print_stock_core_data(
     print(f"  Volume        : {latest.get('volume', 0):,.0f}")
 
     # Moving Averages
-    print(f"\n  === Moving Averages ===")
+    print("\n  === Moving Averages ===")
     for period in [5, 10, 20, 60]:
         ma_col = f"ma_{period}"
         if ma_col in df.columns:
@@ -226,7 +226,7 @@ def print_stock_core_data(
                 )
 
     # Key Indicators
-    print(f"\n  === Key Indicators ===")
+    print("\n  === Key Indicators ===")
     if "rsi" in df.columns:
         rsi = latest.get("rsi", 0)
         rsi_label = "超买" if rsi > 70 else "超卖" if rsi < 30 else "中性"
@@ -244,7 +244,7 @@ def print_stock_core_data(
         print(f"  ATR (14)       : {atr:.2f} ({atr_pct:.1f}%)")
 
     # Recent Returns
-    print(f"\n  === Recent Returns ===")
+    print("\n  === Recent Returns ===")
     for period in [5, 10, 20]:
         mom_col = f"momentum_{period}"
         if mom_col in df.columns:
@@ -253,7 +253,7 @@ def print_stock_core_data(
                 print(f"  {period}d Return     : {ret * 100:+.2f}%")
 
     # Sentiment
-    print(f"\n  === Market Sentiment ===")
+    print("\n  === Market Sentiment ===")
     sentiment_score = latest.get("sentiment_score", 0)
     news_count = latest.get("news_count", 0)
     if pd.notna(sentiment_score):
@@ -271,10 +271,10 @@ def print_stock_core_data(
         print(f"  Sentiment Label : {sentiment_label}")
         print(f"  News Count      : {news_count:.0f}")
     else:
-        print(f"  情绪数据不可用")
+        print("  情绪数据不可用")
 
     # Historical Performance
-    print(f"\n  === Historical Performance ===")
+    print("\n  === Historical Performance ===")
     if len(history_df) >= 20:
         last_20 = history_df.tail(20)
         start_price = last_20["close"].iloc[0]
@@ -301,7 +301,7 @@ def print_stock_core_data(
         print(f"  20日最大回撤   : {drawdown:.2f}%")
         print(f"  20日胜率       : {win_rate:.0f}%")
     else:
-        print(f"  数据不足20天")
+        print("  数据不足20天")
 
 
 def print_backtest_results(results_df: pd.DataFrame) -> None:
@@ -338,6 +338,6 @@ def print_final_recommendation(
     print(f"\n  Reason: {reason}")
 
     if details:
-        print(f"\n  Details:")
+        print("\n  Details:")
         for key, value in details.items():
             print(f"    {key}: {value}")

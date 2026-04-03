@@ -13,30 +13,30 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional
+
 import pandas as pd
-import numpy as np
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 logger = logging.getLogger(__name__)
 
-from src.utils import (
+# noqa: E402 - imports must come after sys.path.insert
+from src.backtest import (  # noqa: E402
+    BacktestEngine,
+    HybridStrategy,
+    MLStrategy,
+    RollingHybridStrategy,
+    RollingMLStrategy,
+    get_market_strategies,
+)
+from src.features import get_feature_combinator  # noqa: E402
+from src.models import StockTradingModel  # noqa: E402
+from src.utils import (  # noqa: E402
+    StockInfoResolver,
     get_cache,
     get_config,
-    StockInfoResolver,
     get_important_dates_manager,
-)
-from src.features import get_feature_combinator, SentimentFeatures
-from src.models import StockTradingModel, get_model
-from src.backtest import (
-    BacktestEngine,
-    run_backtest,
-    get_market_strategies,
-    MLStrategy,
-    HybridStrategy,
-    RollingMLStrategy,
-    RollingHybridStrategy,
 )
 
 
@@ -83,7 +83,7 @@ def print_decision(action: int, confidence: float, probabilities: dict) -> None:
     print_section(" TRADING DECISION")
     print(f"\n  Action   : {action_str}")
     print(f"  Confidence: {confidence:.2%}")
-    print(f"\n  Probabilities:")
+    print("\n  Probabilities:")
     print(f"    - Buy : {probabilities.get('buy_probability', 0):.2%}")
     print(f"    - Hold: {probabilities.get('hold_probability', 0):.2%}")
     print(f"    - Sell: {probabilities.get('sell_probability', 0):.2%}")
@@ -780,7 +780,7 @@ def print_stock_core_data(
     latest = df.iloc[-1]
     current_price = latest.get("close", 0)
 
-    print(f"\n  === Price Info ===")
+    print("\n  === Price Info ===")
     print(f"  Current Price : {current_price:.2f}")
     print(f"  Open          : {latest.get('open', 'N/A')}")
     print(f"  High          : {latest.get('high', 'N/A')}")
@@ -788,7 +788,7 @@ def print_stock_core_data(
     print(f"  Volume        : {latest.get('volume', 'N/A'):,.0f}")
 
     # Moving Averages
-    print(f"\n  === Moving Averages ===")
+    print("\n  === Moving Averages ===")
     for period in [5, 10, 20, 60]:
         ma_col = f"ma_{period}"
         if ma_col in df.columns:
@@ -801,7 +801,7 @@ def print_stock_core_data(
                 )
 
     # Support and Resistance
-    print(f"\n  === Support & Resistance ===")
+    print("\n  === Support & Resistance ===")
 
     # Recent high/low
     high_20d = df["high"].tail(20).max() if len(df) >= 20 else df["high"].max()
@@ -822,7 +822,7 @@ def print_stock_core_data(
             print(f"  BB Lower       : {bb_lower:.2f}")
 
     # Key Indicators
-    print(f"\n  === Key Indicators ===")
+    print("\n  === Key Indicators ===")
 
     # RSI
     if "rsi" in df.columns:
@@ -850,7 +850,7 @@ def print_stock_core_data(
             print(f"  ATR (14)       : {atr:.2f} ({atr_pct:.1f}%)")
 
     # Volume Analysis
-    print(f"\n  === Volume Analysis ===")
+    print("\n  === Volume Analysis ===")
     if "volume_ratio" in df.columns:
         vol_ratio = latest.get("volume_ratio")
         if pd.notna(vol_ratio):
@@ -860,7 +860,7 @@ def print_stock_core_data(
             print(f"  Volume Ratio   : {vol_ratio:.2f} ({vol_status})")
 
     # Returns
-    print(f"\n  === Recent Returns ===")
+    print("\n  === Recent Returns ===")
     for period in [1, 5, 10, 20]:
         ret_col = f"momentum_{period}"
         if ret_col in df.columns:
@@ -869,7 +869,7 @@ def print_stock_core_data(
                 print(f"  {period}d Return     : {ret * 100:+.2f}%")
 
     # Sentiment Analysis
-    print(f"\n  === Market Sentiment ===")
+    print("\n  === Market Sentiment ===")
     sentiment_cols = [col for col in df.columns if "sentiment" in col.lower()]
     if sentiment_cols:
         sentiment_score = latest.get("sentiment_score", 0)
@@ -905,14 +905,14 @@ def print_stock_core_data(
 
         # Extreme sentiment warning
         if sentiment_score > 0.5:
-            print(f"  ⚠️  市场情绪极度乐观，注意风险")
+            print("  ⚠️  市场情绪极度乐观，注意风险")
         elif sentiment_score < -0.5:
-            print(f"  ⚠️  市场情绪极度悲观，可能存在机会")
+            print("  ⚠️  市场情绪极度悲观，可能存在机会")
     else:
-        print(f"  情绪数据不可用 (Sentiment data not available)")
+        print("  情绪数据不可用 (Sentiment data not available)")
 
     # ========== Simple Analysis for Beginners ==========
-    print(f"\n  === Simple Analysis ===")
+    print("\n  === Simple Analysis ===")
     analyses = []
 
     # Price vs MA analysis
@@ -1003,7 +1003,7 @@ def print_stock_core_data(
         print("  暂无明显技术信号")
 
     # ========== Historical Performance Summary ==========
-    print(f"\n  === Historical Performance ===")
+    print("\n  === Historical Performance ===")
 
     # Calculate performance metrics using full history data
     if len(history_df) >= 20:
@@ -1183,7 +1183,7 @@ def _train_model(features_df: pd.DataFrame, args, config) -> StockTradingModel:
         )
         print(f"\n  Training accuracy : {train_metrics['train_accuracy']:.2%}")
         print(f"  Features used     : {train_metrics['feature_count']}")
-        print(f"  Label distribution:")
+        print("  Label distribution:")
         print(f"    - Buy : {train_metrics['label_distribution']['buy']}")
         print(f"    - Sell: {train_metrics['label_distribution']['sell']}")
     except Exception as e:
@@ -1258,7 +1258,7 @@ def _print_final_recommendation(
     final_action = (
         max(action_counts, key=action_counts.get) if action_counts else "HOLD"
     )
-    best_confidence = decisions[best_strategy_name]["confidence"]
+    decisions[best_strategy_name]["confidence"]
 
     # Top3 Voting
     top3_strategies = results_df.head(3)
@@ -1298,7 +1298,7 @@ def _print_final_recommendation(
         )
 
         print_section(" FINAL RECOMMENDATION (MAJORITY VOTE)")
-        print(f"\n  === Strategy Votes ===")
+        print("\n  === Strategy Votes ===")
         print(f"  BUY  : {action_counts.get('BUY', 0)} votes")
         print(f"  HOLD : {action_counts.get('HOLD', 0)} votes")
         print(f"  SELL : {action_counts.get('SELL', 0)} votes")
@@ -1328,16 +1328,16 @@ def _print_final_recommendation(
                 print(f"    Description: {strategy.description}")
                 break
 
-        print(f"\n  === Top3 Voting Strategy ===")
+        print("\n  === Top3 Voting Strategy ===")
         print(f"  Action: {top3_action}")
         print(
             f"  Votes: BUY={top3_votes['BUY']}, SELL={top3_votes['SELL']}, HOLD={top3_votes['HOLD']}"
         )
-        print(f"  Top Strategies:")
+        print("  Top Strategies:")
         for detail in top3_details:
             print(f"    - {detail['name']}: {detail['return']} -> {detail['action']}")
 
-        print(f"\n  === Suggested Position ===")
+        print("\n  === Suggested Position ===")
         print(f"  Lots          : {suggested['lots']:.1f} 手")
         print(f"  Shares        : {suggested['shares']} 股")
         print(f"  Position      : {suggested['position_pct']:.1f}% of capital")
@@ -1352,8 +1352,8 @@ def _print_final_recommendation(
             print(f"  Take Profit   : ${suggested['take_profit']:.2f} (-{tp_pct:.1f}%)")
     else:
         print_section(" FINAL RECOMMENDATION")
-        print(f"\n  Action       : HOLD (no clear consensus)")
-        print(f"\n  === Strategy Votes ===")
+        print("\n  Action       : HOLD (no clear consensus)")
+        print("\n  === Strategy Votes ===")
         print(f"  BUY  : {action_counts.get('BUY', 0)} votes")
         print(f"  HOLD : {action_counts.get('HOLD', 0)} votes")
         print(f"  SELL : {action_counts.get('SELL', 0)} votes")
@@ -1383,7 +1383,7 @@ def _print_final_recommendation(
                 atr=atr_value,
                 cash=initial_cash,
             )
-            print(f"\n  === Suggested Position (Based on Best Return) ===")
+            print("\n  === Suggested Position (Based on Best Return) ===")
             print(f"  Lots          : {suggested['lots']:.1f} 手")
             print(f"  Shares        : {suggested['shares']} 股")
             print(f"  Position      : {suggested['position_pct']:.1f}% of capital")
@@ -1411,7 +1411,7 @@ def _print_final_recommendation(
 def main():
     args = parse_args()
     stock_code = args.stock
-    print_section(f" STOCK TRADING DECISION SYSTEM")
+    print_section(" STOCK TRADING DECISION SYSTEM")
     print(f"\n  Stock Code: {stock_code}")
 
     try:
@@ -1444,7 +1444,7 @@ def main():
         print(f"  Error fetching data: {e}")
         sys.exit(1)
 
-    excluded_dates = _process_important_dates(features_df, market, args, config)
+    _process_important_dates(features_df, market, args, config)
     _update_realtime_price(features_df, stock_code)
     model = _train_model(features_df, args, config)
     prediction_action, prediction_confidence, prediction_proba = _get_prediction(

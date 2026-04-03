@@ -5,7 +5,7 @@
 - prediction: 涨跌预测场景（用于 predict.py）
 """
 
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 # 场景定义
 SCENARIOS = {

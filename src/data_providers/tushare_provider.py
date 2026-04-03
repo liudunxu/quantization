@@ -1,10 +1,12 @@
 """Tushare data provider for Chinese stocks."""
 
+import logging
 import os
 import time
-import logging
 from typing import Optional
+
 import pandas as pd
+
 from .base import BaseDataProvider
 
 logger = logging.getLogger(__name__)

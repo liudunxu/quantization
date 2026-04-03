@@ -1,10 +1,11 @@
 """Yahoo Finance data provider with retry logic."""
 
-import time
 import logging
-from typing import Optional
+import time
+
 import pandas as pd
 import yfinance as yf
+
 from .base import BaseDataProvider
 
 logger = logging.getLogger(__name__)

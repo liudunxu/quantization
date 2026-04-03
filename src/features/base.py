@@ -1,8 +1,10 @@
 """Base feature extractor class."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Optional
+
 import pandas as pd
+
 from ..utils.cache import FeatureCache
 
 

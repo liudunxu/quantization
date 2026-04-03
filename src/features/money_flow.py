@@ -1,9 +1,13 @@
 """Money flow features extractor for Chinese stocks."""
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
 import pandas as pd
-import numpy as np
+
 from .base import BaseFeatureExtractor
+
+if TYPE_CHECKING:
+    from ..utils.cache import FeatureCache
 
 
 class MoneyFlowFeatures(BaseFeatureExtractor):

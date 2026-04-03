@@ -7,14 +7,13 @@ Provides:
 - CombinedSentiment: Unified sentiment scoring from all sources
 """
 
-import re
-import math
 import logging
-from typing import Optional, Dict, List, Tuple
-from datetime import datetime, timedelta
-from collections import Counter
-import pandas as pd
+import re
+from datetime import datetime
+from typing import Dict, List, Optional
+
 import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 

@@ -4,9 +4,9 @@ This module implements rule-based strategies derived from the strategy reference
 in strategy/references/daily_stock_analysis/.
 """
 
+
 import pandas as pd
-import numpy as np
-from typing import Optional
+
 from .engine import Strategy
 
 
@@ -379,11 +379,11 @@ class EmotionCycleStrategy(Strategy):
             vol_ma = volume_ma.iloc[i]
             vol_ma5_val = volume_ma5.iloc[i]
             current_rsi = rsi.iloc[i]
-            current_price = close.iloc[i]
+            close.iloc[i]
             current_position = price_position.iloc[i]
 
             # Volume shrinking
-            is_cold = current_volume < vol_ma * self.volume_shrink
+            current_volume < vol_ma * self.volume_shrink
 
             # Buy signals: cold sentiment + oversold
             if current_rsi < self.rsi_oversold and current_position < 0.3:

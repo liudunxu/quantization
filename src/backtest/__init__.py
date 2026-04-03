@@ -3,32 +3,32 @@
 from .engine import (
     BacktestEngine,
     BacktestResult,
-    Trade,
-    Strategy,
     BuyAndHoldStrategy,
     HighSellLowBuyStrategy,
-    MLStrategy,
     HybridStrategy,
-    RollingMLStrategy,
+    MLStrategy,
     RollingHybridStrategy,
-    run_backtest
-)
-from .strategies import (
-    get_default_strategies,
-    get_quick_strategies,
-    get_market_strategies,
-    MARKET_PARAMS,
+    RollingMLStrategy,
+    Strategy,
+    Trade,
+    run_backtest,
 )
 from .rule_strategies import (
-    MAGoldenCrossStrategy,
-    BullTrendStrategy,
-    ShrinkPullbackStrategy,
     BottomVolumeStrategy,
     BoxOscillationStrategy,
+    BullTrendStrategy,
     EmotionCycleStrategy,
-    VolumeBreakoutStrategy,
-    OneYangThreeYinStrategy,
     MACDDivergenceStrategy,
+    MAGoldenCrossStrategy,
+    OneYangThreeYinStrategy,
+    ShrinkPullbackStrategy,
+    VolumeBreakoutStrategy,
+)
+from .strategies import (
+    MARKET_PARAMS,
+    get_default_strategies,
+    get_market_strategies,
+    get_quick_strategies,
 )
 
 __all__ = [

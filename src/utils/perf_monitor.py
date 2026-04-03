@@ -1,10 +1,10 @@
 """Performance monitoring utilities for timing and memory tracking."""
 
+import functools
 import logging
 import time
-import functools
-from typing import Optional, Callable, Any, Dict
 from contextlib import contextmanager
+from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

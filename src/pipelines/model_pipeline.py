@@ -1,9 +1,9 @@
 """模型训练和预测流水线 - 复用现有 StockTradingModel"""
 
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Dict, List
+
 import pandas as pd
-import numpy as np
 
 from ..models import StockTradingModel
 

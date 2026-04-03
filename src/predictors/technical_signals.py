@@ -1,9 +1,9 @@
 """技术信号生成器 - 基于技术指标生成交易信号"""
 
 import logging
-from typing import Dict, Any, List, Tuple
+from typing import Any, Dict, Tuple
+
 import pandas as pd
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -266,14 +266,13 @@ class TechnicalSignalGenerator:
         ma5 = latest.get("ma_5", None)
         ma10 = latest.get("ma_10", None)
         ma20 = latest.get("ma_20", None)
-        ma60 = latest.get("ma_60", None)
+        latest.get("ma_60", None)
 
         if ma5 is None or ma20 is None:
             return "NEUTRAL", "均线数据不足"
 
         # 价格在均线上方
         above_ma5 = price > ma5 if ma5 else False
-        above_ma10 = price > ma10 if ma10 else False
         above_ma20 = price > ma20 if ma20 else False
 
         # 均线排列
@@ -333,9 +332,9 @@ class TechnicalSignalGenerator:
             curr_hist = hist if hist else 0
 
             if prev_hist < 0 and curr_hist > 0:
-                return "BULLISH", f"MACD金叉 (柱状图由负转正)"
+                return "BULLISH", "MACD金叉 (柱状图由负转正)"
             elif prev_hist > 0 and curr_hist < 0:
-                return "BEARISH", f"MACD死叉 (柱状图由正转负)"
+                return "BEARISH", "MACD死叉 (柱状图由正转负)"
 
         # 柱状图连续放大检测 (趋势确认)
         if len(df) >= 3 and hist is not None:
@@ -701,9 +700,9 @@ class TechnicalSignalGenerator:
             return "NEUTRAL", "OBV数据不足"
 
         if ad_oscillator > 0:
-            return "BULLISH", f"OBV/A-D线向上 (资金流入)"
+            return "BULLISH", "OBV/A-D线向上 (资金流入)"
         elif ad_oscillator < 0:
-            return "BEARISH", f"OBV/A-D线向下 (资金流出)"
+            return "BEARISH", "OBV/A-D线向下 (资金流出)"
 
         return "NEUTRAL", "OBV/A-D线中性"
 

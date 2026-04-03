@@ -4,10 +4,12 @@ Reference: Microsoft Qlib - Alpha158 feature set
 https://github.com/microsoft/qlib
 """
 
-from typing import Optional, List
-import pandas as pd
-import numpy as np
 import logging
+from typing import List, Optional
+
+import numpy as np
+import pandas as pd
+
 from ..utils.cache import FeatureCache
 from .base import BaseFeatureExtractor
 

@@ -1,9 +1,10 @@
 """BaoStock data provider for Chinese A-shares."""
 
-import time
 import logging
-from typing import Optional
+import time
+
 import pandas as pd
+
 from .base import BaseDataProvider
 
 logger = logging.getLogger(__name__)

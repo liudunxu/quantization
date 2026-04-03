@@ -1,7 +1,7 @@
 """预测结果格式化器 - 支持多种输出格式"""
 
 import json
-from typing import Dict, Any, List
+from typing import Any, Dict
 
 
 class PredictionFormatter:

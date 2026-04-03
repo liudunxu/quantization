@@ -9,28 +9,28 @@ Usage:
 import argparse
 import sys
 from pathlib import Path
+
 import pandas as pd
-import numpy as np
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.utils import (
-    get_cache,
-    get_config,
-    StockInfoResolver,
-    get_important_dates_manager,
-)
-from src.features import get_feature_combinator, SentimentFeatures
-from src.models import StockTradingModel
 from src.backtest import (
     BacktestEngine,
     BacktestResult,
-    MLStrategy,
     HybridStrategy,
-    RollingMLStrategy,
+    MLStrategy,
     RollingHybridStrategy,
+    RollingMLStrategy,
     get_market_strategies,
+)
+from src.features import get_feature_combinator
+from src.models import StockTradingModel
+from src.utils import (
+    StockInfoResolver,
+    get_cache,
+    get_config,
+    get_important_dates_manager,
 )
 
 
@@ -129,11 +129,11 @@ def print_sentiment_summary(df: pd.DataFrame, stock_code: str) -> None:
 
     # Extreme sentiment warning
     if sentiment_score > 0.5:
-        print(f"\n  ⚠️  市场情绪极度乐观，注意风险")
-        print(f"     (Market sentiment extremely bullish, be cautious)")
+        print("\n  ⚠️  市场情绪极度乐观，注意风险")
+        print("     (Market sentiment extremely bullish, be cautious)")
     elif sentiment_score < -0.5:
-        print(f"\n  ⚠️  市场情绪极度悲观，可能存在机会")
-        print(f"     (Market sentiment extremely bearish, potential opportunity)")
+        print("\n  ⚠️  市场情绪极度悲观，可能存在机会")
+        print("     (Market sentiment extremely bearish, potential opportunity)")
 
     # Sentiment volatility
     sentiment_std = latest.get("sentiment_std7", 0)
@@ -146,24 +146,24 @@ def print_sentiment_summary(df: pd.DataFrame, stock_code: str) -> None:
     if len(df) >= 5:
         recent_sentiment = df["sentiment_score"].tail(5)
         if recent_sentiment.mean() > 0.2:
-            print(f"  📈 近期情绪偏积极 (Recent sentiment: bullish)")
+            print("  📈 近期情绪偏积极 (Recent sentiment: bullish)")
         elif recent_sentiment.mean() < -0.2:
-            print(f"  📉 近期情绪偏消极 (Recent sentiment: bearish)")
+            print("  📉 近期情绪偏消极 (Recent sentiment: bearish)")
         else:
-            print(f"  ➡️  近期情绪中性 (Recent sentiment: neutral)")
+            print("  ➡️  近期情绪中性 (Recent sentiment: neutral)")
 
     # Trading suggestion based on sentiment
-    print(f"\n  === 基于情绪的交易建议 (Sentiment-based Suggestion) ===")
+    print("\n  === 基于情绪的交易建议 (Sentiment-based Suggestion) ===")
     if sentiment_score > 0.4 and sentiment_trend > 0:
-        print(f"  情绪积极且上升，可考虑买入 (Positive and rising sentiment)")
+        print("  情绪积极且上升，可考虑买入 (Positive and rising sentiment)")
     elif sentiment_score < -0.4 and sentiment_trend < 0:
-        print(f"  情绪消极且下降，注意风险 (Negative and declining sentiment)")
+        print("  情绪消极且下降，注意风险 (Negative and declining sentiment)")
     elif sentiment_score > 0.2:
-        print(f"  情绪略偏积极，谨慎乐观 (Slightly positive, cautious optimism)")
+        print("  情绪略偏积极，谨慎乐观 (Slightly positive, cautious optimism)")
     elif sentiment_score < -0.2:
-        print(f"  情绪略偏消极，谨慎观望 (Slightly negative, cautious观望)")
+        print("  情绪略偏消极，谨慎观望 (Slightly negative, cautious观望)")
     else:
-        print(f"  情绪中性，建议观望 (Neutral sentiment, wait and see)")
+        print("  情绪中性，建议观望 (Neutral sentiment, wait and see)")
 
 
 def main():
@@ -275,7 +275,7 @@ def main():
     forward_days = training_config.get("forward_days", 5)
     threshold = training_config.get("threshold", 0.01)
     min_samples = model_config.get("strategy", {}).get("min_samples", 20)
-    confidence_threshold = model_config.get("strategy", {}).get(
+    model_config.get("strategy", {}).get(
         "confidence_threshold", 0.25
     )
 

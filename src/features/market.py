@@ -1,13 +1,14 @@
 """Market-wide features extractor."""
 
 from typing import Optional
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+
+from ..data_providers import fetch_stock_data
 from ..utils.cache import FeatureCache
 from ..utils.stock_info import StockInfoResolver
-from ..utils.config import get_config
 from .base import BaseFeatureExtractor
-from ..data_providers import fetch_stock_data
 
 
 class MarketFeatures(BaseFeatureExtractor):

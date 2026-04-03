@@ -18,39 +18,39 @@ Usage:
     python scripts/explore_params.py --stock 000001.SZ --search-method grid --param-samples 5
 """
 
-import sys
 import argparse
-import logging
 import itertools
-from pathlib import Path
-from typing import Dict, List, Any, Tuple, Optional
+import logging
+import sys
 from datetime import datetime
-import pandas as pd
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
+
 import numpy as np
+import pandas as pd
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.utils import (
-    get_cache,
-    get_config,
-    get_param_manager,
-    StockInfoResolver,
-    get_important_dates_manager,
-)
-from src.features import get_feature_combinator
 from src.backtest import BacktestEngine
 from src.backtest.rule_strategies import (
-    MAGoldenCrossStrategy,
-    BullTrendStrategy,
-    ShrinkPullbackStrategy,
     BottomVolumeStrategy,
     BoxOscillationStrategy,
+    BullTrendStrategy,
     EmotionCycleStrategy,
-    VolumeBreakoutStrategy,
-    OneYangThreeYinStrategy,
     MACDDivergenceStrategy,
+    MAGoldenCrossStrategy,
+    ShrinkPullbackStrategy,
+    VolumeBreakoutStrategy,
+)
+from src.features import get_feature_combinator
+from src.utils import (
+    StockInfoResolver,
+    get_cache,
+    get_config,
+    get_important_dates_manager,
+    get_param_manager,
 )
 
 # Configure logging
@@ -947,7 +947,7 @@ def main():
             "f1_down": best_metrics.get("f1_down", 0),
         }
 
-        print(f"\n  Best prediction parameters:")
+        print("\n  Best prediction parameters:")
         print(f"    forward_days: {best_forward_days}")
         print(f"    threshold: {best_threshold}")
         print(f"    model_type: {best_model_type}")
@@ -957,7 +957,7 @@ def main():
         print(f"    accuracy: {best_accuracy:.1%}")
 
         # 显示模型排名
-        print(f"\n  Model ranking (top 5):")
+        print("\n  Model ranking (top 5):")
         for i, (name, score) in enumerate(
             sorted(model_scores.items(), key=lambda x: x[1], reverse=True)[:5]
         ):
@@ -987,10 +987,10 @@ def main():
                 all_best_params[strategy_name] = best_params
                 all_best_metrics[strategy_name] = best_metrics
 
-                print(f"    Best Params:")
+                print("    Best Params:")
                 for k, v in best_params.items():
                     print(f"      {k}: {v}")
-                print(f"    Performance:")
+                print("    Performance:")
                 print(f"      Total Return : {best_metrics.get('total_return', 0):.2%}")
                 print(f"      Sharpe Ratio : {best_metrics.get('sharpe_ratio', 0):.2f}")
                 print(f"      Win Rate     : {best_metrics.get('win_rate', 0):.2%}")
@@ -1024,7 +1024,7 @@ def main():
 
             print(f"  Saved {strategy_name} params for {stock_code}")
 
-        print(f"\n  Done! Parameters saved to cache/strategy_params.db")
+        print("\n  Done! Parameters saved to cache/strategy_params.db")
     elif args.dry_run:
         print(f"\n{'=' * 60}")
         print(" DRY RUN - Results NOT saved to database")

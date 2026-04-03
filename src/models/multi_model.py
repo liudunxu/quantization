@@ -3,10 +3,11 @@
 Combines CatBoost, LightGBM, and XGBoost predictions using weighted voting.
 """
 
-from typing import Optional, List, Dict, Any
-import pandas as pd
-import numpy as np
 import logging
+from typing import Any, Dict, Optional
+
+import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ class MultiModelEnsemble(BaseModel):
         available = {"catboost": True}  # CatBoost is always available
 
         try:
-            import lightgbm
+            import lightgbm  # noqa: F401
 
             available["lightgbm"] = True
         except ImportError:
@@ -44,7 +45,7 @@ class MultiModelEnsemble(BaseModel):
             logger.warning("LightGBM not available")
 
         try:
-            import xgboost
+            import xgboost  # noqa: F401
 
             available["xgboost"] = True
         except ImportError:
