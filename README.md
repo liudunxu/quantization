@@ -708,6 +708,7 @@ uvicorn scripts.predict:app --host 0.0.0.0 --port 8000
 | `/health` | GET | 健康检查 |
 | `/predict` | GET/POST | 股票预测 |
 | `/stocks/{code}/info` | GET | 股票信息 |
+| `/stocks` | GET | 股票列表（按区域） |
 
 #### 请求示例
 
@@ -731,6 +732,14 @@ curl "https://predict-api-production.up.railway.app/predict?stock=000001.SZ&fast
 curl -X POST "https://predict-api-production.up.railway.app/predict" \
   -H "Content-Type: application/json" \
   -d '{"stock": "000001.SZ", "fast_mode": true}'
+
+# 获取股票列表
+curl "https://predict-api-production.up.railway.app/stocks?zone=cn"   # A股
+curl "https://predict-api-production.up.railway.app/stocks?zone=hk"   # 港股
+curl "https://predict-api-production.up.railway.app/stocks?zone=us"   # 美股
+
+# 获取单只股票信息
+curl "https://predict-api-production.up.railway.app/stocks/000001.SZ/info"
 ```
 
 #### 性能优化参数
