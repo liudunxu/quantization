@@ -149,6 +149,15 @@ backtest:
   slippage: 0.001
   max_drawdown_threshold: 0.20  # 20% max drawdown - force sell and stop trading
 
+# Cache configuration
+cache:
+  # Backend: "sqlite" | "hybrid" (auto-detected from env vars)
+  # When UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are set,
+  # the system automatically uses hybrid cache (Redis primary + SQLite fallback)
+  backend: "auto"
+  # TTL in hours for cached features
+  ttl_hours: 24
+
 logging:
   level: "INFO"
   file: "logs/trading.log"

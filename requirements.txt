@@ -17,6 +17,8 @@ statsmodels>=0.14.0
 
 # Cache
 joblib>=1.3.0
+# Redis (Upstash) - optional, auto-detected via env vars
+upstash-redis>=1.0.0
 
 # Backtesting
 backtrader>=1.9.78
