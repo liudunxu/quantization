@@ -53,6 +53,7 @@ class OpenBBProvider(BaseDataProvider):
 
     @property
     def name(self) -> str:
+        """Return provider name."""
         return self._name
 
     def _convert_symbol(self, stock_code: str) -> str:

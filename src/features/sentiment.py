@@ -17,11 +17,13 @@ class SentimentFeatures(BaseFeatureExtractor):
     """Extract sentiment features from news and social media data."""
 
     def __init__(self, cache: Optional[FeatureCache] = None):
+        """Initialize SentimentFeatures."""
         super().__init__(cache)
         self.provider = SentimentProvider()
 
     @property
     def feature_type(self) -> str:
+        """Return feature type name."""
         return "sentiment"
 
     def extract(self, stock_code: str, days: int = 120, **kwargs) -> pd.DataFrame:

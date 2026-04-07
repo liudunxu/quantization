@@ -17,10 +17,12 @@ class FundamentalFeatures(BaseFeatureExtractor):
     """Extract fundamental features for a stock."""
 
     def __init__(self, cache: Optional[FeatureCache] = None):
+        """Initialize FundamentalFeatures."""
         super().__init__(cache)
 
     @property
     def feature_type(self) -> str:
+        """Return feature type name."""
         return "fundamental"
 
     def extract(self, stock_code: str, **kwargs) -> pd.DataFrame:

@@ -19,6 +19,7 @@ class MultiModelEnsemble(BaseModel):
     """Multi-model ensemble combining CatBoost, LightGBM, and XGBoost."""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """Initialize MultiModelEnsemble."""
         super().__init__(config)
         self.config = config or {}
         self.models: Dict[str, BaseModel] = {}
@@ -30,6 +31,7 @@ class MultiModelEnsemble(BaseModel):
 
     @property
     def model_name(self) -> str:
+        """Return model name."""
         return "MultiModelEnsemble"
 
     def _check_available_models(self) -> Dict[str, bool]:

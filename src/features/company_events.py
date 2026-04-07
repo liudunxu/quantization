@@ -22,11 +22,13 @@ class CompanyEventsFeatures(BaseFeatureExtractor):
     """
 
     def __init__(self, cache: Optional[FeatureCache] = None):
+        """Initialize CompanyEventsFeatures."""
         super().__init__(cache)
         self._dividend_data = None
 
     @property
     def feature_type(self) -> str:
+        """Return feature type name."""
         return "company_events"
 
     def _get_akshare(self):

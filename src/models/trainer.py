@@ -84,6 +84,7 @@ class StockTradingModel:
     """CatBoost model for stock trading decisions."""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """Initialize ModelTrainer with configuration."""
         self.config = config or get_config().get_section("model").get("catboost", {})
         self.iterations = self.config.get("iterations", 500)
         self.depth = self.config.get("depth", 6)
@@ -218,6 +219,7 @@ class StockTradingModel:
 
         # Assign market relevance score
         def get_market_score(categories):
+            """Calculate market relevance score for feature categories."""
             if "other" in categories:
                 return 0.5  # Unknown features get medium score
             # Higher score for more relevant categories

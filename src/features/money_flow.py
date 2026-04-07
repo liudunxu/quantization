@@ -20,6 +20,7 @@ class MoneyFlowFeatures(BaseFeatureExtractor):
     """
 
     def __init__(self, cache: Optional["FeatureCache"] = None):
+        """Initialize MoneyFlowFeatures."""
         super().__init__(cache)
         self._akshare = None
 
@@ -36,6 +37,7 @@ class MoneyFlowFeatures(BaseFeatureExtractor):
 
     @property
     def feature_type(self) -> str:
+        """Return feature type name."""
         return "money_flow"
 
     def extract(self, stock_code: str, **kwargs) -> pd.DataFrame:

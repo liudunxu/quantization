@@ -222,6 +222,7 @@ class NewsSentimentAnalyzer:
     """Multi-source news sentiment analyzer with weighted scoring."""
 
     def __init__(self):
+        """Initialize NewsSentimentAnalyzer."""
         self._source_weights = {
             "caixin": 0.9,  # 财新 - 高质量财经
             "xinhua": 0.85,  # 新华社 - 权威
@@ -378,6 +379,7 @@ class SocialMediaAnalyzer:
     """Social media sentiment analyzer for Weibo, Reddit, X/Twitter."""
 
     def __init__(self):
+        """Initialize SocialMediaAnalyzer."""
         self._platform_weights = {
             "weibo": 0.8,  # 微博 - A股情绪风向标
             "xueqiu": 0.85,  # 雪球 - 专业投资者
@@ -554,6 +556,7 @@ class SearchTrendAnalyzer:
     """Analyze search trends as sentiment proxy."""
 
     def __init__(self):
+        """Initialize SearchTrendAnalyzer."""
         self._trend_cache: Dict[str, pd.DataFrame] = {}
 
     def analyze_search_trend(
@@ -625,6 +628,7 @@ class CombinedSentiment:
     """Combine multiple sentiment sources into a unified score."""
 
     def __init__(self):
+        """Initialize CombinedSentiment."""
         # Source weights for final combination
         self.source_weights = {
             "news": 0.35,

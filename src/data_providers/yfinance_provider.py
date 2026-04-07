@@ -15,10 +15,12 @@ class YFinanceProvider(BaseDataProvider):
     """Yahoo Finance data provider with retry logic."""
 
     def __init__(self):
+        """Initialize YFinance provider."""
         self._name = "yfinance"
 
     @property
     def name(self) -> str:
+        """Return provider name."""
         return self._name
 
     def fetch(
@@ -26,7 +28,7 @@ class YFinanceProvider(BaseDataProvider):
         stock_code: str,
         days: int = 120,
         retry_count: int = 3,
-        retry_delay: float = 1.0
+        retry_delay: float = 1.0,
     ) -> pd.DataFrame:
         """Fetch stock data from Yahoo Finance with retry logic."""
         last_error = None
@@ -34,10 +36,7 @@ class YFinanceProvider(BaseDataProvider):
         for attempt in range(retry_count):
             try:
                 data = yf.download(
-                    stock_code,
-                    period=f"{days}d",
-                    auto_adjust=False,
-                    progress=False
+                    stock_code, period=f"{days}d", auto_adjust=False, progress=False
                 )
 
                 if data.empty:
@@ -56,35 +55,43 @@ class YFinanceProvider(BaseDataProvider):
                     data.columns = [col[0] for col in data.columns]
 
                 # Ensure date is index
-                if 'Date' in data.columns:
-                    data = data.set_index('Date')
-                elif 'date' not in data.index.name.lower():
+                if "Date" in data.columns:
+                    data = data.set_index("Date")
+                elif "date" not in data.index.name.lower():
                     data.index = pd.to_datetime(data.index)
 
                 # Build result DataFrame with required columns
                 df = pd.DataFrame(index=data.index)
-                df.index.name = 'date'
+                df.index.name = "date"
 
                 # Handle both DataFrame and Series cases for each column
-                close = data['Close']
-                df['close'] = close.iloc[:, 0] if isinstance(close, pd.DataFrame) else close
+                close = data["Close"]
+                df["close"] = (
+                    close.iloc[:, 0] if isinstance(close, pd.DataFrame) else close
+                )
 
-                open_ = data['Open']
-                df['open'] = open_.iloc[:, 0] if isinstance(open_, pd.DataFrame) else open_
+                open_ = data["Open"]
+                df["open"] = (
+                    open_.iloc[:, 0] if isinstance(open_, pd.DataFrame) else open_
+                )
 
-                high = data['High']
-                df['high'] = high.iloc[:, 0] if isinstance(high, pd.DataFrame) else high
+                high = data["High"]
+                df["high"] = high.iloc[:, 0] if isinstance(high, pd.DataFrame) else high
 
-                low = data['Low']
-                df['low'] = low.iloc[:, 0] if isinstance(low, pd.DataFrame) else low
+                low = data["Low"]
+                df["low"] = low.iloc[:, 0] if isinstance(low, pd.DataFrame) else low
 
-                volume = data['Volume']
-                df['volume'] = volume.iloc[:, 0] if isinstance(volume, pd.DataFrame) else volume
+                volume = data["Volume"]
+                df["volume"] = (
+                    volume.iloc[:, 0] if isinstance(volume, pd.DataFrame) else volume
+                )
 
                 df = df.reset_index()
 
                 if self._validate_data(df):
-                    logger.info(f"[{self.name}] Successfully fetched {len(df)} rows for {stock_code}")
+                    logger.info(
+                        f"[{self.name}] Successfully fetched {len(df)} rows for {stock_code}"
+                    )
                     return df
 
                 last_error = "Missing required columns after processing"
@@ -104,5 +111,7 @@ class YFinanceProvider(BaseDataProvider):
                 if attempt < retry_count - 1:
                     time.sleep(retry_delay)
 
-        logger.error(f"[{self.name}] All {retry_count} attempts failed for {stock_code}: {last_error}")
+        logger.error(
+            f"[{self.name}] All {retry_count} attempts failed for {stock_code}: {last_error}"
+        )
         return pd.DataFrame()

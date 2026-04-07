@@ -66,6 +66,7 @@ class LightGBMModel(BaseModel):
     """LightGBM model for stock trading decisions."""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """Initialize LightGBMModel."""
         super().__init__(config)
         if not HAS_LIGHTGBM:
             raise ImportError(
@@ -85,6 +86,7 @@ class LightGBMModel(BaseModel):
 
     @property
     def model_name(self) -> str:
+        """Return model name."""
         return "LightGBM"
 
     def _prepare_data(

@@ -15,6 +15,7 @@ class ImportantDatesManager:
     """Manager for important dates that significantly impact stock prices."""
 
     def __init__(self, db_path: str = "cache/important_dates.db"):
+        """Initialize ImportantDatesManager."""
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
@@ -433,6 +434,7 @@ class ImportantDatesManager:
 
         # Filter by year
         def filter_by_year(events_list, start_year):
+            """Filter events by start year."""
             return [e for e in events_list if int(e["date"][:4]) >= start_year]
 
         # Select events based on market

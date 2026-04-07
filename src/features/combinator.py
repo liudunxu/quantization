@@ -22,6 +22,7 @@ class FeatureCombinator:
     """Combine all features into a single DataFrame."""
 
     def __init__(self, cache: Optional[FeatureCache] = None):
+        """Initialize FeatureCombinator with all feature extractors."""
         self.cache = cache
         self.extractors = {
             "technical": TechnicalFeatures(cache),

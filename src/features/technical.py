@@ -18,6 +18,7 @@ class TechnicalFeatures(BaseFeatureExtractor):
     """Extract technical indicator features."""
 
     def __init__(self, cache: Optional[FeatureCache] = None):
+        """Initialize TechnicalFeatures with configuration."""
         super().__init__(cache)
         self.config = get_config().get_section("features").get("technical", {})
         self.ma_periods = self.config.get("ma_periods", [5, 10, 20, 60])
@@ -30,6 +31,7 @@ class TechnicalFeatures(BaseFeatureExtractor):
 
     @property
     def feature_type(self) -> str:
+        """Return feature type name."""
         return "technical"
 
     def _fetch_with_incremental(self, stock_code: str, days: int) -> pd.DataFrame:

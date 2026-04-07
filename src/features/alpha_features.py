@@ -28,10 +28,12 @@ class AlphaFeatures(BaseFeatureExtractor):
     """
 
     def __init__(self, cache: Optional[FeatureCache] = None):
+        """Initialize AlphaFeatures."""
         super().__init__(cache)
 
     @property
     def feature_type(self) -> str:
+        """Return feature type name."""
         return "alpha"
 
     def extract(self, stock_code: str, **kwargs) -> pd.DataFrame:

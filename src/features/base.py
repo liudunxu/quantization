@@ -12,6 +12,7 @@ class BaseFeatureExtractor(ABC):
     """Base class for feature extractors."""
 
     def __init__(self, cache: Optional[FeatureCache] = None):
+        """Initialize BaseFeatureExtractor."""
         self.cache = cache
 
     @property

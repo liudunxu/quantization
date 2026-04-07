@@ -4,7 +4,6 @@ This module implements rule-based strategies derived from the strategy reference
 in strategy/references/daily_stock_analysis/.
 """
 
-
 import pandas as pd
 
 from .engine import Strategy
@@ -23,6 +22,7 @@ class MAGoldenCrossStrategy(Strategy):
     """
 
     def __init__(self, fast_ma: int = 5, slow_ma: int = 10, volume_ratio: float = 1.2):
+        """Initialize MAGoldenCrossStrategy."""
         description = (
             f"均线金叉策略：当{fast_ma}日均线上穿{slow_ma}日均线且成交量放大时买入，"
             f"下穿时卖出。量能确认阈值={volume_ratio}。"
@@ -33,6 +33,7 @@ class MAGoldenCrossStrategy(Strategy):
         self.volume_ratio = volume_ratio
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using MA golden cross."""
         signals = pd.Series(0, index=df.index)
         close = df["close"]
 
@@ -79,6 +80,7 @@ class BullTrendStrategy(Strategy):
     def __init__(
         self, ma5_period: int = 5, ma10_period: int = 10, ma20_period: int = 20
     ):
+        """Initialize BullTrendStrategy."""
         description = (
             f"趋势跟随策略：当MA{ma5_period}>=MA{ma10_period}>=MA{ma20_period}形成多头排列时，"
             f"价格回调至均线附近（5%以内）买入，跌破MA{ma20_period}卖出。"
@@ -91,6 +93,7 @@ class BullTrendStrategy(Strategy):
         self.ma20_period = ma20_period
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using bull trend strategy."""
         signals = pd.Series(0, index=df.index)
         close = df["close"]
 
@@ -139,6 +142,7 @@ class ShrinkPullbackStrategy(Strategy):
     def __init__(
         self, lookback: int = 5, ma_period: int = 5, volume_shrink: float = 0.7
     ):
+        """Initialize ShrinkPullbackStrategy."""
         description = (
             f"缩量回调策略：在上升趋势中，当价格回调至均线附近且成交量缩小时买入，"
             f"跌破MA20卖出。缩量阈值={volume_shrink}。"
@@ -151,6 +155,7 @@ class ShrinkPullbackStrategy(Strategy):
         self.volume_shrink = volume_shrink
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using shrink pullback strategy."""
         signals = pd.Series(0, index=df.index)
         close = df["close"]
 
@@ -203,6 +208,7 @@ class BottomVolumeStrategy(Strategy):
     """
 
     def __init__(self, drop_threshold: float = 0.15, volume_multiplier: float = 3.0):
+        """Initialize BottomReversalStrategy."""
         description = (
             f"底部放量策略：当股价从20日高点下跌超过{drop_threshold * 100:.0f}%后，"
             f"出现{volume_multiplier}倍放量且收阳线时买入，为反转信号。"
@@ -215,6 +221,7 @@ class BottomVolumeStrategy(Strategy):
         self.volume_multiplier = volume_multiplier
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using bottom reversal strategy."""
         signals = pd.Series(0, index=df.index)
         close = df["close"]
         high = df["high"] if "high" in df.columns else close
@@ -272,6 +279,7 @@ class BoxOscillationStrategy(Strategy):
         resistance_margin: float = 0.05,
         box_width_min: float = 0.05,
     ):
+        """Initialize BoxOscillationStrategy."""
         description = (
             f"箱体震荡策略：识别价格波动区间（箱体），在箱体底部附近买入，"
             f"顶部附近或跌破箱底时卖出。支撑/阻力边际={support_margin * 100:.0f}%。"
@@ -286,6 +294,7 @@ class BoxOscillationStrategy(Strategy):
         self.box_width_min = box_width_min
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using box oscillation strategy."""
         signals = pd.Series(0, index=df.index)
 
         for i in range(self.lookback, len(df)):
@@ -340,6 +349,7 @@ class EmotionCycleStrategy(Strategy):
         rsi_oversold: float = 30,
         rsi_overbought: float = 70,
     ):
+        """Initialize EmotionCycleStrategy."""
         description = (
             f"情绪周期策略：基于RSI和成交量判断市场情绪，"
             f"超卖（RSI<{rsi_oversold}）且缩量时买入，超买（RSI>{rsi_overbought}）时卖出。"
@@ -352,6 +362,7 @@ class EmotionCycleStrategy(Strategy):
         self.rsi_overbought = rsi_overbought
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using emotion cycle strategy."""
         signals = pd.Series(0, index=df.index)
         close = df["close"]
 
@@ -412,6 +423,7 @@ class VolumeBreakoutStrategy(Strategy):
     """
 
     def __init__(self, lookback: int = 20, volume_multiplier: float = 2.0):
+        """Initialize VolumeBreakoutStrategy."""
         description = (
             f"放量突破策略：当价格突破{lookback}日高点且成交量放大{volume_multiplier}倍时买入，"
             f"跌破{lookback}日低点或连续3日下跌时卖出。"
@@ -423,6 +435,7 @@ class VolumeBreakoutStrategy(Strategy):
         self.volume_multiplier = volume_multiplier
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using volume breakout strategy."""
         signals = pd.Series(0, index=df.index)
         close = df["close"]
 
@@ -477,6 +490,7 @@ class OneYangThreeYinStrategy(Strategy):
     """
 
     def __init__(self, body_threshold: float = 0.02):
+        """Initialize OneYangThreeYinStrategy."""
         description = (
             f"一阳三阴策略：经典的K线形态，一根大阳线后连续三根缩量小阴线，"
             f"第五天突破阳线收盘价时买入。阳线实体阈值={body_threshold * 100:.0f}%。"
@@ -485,6 +499,7 @@ class OneYangThreeYinStrategy(Strategy):
         self.body_threshold = body_threshold
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using one yang three yin pattern."""
         signals = pd.Series(0, index=df.index)
 
         for i in range(5, len(df)):
@@ -562,6 +577,7 @@ class MACDDivergenceStrategy(Strategy):
     """
 
     def __init__(self, lookback: int = 20):
+        """Initialize MACDDivergenceStrategy."""
         description = (
             f"MACD背驰策略：当价格创新低但MACD柱状图回升时（底背驰）买入，"
             f"价格创新高但MACD减弱时（顶背驰）卖出。回溯周期={lookback}日。"
@@ -570,6 +586,7 @@ class MACDDivergenceStrategy(Strategy):
         self.lookback = lookback
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using MACD divergence strategy."""
         signals = pd.Series(0, index=df.index)
         close = df["close"]
 

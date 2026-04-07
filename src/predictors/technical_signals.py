@@ -15,6 +15,7 @@ class TechnicalSignalGenerator:
     """
 
     def __init__(self):
+        """Initialize TechnicalSignalsAnalyzer."""
         self.signals = []
         self.explanations = []
 

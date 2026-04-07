@@ -21,9 +21,12 @@ def _get_tushare():
     if tushare is None:
         try:
             import tushare as ts
+
             tushare = ts
         except ImportError:
-            logger.warning("[tushare] tushare not installed. Install with: pip install tushare")
+            logger.warning(
+                "[tushare] tushare not installed. Install with: pip install tushare"
+            )
             return None
     return tushare
 
@@ -38,11 +41,12 @@ class TushareProvider(BaseDataProvider):
             token: Tushare API token. If not provided, tries TUSHARE_TOKEN env var.
         """
         self._name = "tushare"
-        self._token = token or os.environ.get('TUSHARE_TOKEN')
+        self._token = token or os.environ.get("TUSHARE_TOKEN")
         self._pro = None
 
     @property
     def name(self) -> str:
+        """Return provider name."""
         return self._name
 
     def _init_pro(self):
@@ -65,17 +69,17 @@ class TushareProvider(BaseDataProvider):
         Returns:
             tuple: (ts_code, api_code) e.g., ('000001.SZ', 'SZ.000001')
         """
-        code = stock_code.split('.')[0]
-        suffix = stock_code.upper().split('.')[-1] if '.' in stock_code else ''
+        code = stock_code.split(".")[0]
+        suffix = stock_code.upper().split(".")[-1] if "." in stock_code else ""
 
-        if suffix == 'SH' or suffix == 'SS':
-            return f'{code}.SH', 'SH.{code}'
-        elif suffix == 'SZ':
-            return f'{code}.SZ', 'SZ.{code}'
-        elif suffix == 'HK':
+        if suffix == "SH" or suffix == "SS":
+            return f"{code}.SH", "SH.{code}"
+        elif suffix == "SZ":
+            return f"{code}.SZ", "SZ.{code}"
+        elif suffix == "HK":
             # Remove leading zeros from HK stock codes
-            code_clean = code.lstrip('0') or '0'
-            return f'{code_clean}.HK', 'HK.{code_clean}'
+            code_clean = code.lstrip("0") or "0"
+            return f"{code_clean}.HK", "HK.{code_clean}"
         return stock_code, None
 
     def fetch(
@@ -83,7 +87,7 @@ class TushareProvider(BaseDataProvider):
         stock_code: str,
         days: int = 120,
         retry_count: int = 3,
-        retry_delay: float = 1.0
+        retry_delay: float = 1.0,
     ) -> pd.DataFrame:
         """Fetch stock data from Tushare."""
         if not self._init_pro():
@@ -100,19 +104,23 @@ class TushareProvider(BaseDataProvider):
         for attempt in range(retry_count):
             try:
                 # Calculate date range
-                end_date = pd.Timestamp.today().strftime('%Y%m%d')
-                start_date = (pd.Timestamp.today() - pd.Timedelta(days=days * 2)).strftime('%Y%m%d')
+                end_date = pd.Timestamp.today().strftime("%Y%m%d")
+                start_date = (
+                    pd.Timestamp.today() - pd.Timedelta(days=days * 2)
+                ).strftime("%Y%m%d")
 
-                if 'HK' in stock_code:
+                if "HK" in stock_code:
                     # HK stock
-                    df = ts.hk_daily(ts_code=ts_code, start_date=start_date, end_date=end_date)
+                    df = ts.hk_daily(
+                        ts_code=ts_code, start_date=start_date, end_date=end_date
+                    )
                 else:
                     # A-share
                     df = ts.pro_bar(
                         ts_code=ts_code,
                         start_date=start_date,
                         end_date=end_date,
-                        adj='qfq'
+                        adj="qfq",
                     )
 
                 if df is None or df.empty:
@@ -125,14 +133,14 @@ class TushareProvider(BaseDataProvider):
                 # Rename columns to standard names
                 # Tushare columns: ts_code, trade_date, open, high, low, close, vol
                 column_mapping = {
-                    'trade_date': 'date',
-                    'vol': 'volume',
+                    "trade_date": "date",
+                    "vol": "volume",
                 }
 
                 df = df.rename(columns=column_mapping)
 
                 # Keep only required columns
-                required = ['date', 'open', 'close', 'high', 'low', 'volume']
+                required = ["date", "open", "close", "high", "low", "volume"]
                 df = df[[c for c in required if c in df.columns]]
 
                 if not self._validate_data(df):
@@ -143,12 +151,14 @@ class TushareProvider(BaseDataProvider):
                     break
 
                 # Convert date to datetime
-                df['date'] = pd.to_datetime(df['date'])
+                df["date"] = pd.to_datetime(df["date"])
 
                 # Sort by date and take last N days
-                df = df.sort_values('date').tail(days)
+                df = df.sort_values("date").tail(days)
 
-                logger.info(f"[{self.name}] Successfully fetched {len(df)} rows for {stock_code}")
+                logger.info(
+                    f"[{self.name}] Successfully fetched {len(df)} rows for {stock_code}"
+                )
                 return df.reset_index(drop=True)
 
             except Exception as e:
@@ -160,5 +170,7 @@ class TushareProvider(BaseDataProvider):
                 if attempt < retry_count - 1:
                     time.sleep(retry_delay)
 
-        logger.error(f"[{self.name}] All {retry_count} attempts failed for {stock_code}: {last_error}")
+        logger.error(
+            f"[{self.name}] All {retry_count} attempts failed for {stock_code}: {last_error}"
+        )
         return pd.DataFrame()

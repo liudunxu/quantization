@@ -23,6 +23,7 @@ class XGBoostModel(BaseModel):
     """XGBoost model for stock trading decisions."""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """Initialize XGBoostModel."""
         super().__init__(config)
         if not HAS_XGBOOST:
             raise ImportError(
@@ -41,6 +42,7 @@ class XGBoostModel(BaseModel):
 
     @property
     def model_name(self) -> str:
+        """Return model name."""
         return "XGBoost"
 
     def _prepare_data(

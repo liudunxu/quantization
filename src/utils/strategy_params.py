@@ -120,6 +120,7 @@ class StrategyParamManager:
     """
 
     def __init__(self, db_path: str = "cache/strategy_params.db"):
+        """Initialize StrategyParamStore."""
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()

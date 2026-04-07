@@ -33,10 +33,12 @@ class AKShareProvider(BaseDataProvider):
     """AKShare data provider for Chinese A-shares and HK stocks."""
 
     def __init__(self):
+        """Initialize AKShare provider."""
         self._name = "akshare"
 
     @property
     def name(self) -> str:
+        """Return provider name."""
         return self._name
 
     def _convert_a_share_code(self, stock_code: str) -> tuple:

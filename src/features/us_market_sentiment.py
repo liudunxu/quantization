@@ -21,10 +21,12 @@ class USMarketSentimentFeatures(BaseFeatureExtractor):
     """
 
     def __init__(self, cache: Optional[FeatureCache] = None):
+        """Initialize USMarketSentimentFeatures."""
         super().__init__(cache)
 
     @property
     def feature_type(self) -> str:
+        """Return feature type name."""
         return "us_market_sentiment"
 
     def extract(self, stock_code: str, days: int = 120, **kwargs) -> pd.DataFrame:

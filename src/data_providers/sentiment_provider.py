@@ -105,12 +105,14 @@ class SentimentProvider(BaseDataProvider):
     """Sentiment data provider for stock news analysis."""
 
     def __init__(self):
+        """Initialize Sentiment provider."""
         self._name = "sentiment"
         self._cache_duration = timedelta(hours=6)  # Cache for 6 hours
         self._news_cache: Dict[str, Tuple[datetime, pd.DataFrame]] = {}
 
     @property
     def name(self) -> str:
+        """Return provider name."""
         return self._name
 
     def _convert_code(self, stock_code: str) -> str:

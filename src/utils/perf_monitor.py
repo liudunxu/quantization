@@ -20,15 +20,18 @@ class Timer:
     def __init__(
         self, operation: str, logger_instance: Optional[logging.Logger] = None
     ):
+        """Initialize Timer."""
         self.operation = operation
         self.logger = logger_instance or logger
         self.elapsed: float = 0.0
 
     def __enter__(self) -> "Timer":
+        """Start timer."""
         self.start = time.perf_counter()
         return self
 
     def __exit__(self, *args) -> None:
+        """Stop timer and log elapsed time."""
         self.elapsed = time.perf_counter() - self.start
         self.logger.info(f"[PERF] {self.operation} completed in {self.elapsed:.3f}s")
 
@@ -43,10 +46,12 @@ def timing_decorator(operation: Optional[str] = None) -> Callable:
     """
 
     def decorator(func: Callable) -> Callable:
+        """Create decorator for timing a function."""
         op_name = operation or func.__name__
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:
+            """Wrapper function that times execution."""
             start = time.perf_counter()
             result = func(*args, **kwargs)
             elapsed = time.perf_counter() - start
@@ -79,6 +84,7 @@ class PerformanceTracker:
     """Track performance metrics across multiple operations."""
 
     def __init__(self):
+        """Initialize PerformanceTracker."""
         self._metrics: Dict[str, Dict[str, float]] = {}
 
     def record(self, operation: str, elapsed: float) -> None:

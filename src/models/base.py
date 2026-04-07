@@ -10,6 +10,7 @@ class BaseModel(ABC):
     """Base class for all stock trading models."""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """Initialize BaseModel."""
         self.config = config or {}
         self.feature_names: Optional[List[str]] = None
         self.selected_features: Optional[List[str]] = None

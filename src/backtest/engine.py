@@ -40,6 +40,7 @@ class Strategy:
     """Base strategy class."""
 
     def __init__(self, name: str, description: str = ""):
+        """Initialize Strategy."""
         self.name = name
         self.description = description
 
@@ -56,12 +57,14 @@ class BuyAndHoldStrategy(Strategy):
     """Simple buy and hold strategy (benchmark, no trading costs)."""
 
     def __init__(self):
+        """Initialize BuyAndHoldStrategy."""
         super().__init__(
             "Buy & Hold",
             "买入并持有策略：在第一天买入后长期持有，不做任何操作。作为基准策略用于比较。",
         )
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate buy signal on first day, hold thereafter."""
         signals = pd.Series(0, index=df.index)
         signals.iloc[0] = 1  # Buy on first day
         return signals
@@ -79,6 +82,7 @@ class HighSellLowBuyStrategy(Strategy):
     """Contrarian strategy: sell when price is high, buy when low."""
 
     def __init__(self, lookback: int = 20, threshold: float = 0.1):
+        """Initialize HighSellLowBuyStrategy."""
         super().__init__(
             f"High Sell Low Buy (L:{lookback}, T:{threshold})",
             f"高抛低吸策略：基于{lookback}日价格区间，当价格处于区间底部{threshold * 100:.0f}%时买入，处于顶部{threshold * 100:.0f}%时卖出。",
@@ -87,6 +91,7 @@ class HighSellLowBuyStrategy(Strategy):
         self.threshold = threshold
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate contrarian signals based on price range."""
         signals = pd.Series(0, index=df.index)
         close = df["close"]
 
@@ -140,6 +145,7 @@ class MLStrategy(Strategy):
         self.require_bull_market_for_buy = require_bull_market_for_buy
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using ML model."""
         signals = pd.Series(0, index=df.index)
 
         if len(df) < self.min_samples:
@@ -234,6 +240,7 @@ class HybridStrategy(Strategy):
         )
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using hybrid approach."""
         signals = pd.Series(0, index=df.index)
 
         if len(df) < self.min_samples:
@@ -375,6 +382,7 @@ class RollingMLStrategy(Strategy):
             return False
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using rolling ML model."""
         signals = pd.Series(0, index=df.index)
 
         if len(df) < self.min_samples:
@@ -518,6 +526,7 @@ class RollingHybridStrategy(Strategy):
             return False
 
     def generate_signals(self, df: pd.DataFrame) -> pd.Series:
+        """Generate trading signals using rolling hybrid approach."""
         signals = pd.Series(0, index=df.index)
 
         if len(df) < self.min_samples:
@@ -610,6 +619,7 @@ class BacktestEngine:
         lot_size: int = 100,  # 1 lot = 100 shares
         max_drawdown_threshold: float = 0.20,  # Max 20% drawdown before stopping
     ):
+        """Initialize BacktestEngine."""
         self.initial_cash = initial_cash
         self.commission = commission
         self.slippage = slippage

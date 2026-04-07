@@ -18,11 +18,13 @@ class SouthboundFlowFeatures(BaseFeatureExtractor):
     """
 
     def __init__(self, cache: Optional[FeatureCache] = None):
+        """Initialize SouthboundFlowFeatures."""
         super().__init__(cache)
         self._flow_data = None
 
     @property
     def feature_type(self) -> str:
+        """Return feature type name."""
         return "southbound_flow"
 
     def _get_southbound_data(self, days: int = 180) -> pd.DataFrame:
