@@ -54,6 +54,90 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Stock name mapping for predefined list
+STOCK_NAMES = {
+    # A股 (CN)
+    "000001.SH": "上证指数",
+    "399001.SZ": "深证成指",
+    "000688.SH": "科创50",
+    "399006.SZ": "创业板指",
+    "159632.SZ": "中证100ETF",
+    "159305.SZ": "证券ETF",
+    "159870.SZ": "中证1000ETF",
+    "159567.SZ": "创业板50ETF",
+    "600111.SH": "北方华创",
+    "603986.SH": "兆易创新",
+    "601138.SH": "工业富联",
+    "002475.SZ": "立讯精密",
+    "002156.SZ": "通富微电",
+    "000021.SZ": "深科技",
+    "601020.SH": "华菱钢铁",
+    "600036.SH": "招商银行",
+    "000333.SZ": "美的集团",
+    "603191.SH": "万丰燃气",
+    "600089.SH": "特变电工",
+    "601288.SH": "农业银行",
+    "600887.SH": "伊利股份",
+    "600900.SH": "长江电力",
+    "600362.SH": "江西铜业",
+    "000807.SZ": "深振业A",
+    "000792.SZ": "盐湖股份",
+    # 港股 (HK)
+    "HSTECH.HK": "恒生科技指数",
+    "09988.HK": "阿里巴巴",
+    "01024.HK": "快手",
+    "00981.HK": "中芯国际",
+    "09961.HK": "携程集团",
+    "03690.HK": "美团",
+    "01810.HK": "小米集团",
+    "03750.HK": "携程-S",
+    "09880.HK": "小鹏汽车",
+    "00700.HK": "腾讯控股",
+    "02097.HK": "医脉通",
+    "09868.HK": "零跑汽车",
+    "01357.HK": "海康威视",
+    "00100.HK": "新鸿基地产",
+    "06082.HK": "阳光保险",
+    "02577.HK": "东方甄选",
+    "02020.HK": "安踏体育",
+    "00522.HK": "ASM太平洋",
+    "01347.HK": "华润啤酒",
+    "09626.HK": "贝壳-W",
+    "513310.SH": "腾讯控股",
+    # 美股 (US)
+    "AMZN": "亚马逊",
+    "MSFT": "微软",
+    "TSLA": "特斯拉",
+    "AAPL": "苹果",
+    "ASML": "阿斯麦",
+    "TSM": "台积电",
+    "SE": "Sea Ltd",
+    "SMR": "NuScale Power",
+    "CRDO": "Credo Technology",
+    "OKLO": "Oklo Inc",
+    "QCOM": "高通",
+    "AMD": "超威半导体",
+    "INTC": "英特尔",
+    "GOOGL": "谷歌",
+    "AVGO": "博通",
+    "NVDA": "英伟达",
+    "PONY": "小马智行",
+    "PDD": "拼多多",
+    "CRWV": "Coreweave",
+    "MU": "美光科技",
+    "SNDK": "西部数据",
+    "UNH": "联合健康",
+    "TCEHY": "腾讯ADR",
+    "NBIS": "Nebius Group",
+}
+
+# Zone to stock code suffix mapping
+ZONE_SUFFIX = {
+    "cn": [".SH", ".SZ"],
+    "hk": [".HK"],
+    "us": [],
+}
+
 
 def parse_args():
     """Parse command line arguments."""
@@ -791,6 +875,37 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
             }
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
+
+    @app.get("/stocks")
+    async def list_stocks(zone: str = Query(..., description="区域: cn, hk, us")):
+        """Get predefined stock list by zone.
+
+        Args:
+            zone: cn (A股), hk (港股), us (美股)
+
+        Returns:
+            JSON with stock list including code and name
+        """
+        zone = zone.lower()
+        if zone not in ZONE_SUFFIX:
+            raise HTTPException(
+                status_code=400, detail="Invalid zone. Must be one of: cn, hk, us"
+            )
+
+        suffixes = ZONE_SUFFIX[zone]
+        stocks = []
+
+        for code, name in STOCK_NAMES.items():
+            if zone == "us":
+                # US stocks have no suffix
+                if "." not in code:
+                    stocks.append({"code": code, "name": name})
+            else:
+                # CN and HK stocks have suffix
+                if any(code.endswith(s) for s in suffixes):
+                    stocks.append({"code": code, "name": name})
+
+        return {"zone": zone, "count": len(stocks), "stocks": stocks}
 
     print(f"\n  Starting Stock Prediction API...")
     print(f"  Server: http://{host}:{port}")
