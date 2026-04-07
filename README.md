@@ -684,6 +684,89 @@ manager.add_date(
 detected = manager.detect_high_volatility_dates(df, market='a_share')
 ```
 
+### 5. HTTP API 服务
+
+提供 HTTP API 服务，支持快速预测调用：
+
+#### 启动服务
+
+```bash
+# 安装依赖
+pip install fastapi uvicorn
+
+# 启动服务
+python scripts/predict.py --serve --host 0.0.0.0 --port 8000
+
+# 或使用 uvicorn
+uvicorn scripts.predict:app --host 0.0.0.0 --port 8000
+```
+
+#### API 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/health` | GET | 健康检查 |
+| `/predict` | GET/POST | 股票预测 |
+| `/stocks/{code}/info` | GET | 股票信息 |
+
+#### 请求示例
+
+```bash
+# A股预测
+curl "https://predict-api-production.up.railway.app/predict?stock=000001.SZ"
+
+# 港股预测
+curl "https://predict-api-production.up.railway.app/predict?stock=0700.HK"
+
+# 美股预测
+curl "https://predict-api-production.up.railway.app/predict?stock=AAPL"
+
+# 指数预测
+curl "https://predict-api-production.up.railway.app/predict?index=000300"
+
+# 快速模式（跳过训练/评估/实时价格）
+curl "https://predict-api-production.up.railway.app/predict?stock=000001.SZ&fast_mode=true"
+
+# POST 请求
+curl -X POST "https://predict-api-production.up.railway.app/predict" \
+  -H "Content-Type: application/json" \
+  -d '{"stock": "000001.SZ", "fast_mode": true}'
+```
+
+#### 性能优化参数
+
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `fast_mode` | bool | 快速模式，跳过训练/评估/实时价格 | false |
+| `skip_training` | bool | 跳过模型训练 | false |
+| `skip_eval` | bool | 跳过模型评估 | false |
+| `skip_realtime` | bool | 跳过实时价格查询 | false |
+| `skip_params` | bool | 跳过优化参数查询 | false |
+| `train_days` | int | 训练天数 | 365 |
+| `threshold` | float | 涨跌阈值 | 0.008 |
+| `refresh` | bool | 强制刷新数据缓存 | false |
+
+#### 性能对比
+
+| 模式 | 预计耗时 | 适用场景 |
+|------|----------|----------|
+| `fast_mode=true` | ~3秒 | 日常快速查询 |
+| `skip_training=true` | ~10秒 | 需要评估指标时 |
+| 完整模式 | ~30秒+ | 首次预测/精确分析 |
+
+#### 本地开发
+
+```bash
+# 启动服务
+python scripts/predict.py --serve --port 8000
+
+# 访问 API 文档
+# http://localhost:8000/docs
+
+# 测试预测
+curl "http://localhost:8000/predict?stock=000001.SZ&fast_mode=true"
+```
+
 ## License
 
 MIT
