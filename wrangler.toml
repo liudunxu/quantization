@@ -1,0 +1,10 @@
+name = "stock-prediction-api"
+main = "scripts/predict_worker.js"
+compatibility_date = "2026-03-01"
+
+[vars]
+PREDICTION_API_URL = "https://predict-api-production.up.railway.app"
+
+# Optional: uncomment to enable API key auth
+# [vars]
+# API_SECRET = "your-secret-key-here"

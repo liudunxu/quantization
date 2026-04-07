@@ -57,3 +57,7 @@ Thumbs.db
 # Results
 results/
 backtest_results/
+
+# Railway
+.railway/
+railway.toml
