@@ -98,6 +98,18 @@ export default {
       }
     }
 
+    // Route: /stocks?zone=cn|hk|us
+    if (url.pathname === "/stocks" || url.pathname === "/stocks/") {
+      const zone = url.searchParams.get("zone") || "cn";
+      try {
+        const resp = await fetch(`${backendUrl}/stocks?zone=${zone}`);
+        const data = await resp.json();
+        return jsonResponse(data, resp.status);
+      } catch (e) {
+        return jsonResponse({ error: `Stock list failed: ${e.message}` }, 500);
+      }
+    }
+
     // 404
     return jsonResponse({ error: "Not found" }, 404);
   },

@@ -529,7 +529,7 @@ class RedisFeatureCache:
             data_b64 = result[0]
             meta_json = result[1]
 
-            if data_b64 is None:
+            if data_b64 is None or not isinstance(data_b64, str):
                 return None
 
             df = self._deserialize_df(data_b64)
