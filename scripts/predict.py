@@ -24,10 +24,15 @@ Features:
 """
 
 import argparse
+import asyncio
 import json
 import logging
 import sys
+import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Optional, Any
 
 import pandas as pd
 
@@ -41,6 +46,7 @@ from src.pipelines import DataPipeline, ModelPipeline
 from src.predictors import EnsemblePredictor
 from src.utils import (
     StockInfoResolver,
+    StockInfo,
     get_cache,
     get_config,
     get_important_dates_manager,
@@ -53,6 +59,81 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Module-level caches (initialized lazily, thread-safe)
+_config_cache = None
+_param_manager_cache = None
+_dates_manager_cache = None
+_stock_info_cache = {}
+_cache_lock = threading.Lock()
+
+# Prediction result cache (key: code, value: (result, timestamp))
+_pred_cache = {}
+_pred_ttl = 300  # 5 minutes TTL
+
+# Thread pool for async execution
+_executor = ThreadPoolExecutor(max_workers=4)
+
+
+def _get_config_cached():
+    """Get config with module-level caching (thread-safe)."""
+    global _config_cache
+    if _config_cache is None:
+        with _cache_lock:
+            if _config_cache is None:
+                _config_cache = get_config()
+    return _config_cache
+
+
+def _get_param_manager_cached():
+    """Get param manager with module-level caching (thread-safe)."""
+    global _param_manager_cache
+    if _param_manager_cache is None:
+        with _cache_lock:
+            if _param_manager_cache is None:
+                _param_manager_cache = get_param_manager()
+    return _param_manager_cache
+
+
+def _get_dates_manager_cached():
+    """Get dates manager with module-level caching (thread-safe)."""
+    global _dates_manager_cache
+    if _dates_manager_cache is None:
+        with _cache_lock:
+            if _dates_manager_cache is None:
+                _dates_manager_cache = get_important_dates_manager()
+    return _dates_manager_cache
+
+
+def _get_stock_info_cached(code: str) -> StockInfo:
+    """Get stock info with module-level caching (thread-safe)."""
+    if code not in _stock_info_cache:
+        with _cache_lock:
+            if code not in _stock_info_cache:
+                _stock_info_cache[code] = StockInfoResolver.resolve(code)
+    return _stock_info_cache[code]
+
+
+def _get_cache_cached():
+    """Get cache with module-level caching (thread-safe)."""
+    config = _get_config_cached()
+    return get_cache(config.get("data.cache_dir", "cache"))
+
+
+def _get_cached_prediction(code: str) -> Optional[dict]:
+    """Get cached prediction result if still valid (5 min TTL)."""
+    if code in _pred_cache:
+        result, timestamp = _pred_cache[code]
+        if time.time() - timestamp < _pred_ttl:
+            return result
+        else:
+            del _pred_cache[code]
+    return None
+
+
+def _cache_prediction(code: str, result: dict):
+    """Cache prediction result with 5 min TTL."""
+    _pred_cache[code] = (result, time.time())
 
 # Stock name mapping for predefined list
 STOCK_NAMES = {
@@ -535,16 +616,23 @@ def run_prediction(
     Returns:
         Prediction result dict
     """
+    # Check prediction cache first (fast_mode benefits most)
+    if fast_mode or skip_training:
+        cached = _get_cached_prediction(code)
+        if cached is not None:
+            logger.info(f"Returning cached prediction for {code}")
+            return cached
+
     market = "a_share"
     if not is_index:
         try:
-            stock_info = StockInfoResolver.resolve(code)
+            stock_info = _get_stock_info_cached(code)
             market = stock_info.market.replace("_share", "")
         except ValueError as e:
             return {"error": str(e)}
 
-    config = get_config()
-    cache = get_cache(config.get("data.cache_dir", "cache"))
+    config = _get_config_cached()
+    cache = _get_cache_cached()
 
     if is_index:
         total_days = train_days + 30
@@ -557,7 +645,7 @@ def run_prediction(
         model_pipeline = ModelPipeline(config)
 
         if not skip_params:
-            param_manager = get_param_manager()
+            param_manager = _get_param_manager_cached()
             optimized_params = param_manager.get_strategy_params(
                 "prediction", market, code
             )
@@ -580,7 +668,7 @@ def run_prediction(
 
     excluded_dates = []
     if exclude_dates:
-        dates_manager = get_important_dates_manager()
+        dates_manager = _get_dates_manager_cached()
         start_date = (
             df["date"].min().strftime("%Y-%m-%d") if "date" in df.columns else None
         )
@@ -637,19 +725,28 @@ def run_prediction(
                 momentum_weight=0.30,
                 market_weight=0.20,
             )
+        # Cache trained model for fast_mode reuse
+        _cache_model(code, model)
     else:
-        model = model_pipeline.train(
-            train_df,
-            forward_days=1,
-            threshold=threshold,
-            use_composite_labels=True,
-            trend_weight=0.30,
-            momentum_weight=0.30,
-            market_weight=0.20,
-        )
+        # Load cached model instead of retraining
+        model = _load_cached_model(code, model_pipeline)
+        if model is None:
+            # Fallback: train if no cached model available
+            logger.info("No cached model found, training new model...")
+            model = model_pipeline.train(
+                train_df,
+                forward_days=1,
+                threshold=threshold,
+                use_composite_labels=True,
+                trend_weight=0.30,
+                momentum_weight=0.30,
+                market_weight=0.20,
+            )
+            _cache_model(code, model)
 
     if skip_eval or fast_mode:
-        eval_metrics = {
+        # Use cached eval metrics if available, otherwise default
+        eval_metrics = _get_cached_eval_metrics(code) or {
             "accuracy": 0.5,
             "precision_up": 0.5,
             "recall_up": 0.5,
@@ -662,6 +759,8 @@ def run_prediction(
         eval_metrics = model_pipeline.evaluate_metrics(
             model, eval_df, threshold=threshold
         )
+        # Cache eval metrics for fast_mode requests
+        _cache_eval_metrics(code, eval_metrics)
 
     accuracy = eval_metrics["accuracy"]
 
@@ -722,7 +821,115 @@ def run_prediction(
         else:
             clean_data[key] = value
 
+    # Cache prediction result for fast_mode reuse
+    if fast_mode or skip_training:
+        _cache_prediction(code, clean_data)
+
     return clean_data
+
+
+def _get_model_dir() -> Path:
+    """Get the models directory path."""
+    model_dir = Path("models")
+    model_dir.mkdir(exist_ok=True)
+    return model_dir
+
+
+def _load_cached_model(code: str, model_pipeline) -> Optional[Any]:
+    """Load cached model for a stock.
+
+    Args:
+        code: Stock code
+        model_pipeline: ModelPipeline instance
+
+    Returns:
+        Cached model or None if not found
+    """
+    model_dir = _get_model_dir()
+    model_path = model_dir / f"{code.replace('.', '_')}_model.pkl"
+
+    if not model_path.exists():
+        return None
+
+    try:
+        import pickle
+
+        with open(model_path, "rb") as f:
+            model = pickle.load(f)
+        logger.info(f"Loaded cached model for {code}")
+        return model
+    except Exception as e:
+        logger.warning(f"Failed to load cached model for {code}: {e}")
+        return None
+
+
+def _cache_model(code: str, model: Any) -> bool:
+    """Cache trained model to disk.
+
+    Args:
+        code: Stock code
+        model: Trained model
+
+    Returns:
+        True if successful
+    """
+    model_dir = _get_model_dir()
+    model_path = model_dir / f"{code.replace('.', '_')}_model.pkl"
+
+    try:
+        import pickle
+
+        with open(model_path, "wb") as f:
+            pickle.dump(model, f)
+        logger.info(f"Cached model for {code}")
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to cache model for {code}: {e}")
+        return False
+
+
+def _get_cached_eval_metrics(code: str) -> Optional[dict]:
+    """Get cached evaluation metrics for a stock.
+
+    Args:
+        code: Stock code
+
+    Returns:
+        Cached metrics or None
+    """
+    model_dir = _get_model_dir()
+    metrics_path = model_dir / f"{code.replace('.', '_')}_metrics.json"
+
+    if not metrics_path.exists():
+        return None
+
+    try:
+        with open(metrics_path, "r") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _cache_eval_metrics(code: str, metrics: dict) -> bool:
+    """Cache evaluation metrics to disk.
+
+    Args:
+        code: Stock code
+        metrics: Evaluation metrics dict
+
+    Returns:
+        True if successful
+    """
+    model_dir = _get_model_dir()
+    metrics_path = model_dir / f"{code.replace('.', '_')}_metrics.json"
+
+    try:
+        with open(metrics_path, "w") as f:
+            json.dump(metrics, f)
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to cache metrics for {code}: {e}")
+        return False
 
 
 def start_server(host: str = "127.0.0.1", port: int = 8000):
@@ -777,23 +984,15 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
         is_index = index is not None
         code = index if is_index else stock
 
+        loop = asyncio.get_event_loop()
         try:
-            result = run_prediction(
-                code=code,
-                is_index=is_index,
-                train_days=train_days,
-                threshold=threshold,
-                refresh=refresh,
-                multi_model=multi_model,
-                ml_weight=ml_weight,
-                technical_weight=technical_weight,
-                momentum_weight=momentum_weight,
-                exclude_dates=exclude_dates,
-                fast_mode=fast_mode,
-                skip_training=skip_training,
-                skip_eval=skip_eval,
-                skip_realtime=skip_realtime,
-                skip_params=skip_params,
+            result = await loop.run_in_executor(
+                _executor,
+                run_prediction,
+                code, is_index, train_days, threshold, refresh,
+                multi_model, ml_weight, technical_weight, momentum_weight,
+                exclude_dates, 2.0, fast_mode, skip_training, skip_eval,
+                skip_realtime, skip_params
             )
         except Exception as e:
             logger.exception(f"Prediction failed for {code}")
@@ -834,23 +1033,15 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
         is_index = index is not None
         code = index if is_index else stock
 
+        loop = asyncio.get_event_loop()
         try:
-            result = run_prediction(
-                code=code,
-                is_index=is_index,
-                train_days=train_days,
-                threshold=threshold,
-                refresh=refresh,
-                multi_model=multi_model,
-                ml_weight=ml_weight,
-                technical_weight=technical_weight,
-                momentum_weight=momentum_weight,
-                exclude_dates=exclude_dates,
-                fast_mode=fast_mode,
-                skip_training=skip_training,
-                skip_eval=skip_eval,
-                skip_realtime=skip_realtime,
-                skip_params=skip_params,
+            result = await loop.run_in_executor(
+                _executor,
+                run_prediction,
+                code, is_index, train_days, threshold, refresh,
+                multi_model, ml_weight, technical_weight, momentum_weight,
+                exclude_dates, 2.0, fast_mode, skip_training, skip_eval,
+                skip_realtime, skip_params
             )
         except Exception as e:
             logger.exception(f"Prediction failed for {code}")
@@ -864,7 +1055,7 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
     @app.get("/stocks/{code}/info")
     async def stock_info(code: str):
         try:
-            info = StockInfoResolver.resolve(code)
+            info = _get_stock_info_cached(code)
             return {
                 "code": code,
                 "name": info.name,
