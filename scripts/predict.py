@@ -905,6 +905,37 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
 
         return {"zone": zone, "count": len(stocks), "stocks": stocks}
 
+    @app.post("/stocks")
+    async def list_stocks_post(request: dict):
+        """Get predefined stock list by zone (POST version).
+
+        Args:
+            zone: cn (A股), hk (港股), us (美股)
+
+        Returns:
+            JSON with stock list including code and name
+        """
+        zone = request.get("zone", "").lower()
+        if not zone:
+            raise HTTPException(status_code=400, detail="Please provide zone parameter")
+        if zone not in ZONE_SUFFIX:
+            raise HTTPException(
+                status_code=400, detail="Invalid zone. Must be one of: cn, hk, us"
+            )
+
+        suffixes = ZONE_SUFFIX[zone]
+        stocks = []
+
+        for code, name in STOCK_NAMES.items():
+            if zone == "us":
+                if "." not in code:
+                    stocks.append({"code": code, "name": name})
+            else:
+                if any(code.endswith(s) for s in suffixes):
+                    stocks.append({"code": code, "name": name})
+
+        return {"zone": zone, "count": len(stocks), "stocks": stocks}
+
     print(f"\n  Starting Stock Prediction API...")
     print(f"  Server: http://{host}:{port}")
     print(f"  Docs:   http://{host}:{port}/docs")
