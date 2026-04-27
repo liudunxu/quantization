@@ -920,31 +920,71 @@ class BacktestEngine:
             current_drawdown = (peak_equity - equity_value) / peak_equity
             max_drawdown = max(max_drawdown, current_drawdown)
 
-            # Risk control: force sell if drawdown exceeds threshold
+            # Graduated risk control: reduce position based on drawdown severity
             risk_control_triggered = False
-            if (
-                self.max_drawdown_threshold > 0
-                and current_drawdown >= self.max_drawdown_threshold
-            ):
-                risk_control_triggered = True
-                if position == 1:
-                    # Force sell all shares
-                    proceeds = shares * current_price
-                    comm = proceeds * self.commission
-                    cash = cash + proceeds - comm
-                    trades.append(
-                        Trade(
-                            date=dates[i]
-                            if hasattr(dates[i], "date")
-                            else pd.Timestamp(dates[i]),
-                            action="sell",
-                            price=current_price,
-                            quantity=shares,
-                            commission=comm,
+            if self.max_drawdown_threshold > 0:
+                # Graduated risk reduction levels
+                if current_drawdown >= self.max_drawdown_threshold:
+                    # Level 3: Close all positions (severe drawdown)
+                    risk_control_triggered = True
+                    if position == 1:
+                        # Force sell all shares
+                        proceeds = shares * current_price
+                        comm = proceeds * self.commission
+                        cash = cash + proceeds - comm
+                        trades.append(
+                            Trade(
+                                date=dates[i]
+                                if hasattr(dates[i], "date")
+                                else pd.Timestamp(dates[i]),
+                                action="sell",
+                                price=current_price,
+                                quantity=shares,
+                                commission=comm,
+                            )
                         )
-                    )
-                    shares = 0
-                    position = 0
+                        shares = 0
+                        position = 0
+                elif current_drawdown >= self.max_drawdown_threshold * 0.75:
+                    # Level 2: Reduce position by 50% (moderate drawdown)
+                    if position == 1 and shares > 100:
+                        shares_to_sell = shares // 2
+                        if shares_to_sell >= 50:  # Minimum lot size
+                            proceeds = shares_to_sell * current_price
+                            comm = proceeds * self.commission
+                            cash = cash + proceeds - comm
+                            trades.append(
+                                Trade(
+                                    date=dates[i]
+                                    if hasattr(dates[i], "date")
+                                    else pd.Timestamp(dates[i]),
+                                    action="sell",
+                                    price=current_price,
+                                    quantity=shares_to_sell,
+                                    commission=comm,
+                                )
+                            )
+                            shares -= shares_to_sell
+                elif current_drawdown >= self.max_drawdown_threshold * 0.5:
+                    # Level 1: Reduce position by 25% (mild drawdown)
+                    if position == 1 and shares > 200:
+                        shares_to_sell = shares // 4
+                        if shares_to_sell >= 50:  # Minimum lot size
+                            proceeds = shares_to_sell * current_price
+                            comm = proceeds * self.commission
+                            cash = cash + proceeds - comm
+                            trades.append(
+                                Trade(
+                                    date=dates[i]
+                                    if hasattr(dates[i], "date")
+                                    else pd.Timestamp(dates[i]),
+                                    action="sell",
+                                    price=current_price,
+                                    quantity=shares_to_sell,
+                                    commission=comm,
+                                )
+                            )
+                            shares -= shares_to_sell
 
             # Check stop loss and take profit first (these override signals)
             stop_loss_triggered = False

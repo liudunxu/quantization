@@ -64,15 +64,3 @@ class BaseFeatureExtractor(ABC):
             df = df.sort_values("date").tail(days).reset_index(drop=True)
 
         return df
-
-        # Merge with existing cache (incremental update)
-        if self.cache is not None:
-            df = self.cache.merge_and_update(
-                stock_code, self.feature_type, df, kwargs.get("params")
-            )
-
-        # Filter by days if specified
-        if days and "date" in df.columns:
-            df = df.sort_values("date").tail(days).reset_index(drop=True)
-
-        return df

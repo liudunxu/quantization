@@ -84,19 +84,19 @@ features:
 
 model:
   catboost:
-    iterations: 300      # Reduced to prevent overfitting
-    depth: 4              # Reduced from 6 to prevent overfitting
-    learning_rate: 0.03
-    l2_leaf_reg: 5        # Increased for more regularization
+    iterations: 500      # Increased for better convergence
+    depth: 5              # Increased from 4 for deeper patterns
+    learning_rate: 0.02   # Reduced for better generalization
+    l2_leaf_reg: 7        # Increased for more regularization
     random_seed: 42
-    n_estimators: 3       # Number of models in ensemble for bagging
+    n_estimators: 5       # Increased ensemble size for better diversity
   
   # Market-specific model parameters
   a_share:
-    iterations: 250
-    depth: 4
-    learning_rate: 0.03
-    l2_leaf_reg: 3
+    iterations: 400
+    depth: 5
+    learning_rate: 0.02
+    l2_leaf_reg: 5
     forward_days: 3       # Shorter prediction for A-share
     threshold: 0.008      # Lower threshold for more signals
     min_samples: 25
@@ -106,10 +106,10 @@ model:
     market_weight: 0.25
   
   hk:
-    iterations: 300
+    iterations: 450
     depth: 5
-    learning_rate: 0.025
-    l2_leaf_reg: 4
+    learning_rate: 0.02
+    l2_leaf_reg: 6
     forward_days: 5
     threshold: 0.01
     min_samples: 30
@@ -119,10 +119,10 @@ model:
     market_weight: 0.20
   
   us:
-    iterations: 350
-    depth: 5
-    learning_rate: 0.02
-    l2_leaf_reg: 5
+    iterations: 500
+    depth: 6
+    learning_rate: 0.015
+    l2_leaf_reg: 7
     forward_days: 5
     threshold: 0.012      # Higher threshold for US
     min_samples: 35

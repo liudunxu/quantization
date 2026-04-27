@@ -1,7 +1,7 @@
 """XGBoost model for stock trading decisions."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -45,6 +45,67 @@ class XGBoostModel(BaseModel):
         """Return model name."""
         return "XGBoost"
 
+    def _create_composite_labels(
+        self,
+        df: pd.DataFrame,
+        forward_days: int = 5,
+        threshold: float = 0.02,
+        trend_weight: float = 0.3,
+        momentum_weight: float = 0.3,
+        market_weight: float = 0.2,
+    ) -> pd.Series:
+        """Create composite labels matching CatBoost's method for consistency."""
+        future_returns = df["close"].shift(-forward_days) / df["close"] - 1
+
+        # 1. Future return score (required condition)
+        return_score = pd.Series(0.0, index=df.index)
+        return_score[future_returns > threshold] = 1.0
+        return_score[future_returns < -threshold] = -1.0
+
+        # 2. Trend score (MA arrangement)
+        trend_score = pd.Series(0.0, index=df.index)
+        if "ma_bullish_arrange" in df.columns and "ma_bearish_arrange" in df.columns:
+            trend_score[df["ma_bullish_arrange"] == 1] = 1.0
+            trend_score[df["ma_bearish_arrange"] == 1] = -1.0
+
+        # 3. Momentum score (RSI, MACD)
+        momentum_score = pd.Series(0.0, index=df.index)
+        if "rsi" in df.columns:
+            momentum_score[df["rsi"] > 60] += 0.5
+            momentum_score[df["rsi"] < 40] -= 0.5
+        if "macd_hist" in df.columns:
+            momentum_score[df["macd_hist"] > 0] += 0.5
+            momentum_score[df["macd_hist"] < 0] -= 0.5
+        momentum_score = momentum_score.clip(-1.0, 1.0)
+
+        # 4. Market score
+        market_score = pd.Series(0.0, index=df.index)
+        if "index_returns" in df.columns:
+            market_score[df["index_returns"] > 0.01] = 0.5
+            market_score[df["index_returns"] < -0.01] = -0.5
+
+        # Combine into composite signal
+        return_weight = 1.0 - trend_weight - momentum_weight - market_weight
+        composite = (
+            return_score * return_weight
+            + trend_score * trend_weight
+            + momentum_score * momentum_weight
+            + market_score * market_weight
+        )
+
+        # Create final labels
+        labels = pd.Series(0, index=df.index)
+        buy_threshold = 0.05
+        sell_threshold = -0.05
+
+        buy_condition = (composite >= buy_threshold) & (future_returns > threshold * 0.2)
+        sell_condition = (composite <= sell_threshold) & (future_returns < -threshold * 0.2)
+
+        labels[buy_condition] = 1
+        labels[sell_condition] = -1
+
+        return labels
+
     def _prepare_data(
         self, df: pd.DataFrame, forward_days: int = 5, threshold: float = 0.01
     ) -> tuple:
@@ -77,13 +138,10 @@ class XGBoostModel(BaseModel):
         X = X.fillna(0)
         X = X.replace([np.inf, -np.inf], 0)
 
-        # Create labels
-        future_returns = df["close"].pct_change(forward_days).shift(-forward_days)
-        labels = np.where(
-            future_returns > threshold, 1, np.where(future_returns < -threshold, -1, 0)
-        )
+        # Create labels using composite method
+        labels = self._create_composite_labels(df, forward_days, threshold)
 
-        valid_idx = ~np.isnan(future_returns)
+        valid_idx = ~labels.isna()
         X = X[valid_idx]
         labels = labels[valid_idx]
 
@@ -141,7 +199,7 @@ class XGBoostModel(BaseModel):
         }
 
     def predict(self, df: pd.DataFrame) -> tuple:
-        """Predict trading action using ensemble voting."""
+        """Predict trading action using soft voting (probability averaging)."""
         if not self.is_trained or not self.models:
             return "HOLD", 0.5
 
@@ -149,24 +207,22 @@ class XGBoostModel(BaseModel):
         if X.empty:
             return "HOLD", 0.5
 
-        # Ensemble voting
-        predictions = []
+        # Soft voting: average probabilities across all models
+        all_probas = []
         for model in self.models:
-            pred = model.predict(X.iloc[[-1]])[0]
-            predictions.append(pred)
+            proba = model.predict_proba(X.iloc[[-1]])[0]
+            all_probas.append(proba)
 
-        # Majority voting
-        from collections import Counter
+        # Average probabilities
+        avg_proba = np.mean(all_probas, axis=0)
 
-        vote_counts = Counter(predictions)
-        final_pred = vote_counts.most_common(1)[0][0]
+        # Get class with highest average probability
+        pred_class = int(np.argmax(avg_proba))
+        confidence = float(avg_proba[pred_class])
 
-        # Calculate confidence
-        confidence = vote_counts[final_pred] / len(predictions)
-
-        # Convert back to action
+        # Convert back to action (classes: 0=SELL, 1=HOLD, 2=BUY)
         action_map = {2: "BUY", 1: "HOLD", 0: "SELL"}
-        action = action_map.get(final_pred, "HOLD")
+        action = action_map.get(pred_class, "HOLD")
 
         return action, confidence
 

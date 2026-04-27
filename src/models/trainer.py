@@ -144,7 +144,8 @@ class StockTradingModel:
         1. Detect market type if not provided
         2. Score features by category relevance for market
         3. Quick preliminary model to get feature importance
-        4. Select diverse features across categories
+        4. Use IC-based selection for model-agnostic feature evaluation
+        5. Select diverse features across categories
         """
         # Drop non-feature columns
         drop_cols = [
@@ -196,7 +197,7 @@ class StockTradingModel:
             feature_df = feature_df.drop(columns=low_var_cols, errors="ignore")
             return feature_df.columns.tolist()[: self.max_features]
 
-        # Quick preliminary model to get feature importance
+        # Stage 1: Quick preliminary model to get feature importance
         quick_model = CatBoostClassifier(
             iterations=50,
             depth=4,
@@ -206,11 +207,48 @@ class StockTradingModel:
         )
         quick_model.fit(X_quick, y_quick, verbose=False)
 
-        # Get feature importance
+        # Get feature importance from CatBoost
         importance = quick_model.get_feature_importance()
         importance_df = pd.DataFrame(
             {"feature": X_quick.columns, "importance": importance}
         ).sort_values("importance", ascending=False)
+
+        # Stage 2: IC-based feature selection (Information Coefficient)
+        # Calculate correlation between each feature and labels
+        ic_scores = {}
+        for col in X_quick.columns:
+            try:
+                # Use rank correlation (Spearman) for robustness
+                ic = X_quick[col].corr(y_quick, method='spearman')
+                if not np.isnan(ic):
+                    ic_scores[col] = abs(ic)
+            except Exception:
+                ic_scores[col] = 0.0
+
+        ic_df = pd.DataFrame(
+            {"feature": list(ic_scores.keys()), "ic_score": list(ic_scores.values())}
+        )
+
+        # Merge CatBoost importance with IC scores
+        importance_df = importance_df.merge(ic_df, on="feature", how="left")
+        importance_df["ic_score"] = importance_df["ic_score"].fillna(0.0)
+
+        # Normalize scores to [0, 1] range
+        if importance_df["importance"].max() > 0:
+            importance_df["importance_norm"] = importance_df["importance"] / importance_df["importance"].max()
+        else:
+            importance_df["importance_norm"] = 0
+            
+        if importance_df["ic_score"].max() > 0:
+            importance_df["ic_norm"] = importance_df["ic_score"] / importance_df["ic_score"].max()
+        else:
+            importance_df["ic_norm"] = 0
+
+        # Combined score: 60% CatBoost importance + 40% IC score
+        importance_df["raw_score"] = (
+            0.6 * importance_df["importance_norm"] + 
+            0.4 * importance_df["ic_norm"]
+        )
 
         # Assign categories to each feature
         importance_df["categories"] = importance_df["feature"].apply(
@@ -235,7 +273,7 @@ class StockTradingModel:
             get_market_score
         )
         importance_df["combined_score"] = (
-            importance_df["importance"] * importance_df["market_score"]
+            importance_df["raw_score"] * importance_df["market_score"]
         )
 
         # Sort by combined score
@@ -543,13 +581,26 @@ class StockTradingModel:
                 eval_data = eval_X_valid
                 eval_labels_converted = eval_labels_valid
 
-        # Train ensemble of models (bagging with bootstrap sampling)
+        # Train ensemble of models with hyperparameter diversity
         self.models = []
         n_samples = len(train_data)
+        
+        # Define diverse hyperparameter configurations for ensemble
+        hyperparam_configs = [
+            {"depth": self.depth, "learning_rate": self.learning_rate, "l2_leaf_reg": self.l2_leaf_reg},
+            {"depth": max(3, self.depth - 1), "learning_rate": self.learning_rate * 1.2, "l2_leaf_reg": self.l2_leaf_reg * 0.8},
+            {"depth": min(8, self.depth + 1), "learning_rate": self.learning_rate * 0.8, "l2_leaf_reg": self.l2_leaf_reg * 1.2},
+            {"depth": self.depth, "learning_rate": self.learning_rate * 0.7, "l2_leaf_reg": self.l2_leaf_reg * 1.5},
+            {"depth": max(3, self.depth - 1), "learning_rate": self.learning_rate * 1.3, "l2_leaf_reg": self.l2_leaf_reg * 0.6},
+        ]
 
         for i in range(self.n_estimators):
             # Use different random seed for each model
             model_seed = self.random_seed + i * 111  # Spread out seeds
+            
+            # Get hyperparameter configuration for this model
+            config_idx = i % len(hyperparam_configs)
+            hp_config = hyperparam_configs[config_idx]
 
             # Bootstrap sampling for diversity (sample with replacement)
             np.random.seed(model_seed)
@@ -576,9 +627,9 @@ class StockTradingModel:
 
             model = CatBoostClassifier(
                 iterations=self.iterations,
-                depth=self.depth,
-                learning_rate=self.learning_rate,
-                l2_leaf_reg=self.l2_leaf_reg,
+                depth=hp_config["depth"],
+                learning_rate=hp_config["learning_rate"],
+                l2_leaf_reg=hp_config["l2_leaf_reg"],
                 random_seed=model_seed,
                 verbose=False,
                 loss_function="MultiClass",

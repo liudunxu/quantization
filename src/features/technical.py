@@ -183,6 +183,7 @@ class TechnicalFeatures(BaseFeatureExtractor):
         self._add_lag_features(df)
         self._add_rolling_features(df)
         self._add_cross_asset_features(df)
+        self._add_interaction_features(df)
         self._clean_and_fill(df)
 
         return df
@@ -378,32 +379,45 @@ class TechnicalFeatures(BaseFeatureExtractor):
             ).astype(int)
 
     def _add_pattern_features(self, df: pd.DataFrame) -> None:
-        """Add price-volume pattern features."""
+        """Add price-volume pattern features using historical data only."""
+        # Use past returns only to avoid future data leakage
+        ret_5d = df["close"].pct_change(5)
         ret_10d = df["close"].pct_change(10)
-        ret_5d_later = df["close"].shift(-5).pct_change(5)
-        df["pattern_drop_then_rise"] = (
-            (ret_10d < -0.05) & (ret_5d_later > 0.05)
+        ret_20d = df["close"].pct_change(20)
+        
+        # Pattern: significant drop then stabilization (potential reversal signal)
+        # Uses past 10-day drop and recent 5-day stabilization
+        df["pattern_drop_then_stabilize"] = (
+            (ret_10d < -0.05) & (ret_5d.abs() < 0.02)
         ).astype(int)
-        df["pattern_rise_then_drop"] = (
-            (ret_10d > 0.05) & (ret_5d_later < -0.05)
+        
+        # Pattern: significant rise then pullback (potential continuation or reversal)
+        df["pattern_rise_then_pullback"] = (
+            (ret_10d > 0.05) & (ret_5d < -0.02)
         ).astype(int)
 
-        vol_10d_ago = df["volume"].shift(10)
+        # Volume surge patterns (using historical volume comparison)
+        vol_5d_avg = df["volume"].rolling(window=5).mean()
+        vol_10d_avg = df["volume"].rolling(window=10).mean()
+        df["pattern_vol_surge"] = (
+            (df["volume"] / vol_10d_avg > 2.0)
+        ).astype(int)
+        
+        # Volume surge with direction
         df["pattern_vol_surge_rise"] = (
-            (df["volume"] / vol_10d_ago > 2.0) & (ret_10d > 0)
+            (df["pattern_vol_surge"] == 1) & (ret_5d > 0)
         ).astype(int)
         df["pattern_vol_surge_drop"] = (
-            (df["volume"] / vol_10d_ago > 2.0) & (ret_10d < 0)
+            (df["pattern_vol_surge"] == 1) & (ret_5d < 0)
         ).astype(int)
 
+        # Reversal patterns using historical data
         ret_3d = df["close"].pct_change(3)
-        ret_7d_prior = df["close"].shift(3).pct_change(7)
-        df["pattern_reversal_up"] = ((ret_7d_prior < -0.03) & (ret_3d > 0.03)).astype(
-            int
-        )
-        df["pattern_reversal_down"] = ((ret_7d_prior > 0.03) & (ret_3d < -0.03)).astype(
-            int
-        )
+        ret_7d = df["close"].pct_change(7)
+        # Prior trend (7 days ago to 3 days ago) vs recent trend (last 3 days)
+        prior_ret = (df["close"].shift(3) / df["close"].shift(10) - 1)
+        df["pattern_reversal_up"] = ((prior_ret < -0.03) & (ret_3d > 0.03)).astype(int)
+        df["pattern_reversal_down"] = ((prior_ret > 0.03) & (ret_3d < -0.03)).astype(int)
 
     def _add_ma120(self, df: pd.DataFrame) -> None:
         """Add MA120 if not already present."""
@@ -689,8 +703,51 @@ class TechnicalFeatures(BaseFeatureExtractor):
             & (df["dmi_minus_di"] > df["dmi_plus_di"])
         ).astype(int)
 
+    def _add_interaction_features(self, df: pd.DataFrame) -> None:
+        """Add interaction features that capture nonlinear relationships."""
+        # RSI * Volume ratio interaction
+        if "rsi" in df.columns and "volume_ratio" in df.columns:
+            df["rsi_volume_interaction"] = df["rsi"] * df["volume_ratio"]
+        
+        # Momentum * Volatility interaction
+        if "momentum_10" in df.columns and "volatility_20d" in df.columns:
+            df["momentum_volatility_interaction"] = df["momentum_10"] * df["volatility_20d"]
+        
+        # MACD histogram * Volume change interaction
+        if "macd_hist" in df.columns and "volume_change" in df.columns:
+            df["macd_volume_interaction"] = df["macd_hist"] * df["volume_change"]
+        
+        # RSI divergence from price
+        if "rsi" in df.columns and "returns" in df.columns:
+            df["rsi_return_divergence"] = df["rsi"] * df["returns"]
+        
+        # Bollinger Band width * RSI (volatility + momentum)
+        if "bb_width" in df.columns and "rsi" in df.columns:
+            df["bb_rsi_interaction"] = df["bb_width"] * df["rsi"]
+        
+        # ADX * Volume ratio (trend strength + volume confirmation)
+        if "adx" in df.columns and "volume_ratio" in df.columns:
+            df["adx_volume_interaction"] = df["adx"] * df["volume_ratio"]
+        
+        # Price position in Bollinger Bands * Momentum
+        if "bb_pct" in df.columns and "momentum_5" in df.columns:
+            df["bb_momentum_interaction"] = df["bb_pct"] * df["momentum_5"]
+        
+        # Stochastic %K * Volume ratio
+        if "stoch_k" in df.columns and "volume_ratio" in df.columns:
+            df["stoch_volume_interaction"] = df["stoch_k"] * df["volume_ratio"]
+        
+        # MFI * ATR ratio (money flow * volatility)
+        if "mfi" in df.columns and "atr_ratio" in df.columns:
+            df["mfi_atr_interaction"] = df["mfi"] * df["atr_ratio"]
+        
+        # CCI * Volume change
+        if "cci" in df.columns and "volume_change" in df.columns:
+            df["cci_volume_interaction"] = df["cci"] * df["volume_change"]
+
     def _clean_and_fill(self, df: pd.DataFrame) -> None:
-        """Fill NaN values and handle outliers."""
+        """Fill NaN values and handle outliers with improved strategy."""
+        # First pass: forward fill then backward fill
         df.ffill(inplace=True)
         df.bfill(inplace=True)
 
@@ -716,14 +773,29 @@ class TechnicalFeatures(BaseFeatureExtractor):
             "is_bullish",
             "is_bearish",
         }
+        
+        # Clip outliers for numeric columns (using IQR method for robustness)
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         for col in numeric_cols:
             if col not in skip_cols and col in df.columns:
+                # Use 1st and 99th percentile for clipping
                 lower = df[col].quantile(0.01)
                 upper = df[col].quantile(0.99)
                 df[col] = df[col].clip(lower=lower, upper=upper)
 
+        # Replace inf with NaN
         df.replace([np.inf, -np.inf], np.nan, inplace=True)
+        
+        # Second pass: forward fill then backward fill again
         df.ffill(inplace=True)
         df.bfill(inplace=True)
-        df.fillna(0, inplace=True)
+        
+        # Final pass: use median fill for remaining NaN (better than fillna(0))
+        for col in numeric_cols:
+            if col in df.columns and df[col].isna().any():
+                median_val = df[col].median()
+                if pd.notna(median_val):
+                    df[col] = df[col].fillna(median_val)
+                else:
+                    # If median is also NaN (all NaN column), use 0
+                    df[col] = df[col].fillna(0)

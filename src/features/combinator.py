@@ -250,10 +250,44 @@ class FeatureCombinator:
                 combined["volume_change"] - combined["index_volume_ratio"]
             )
 
-        # Clean up column names
-        combined.columns = [
-            c.replace("_market", "").replace("_industry", "") for c in combined.columns
-        ]
+        # Clean up column names (more precise approach to avoid accidental renaming)
+        # Only remove suffixes that were added during merge operations
+        new_columns = []
+        for col in combined.columns:
+            # Check if column ends with _market or _industry suffix from merge
+            # Only remove if it's clearly a suffix (not part of the original name)
+            if col.endswith("_market") and not any(
+                col.startswith(prefix) for prefix in ["market_", "index_"]
+            ):
+                # Check if removing suffix creates a valid column name
+                base_name = col[:-7]  # Remove "_market"
+                if base_name in combined.columns or base_name + "_x" in combined.columns:
+                    new_columns.append(base_name)
+                else:
+                    new_columns.append(col)
+            elif col.endswith("_industry") and not any(
+                col.startswith(prefix) for prefix in ["industry_", "sector_"]
+            ):
+                base_name = col[:-9]  # Remove "_industry"
+                if base_name in combined.columns or base_name + "_x" in combined.columns:
+                    new_columns.append(base_name)
+                else:
+                    new_columns.append(col)
+            else:
+                new_columns.append(col)
+        
+        # Handle duplicate column names by adding suffix
+        seen = {}
+        final_columns = []
+        for col in new_columns:
+            if col in seen:
+                seen[col] += 1
+                final_columns.append(f"{col}_{seen[col]}")
+            else:
+                seen[col] = 0
+                final_columns.append(col)
+        
+        combined.columns = final_columns
 
         return combined
 

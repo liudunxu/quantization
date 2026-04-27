@@ -27,6 +27,7 @@ class MultiModelEnsemble(BaseModel):
             "model_weights",
             {"catboost": 0.4, "lightgbm": 0.3, "xgboost": 0.3},
         )
+        self.model_accuracies: Dict[str, float] = {}  # Track model accuracies
         self.available_models = self._check_available_models()
 
     @property
@@ -64,7 +65,7 @@ class MultiModelEnsemble(BaseModel):
         eval_df: Optional[pd.DataFrame] = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        """Train all available models."""
+        """Train all available models with adaptive weight adjustment."""
         results = {}
 
         # Train CatBoost
@@ -75,6 +76,7 @@ class MultiModelEnsemble(BaseModel):
                 df, forward_days, threshold, eval_df, **kwargs
             )
             self.models["catboost"] = catboost_model
+            self.model_accuracies["catboost"] = catboost_result["train_accuracy"]
             results["catboost"] = catboost_result
             logger.info(f"CatBoost accuracy: {catboost_result['train_accuracy']:.2%}")
         except Exception as e:
@@ -91,6 +93,7 @@ class MultiModelEnsemble(BaseModel):
                     df, forward_days, threshold, eval_df, **kwargs
                 )
                 self.models["lightgbm"] = lgbm_model
+                self.model_accuracies["lightgbm"] = lgbm_result["train_accuracy"]
                 results["lightgbm"] = lgbm_result
                 logger.info(f"LightGBM accuracy: {lgbm_result['train_accuracy']:.2%}")
             except Exception as e:
@@ -107,12 +110,16 @@ class MultiModelEnsemble(BaseModel):
                     df, forward_days, threshold, eval_df, **kwargs
                 )
                 self.models["xgboost"] = xgb_model
+                self.model_accuracies["xgboost"] = xgb_result["train_accuracy"]
                 results["xgboost"] = xgb_result
                 logger.info(f"XGBoost accuracy: {xgb_result['train_accuracy']:.2%}")
             except Exception as e:
                 logger.error(f"XGBoost training failed: {e}")
 
         self.is_trained = len(self.models) > 0
+
+        # Update model weights based on training accuracy (adaptive weighting)
+        self._update_weights_based_on_accuracy()
 
         # Calculate average accuracy
         avg_accuracy = np.mean([r["train_accuracy"] for r in results.values()])
@@ -121,7 +128,38 @@ class MultiModelEnsemble(BaseModel):
             "train_accuracy": avg_accuracy,
             "models_trained": list(self.models.keys()),
             "model_results": results,
+            "model_weights": self.model_weights,
         }
+
+    def _update_weights_based_on_accuracy(self):
+        """Update model weights based on training accuracy (adaptive weighting)."""
+        if not self.model_accuracies:
+            return
+
+        # Calculate weights proportional to accuracy
+        total_accuracy = sum(self.model_accuracies.values())
+        if total_accuracy > 0:
+            # Normalize weights to sum to 1.0
+            for name, accuracy in self.model_accuracies.items():
+                self.model_weights[name] = accuracy / total_accuracy
+            
+            # Ensure we don't deviate too much from default weights
+            # Blend with default weights (70% adaptive, 30% default)
+            default_weights = {"catboost": 0.4, "lightgbm": 0.3, "xgboost": 0.3}
+            for name in self.model_weights:
+                if name in default_weights:
+                    self.model_weights[name] = (
+                        0.7 * self.model_weights[name] + 
+                        0.3 * default_weights[name]
+                    )
+            
+            # Renormalize to ensure sum is 1.0
+            total_weight = sum(self.model_weights.values())
+            if total_weight > 0:
+                for name in self.model_weights:
+                    self.model_weights[name] /= total_weight
+            
+            logger.info(f"Updated model weights: {self.model_weights}")
 
     def predict(self, df: pd.DataFrame) -> tuple:
         """Predict using weighted voting across all models."""
@@ -134,6 +172,11 @@ class MultiModelEnsemble(BaseModel):
         for name, model in self.models.items():
             try:
                 action, confidence = model.predict(df)
+                # Normalize action to string format
+                if isinstance(action, int):
+                    # Convert integer action to string (CatBoost format: -1, 0, 1)
+                    action_map = {1: "BUY", 0: "HOLD", -1: "SELL"}
+                    action = action_map.get(action, "HOLD")
                 predictions[name] = action
                 confidences[name] = confidence
             except Exception as e:
