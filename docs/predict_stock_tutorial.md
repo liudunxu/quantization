@@ -12,17 +12,60 @@ uv sync
 pip install -r requirements.txt
 ```
 
-### 2. 基本预测
+### 2. 基本预测命令
 
 ```bash
-# A股预测
+# A股
 python scripts/predict.py --stock 000001.SZ
+python scripts/predict.py --stock 600036.SH
 
-# 港股预测
+# 港股
 python scripts/predict.py --stock 0700.HK
+python scripts/predict.py --stock 1024.HK
 
-# 美股预测
+# 美股
 python scripts/predict.py --stock AAPL
+python scripts/predict.py --stock NVDA
+
+# 指数
+python scripts/predict.py --index 000001
+```
+
+### 3. 推荐参数（基于优化结果）
+
+```bash
+# 港股（效果最好）
+python scripts/predict.py --stock 1024.HK --threshold 0.005
+
+# A股
+python scripts/predict.py --stock 600036.SH --threshold 0.005 --exclude-dates
+
+# 美股
+python scripts/predict.py --stock NVDA --threshold 0.005
+```
+
+### 4. 高置信度模式
+
+```bash
+# 只在信号明确时预测（准确率更高，信号更少）
+python scripts/predict.py --stock 1024.HK --min-confidence 0.50
+```
+
+### 5. 输出格式
+
+```bash
+# JSON格式（便于程序处理）
+python scripts/predict.py --stock 0700.HK --output json
+
+# CSV格式（便于批量分析）
+python scripts/predict.py --stock 0700.HK --output csv
+```
+
+### 6. 快速模式
+
+```bash
+# 跳过训练，使用缓存（约3秒）
+python scripts/predict.py --stock 0700.HK --fast
 ```
 
 ## 预测原理
