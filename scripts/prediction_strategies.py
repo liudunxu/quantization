@@ -225,7 +225,7 @@ INDUSTRY_STRATEGIES = {
 
 
 # ============================================================
-# 特殊股票策略
+# 特殊股票策略 (基于回测优化)
 # ============================================================
 
 SPECIAL_STRATEGIES = {
@@ -233,32 +233,77 @@ SPECIAL_STRATEGIES = {
     "index": PredictionStrategy(
         name="指数预测策略",
         description="大盘指数预测，更注重市场整体",
-        iterations=500,
-        depth=5,
-        learning_rate=0.02,
-        threshold=0.005,  # 指数波动小
+        iterations=300,
+        depth=4,
+        learning_rate=0.03,
+        n_estimators=3,
+        forward_days=1,
+        threshold=0.005,
         ml_weight=0.35,
         technical_weight=0.25,
         momentum_weight=0.15,
         trend_weight=0.15,
         trend_label_weight=0.30,
         momentum_label_weight=0.25,
-        market_label_weight=0.30,  # 指数本身就是市场
+        market_label_weight=0.30,
         confidence_threshold=0.55,
     ),
-    # 高价股
-    "expensive": PredictionStrategy(
-        name="高价股策略",
-        description="价格>100的股票，更保守",
-        iterations=400,
+    # 高波动科技股 (如0700.HK腾讯)
+    "high_vol_tech": PredictionStrategy(
+        name="高波动科技股策略",
+        description="高波动科技股，使用多模型集成+趋势过滤",
+        iterations=300,
         depth=5,
-        learning_rate=0.02,
-        threshold=0.008,
+        learning_rate=0.025,
+        n_estimators=4,
+        forward_days=1,
+        threshold=0.005,
         ml_weight=0.35,
         technical_weight=0.25,
         momentum_weight=0.15,
         trend_weight=0.15,
-        confidence_threshold=0.65,  # 高价股需要更高置信度
+        trend_label_weight=0.30,
+        momentum_label_weight=0.30,
+        market_label_weight=0.20,
+        confidence_threshold=0.50,
+    ),
+    # 中等波动互联网股 (如1024.HK快手)
+    "mid_vol_internet": PredictionStrategy(
+        name="中等波动互联网股策略",
+        description="中等波动互联网股，高置信度过滤效果好",
+        iterations=200,
+        depth=4,
+        learning_rate=0.03,
+        n_estimators=3,
+        forward_days=1,
+        threshold=0.005,
+        ml_weight=0.35,
+        technical_weight=0.25,
+        momentum_weight=0.15,
+        trend_weight=0.15,
+        trend_label_weight=0.30,
+        momentum_label_weight=0.30,
+        market_label_weight=0.20,
+        confidence_threshold=0.50,  # 高置信度过滤
+    ),
+    # 低波动价值股
+    "low_vol_value": PredictionStrategy(
+        name="低波动价值股策略",
+        description="低波动价值股，使用低阈值捕捉小波动",
+        iterations=200,
+        depth=4,
+        learning_rate=0.03,
+        n_estimators=3,
+        forward_days=1,
+        threshold=0.003,  # 低阈值
+        ml_weight=0.35,
+        technical_weight=0.30,
+        momentum_weight=0.10,
+        trend_weight=0.15,
+        trend_label_weight=0.30,
+        momentum_label_weight=0.25,
+        market_label_weight=0.25,
+        confidence_threshold=0.55,
     ),
     # 中概股
     "china_adr": PredictionStrategy(
@@ -267,7 +312,9 @@ SPECIAL_STRATEGIES = {
         iterations=400,
         depth=5,
         learning_rate=0.025,
-        threshold=0.012,
+        n_estimators=4,
+        forward_days=1,
+        threshold=0.005,
         ml_weight=0.30,
         technical_weight=0.25,
         momentum_weight=0.20,
@@ -275,13 +322,13 @@ SPECIAL_STRATEGIES = {
         trend_label_weight=0.30,
         momentum_label_weight=0.30,
         market_label_weight=0.25,
-        confidence_threshold=0.60,
+        confidence_threshold=0.55,
     ),
 }
 
 
 # ============================================================
-# 股票到行业的映射
+# 股票到策略的映射 (基于回测优化)
 # ============================================================
 
 STOCK_INDUSTRY_MAP = {
@@ -300,10 +347,15 @@ STOCK_INDUSTRY_MAP = {
     "600362.SH": "metals", "000807.SZ": "metals", "601020.SH": "metals",
     # A股 - 电气设备
     "603191.SH": "electronics",
-    # 港股 - 互联网
-    "9988.HK": "internet", "0700.HK": "internet", "1810.HK": "internet",
-    "3690.HK": "internet", "1024.HK": "internet", "9626.HK": "internet",
-    "1357.HK": "internet",
+    # 港股 - 互联网 (高波动)
+    "0700.HK": "high_vol_tech",  # 腾讯: 高波动科技股
+    "9988.HK": "high_vol_tech",  # 阿里: 高波动科技股
+    # 港股 - 互联网 (中等波动)
+    "1024.HK": "mid_vol_internet",  # 快手: 中等波动，高置信度效果好
+    "1810.HK": "mid_vol_internet",  # 小米: 中等波动
+    "3690.HK": "mid_vol_internet",  # 美团: 中等波动
+    "9626.HK": "mid_vol_internet",  # 贝壳: 中等波动
+    "1357.HK": "mid_vol_internet",  # 美图: 中等波动
     # 港股 - 半导体
     "0981.HK": "semiconductor", "1347.HK": "semiconductor",
     # 港股 - 汽车
@@ -323,6 +375,27 @@ STOCK_INDUSTRY_MAP = {
     "PDD": "china_adr", "BABA": "china_adr", "JD": "china_adr", "BIDU": "china_adr",
 }
 
+# 特殊股票直接映射到策略
+STOCK_STRATEGY_MAP = {
+    # 指数
+    "000001.SH": "index",
+    "399001.SZ": "index",
+    "399006.SZ": "index",
+    "HSTECH.HK": "index",
+    # 高波动科技股
+    "0700.HK": "high_vol_tech",
+    "9988.HK": "high_vol_tech",
+    # 中等波动互联网股
+    "1024.HK": "mid_vol_internet",
+    "1810.HK": "mid_vol_internet",
+    "3690.HK": "mid_vol_internet",
+    # 中概股
+    "PDD": "china_adr",
+    "BABA": "china_adr",
+    "JD": "china_adr",
+    "BIDU": "china_adr",
+}
+
 # 指数列表
 INDEX_CODES = {
     "000001.SH", "399001.SZ", "399006.SZ", "HSTECH.HK",
@@ -332,22 +405,30 @@ INDEX_CODES = {
 def get_strategy_for_stock(stock_code: str) -> PredictionStrategy:
     """获取股票的最佳预测策略.
     
-    优先级: 特殊股票 > 行业 > 市场 > 默认
+    优先级: 特殊股票映射 > 行业 > 市场 > 默认
+    
+    基于回测优化的策略分配。
     """
-    # 1. 检查是否是指数
+    # 1. 检查特殊股票映射 (最高优先级)
+    if stock_code in STOCK_STRATEGY_MAP:
+        strategy_key = STOCK_STRATEGY_MAP[stock_code]
+        if strategy_key in SPECIAL_STRATEGIES:
+            return SPECIAL_STRATEGIES[strategy_key]
+    
+    # 2. 检查是否是指数
     if stock_code in INDEX_CODES:
         return SPECIAL_STRATEGIES["index"]
     
-    # 2. 检查是否是中概股
+    # 3. 检查是否是中概股
     if stock_code in ["PDD", "BABA", "JD", "BIDU"]:
         return SPECIAL_STRATEGIES["china_adr"]
     
-    # 3. 获取行业策略
+    # 4. 获取行业策略
     industry = STOCK_INDUSTRY_MAP.get(stock_code)
     if industry and industry in INDUSTRY_STRATEGIES:
         return INDUSTRY_STRATEGIES[industry]
     
-    # 4. 获取市场策略
+    # 5. 获取市场策略
     if stock_code.endswith(".SH") or stock_code.endswith(".SZ"):
         return MARKET_STRATEGIES["cn"]
     elif stock_code.endswith(".HK"):
