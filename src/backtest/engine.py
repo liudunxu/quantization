@@ -905,7 +905,6 @@ class BacktestEngine:
             current_price = prices[i] * (
                 1 + self.slippage if position == 1 else 1 - self.slippage
             )
-            prices[i]
 
             # Calculate equity
             if position == 1:

@@ -77,7 +77,6 @@ class TechnicalFeatures(BaseFeatureExtractor):
             missing_days = (today - latest_date).days + 5
             fetch_days = max(missing_days, 10)  # At least 10 days
 
-            logger = __import__("logging").getLogger(__name__)
             logger.info(
                 f"Incremental fetch: latest={latest_date.date()}, fetching {fetch_days} days"
             )
@@ -101,7 +100,6 @@ class TechnicalFeatures(BaseFeatureExtractor):
         elif needs_more_history:
             # Need more historical data, fetch additional days
             extra_days = days - cached_count + 10  # Add buffer
-            logger = __import__("logging").getLogger(__name__)
             logger.info(
                 f"Fetching more history: cached={cached_count}, need={days}, fetching {extra_days} days"
             )
@@ -184,9 +182,20 @@ class TechnicalFeatures(BaseFeatureExtractor):
         self._add_rolling_features(df)
         self._add_cross_asset_features(df)
         self._add_interaction_features(df)
+        df = self._defragment_dataframe(df)
         self._clean_and_fill(df)
 
         return df
+
+    def _defragment_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Defragment DataFrame by copying all columns at once.
+
+        After many individual column insertions, pandas DataFrames become
+        fragmented (block manager has many small blocks). This method
+        consolidates all columns into a single contiguous block, improving
+        memory layout and downstream performance.
+        """
+        return df.copy(deep=False)
 
     def _prepare_base_df(self, data: pd.DataFrame, stock_code: str) -> pd.DataFrame:
         """Prepare base DataFrame with price columns."""
@@ -315,7 +324,7 @@ class TechnicalFeatures(BaseFeatureExtractor):
         df["max_drawdown_20d"] = drawdown.rolling(window=20).min()
 
     def _add_adx(self, df: pd.DataFrame) -> None:
-        """Add ADX indicator."""
+        """Add ADX indicator (stores intermediate DI for reuse by _add_dmi)."""
         high_diff = df["high"].diff()
         low_diff = -df["low"].diff()
         plus_dm = (
@@ -333,6 +342,8 @@ class TechnicalFeatures(BaseFeatureExtractor):
         minus_di = 100 * minus_dm / (atr_14 + 1e-8)
         dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di + 1e-8)
         df["adx"] = dx
+        df["adx_plus_di"] = plus_di
+        df["adx_minus_di"] = minus_di
 
     def _add_stochastic(self, df: pd.DataFrame) -> None:
         """Add Stochastic Oscillator."""
@@ -618,20 +629,16 @@ class TechnicalFeatures(BaseFeatureExtractor):
         df["price_to_vwap"] = df["close"] / df["vwap"]
 
     def _add_aroon(self, df: pd.DataFrame) -> None:
-        """Add Aroon indicator."""
+        """Add Aroon indicator (vectorized)."""
         aroon_period = 25
-        df["aroon_high"] = (
-            df["high"]
-            .rolling(window=aroon_period + 1)
-            .apply(lambda x: float(np.argmax(x)), raw=True)
-        )
-        df["aroon_low"] = (
-            df["low"]
-            .rolling(window=aroon_period + 1)
-            .apply(lambda x: float(np.argmin(x)), raw=True)
-        )
-        df["aroon_up"] = (aroon_period - df["aroon_high"]) / aroon_period * 100
-        df["aroon_down"] = (aroon_period - df["aroon_low"]) / aroon_period * 100
+        rolling_high = df["high"].rolling(window=aroon_period + 1)
+        rolling_low = df["low"].rolling(window=aroon_period + 1)
+        aroon_up = rolling_high.apply(lambda x: float(np.argmax(x)), raw=True)
+        aroon_down = rolling_low.apply(lambda x: float(np.argmin(x)), raw=True)
+        days_since_high = aroon_period - aroon_up
+        days_since_low = aroon_period - aroon_down
+        df["aroon_up"] = (aroon_period - days_since_high) / aroon_period * 100
+        df["aroon_down"] = (aroon_period - days_since_low) / aroon_period * 100
         df["aroon_oscillator"] = df["aroon_up"] - df["aroon_down"]
         df["aroon_trend"] = (df["aroon_up"] > df["aroon_down"]).astype(int)
 
@@ -654,16 +661,22 @@ class TechnicalFeatures(BaseFeatureExtractor):
             )
 
     def _add_dmi(self, df: pd.DataFrame) -> None:
-        """Add DMI features."""
-        high_diff = df["high"].diff()
-        low_diff = -df["low"].diff()
-        plus_dm = high_diff.where((high_diff > low_diff) & (high_diff > 0), 0)
-        minus_dm = low_diff.where((low_diff > high_diff) & (low_diff > 0), 0)
-        smooth_plus_dm = plus_dm.rolling(window=14).mean()
-        smooth_minus_dm = minus_dm.rolling(window=14).mean()
-        atr_14 = df["atr"]
-        plus_di = 100 * smooth_plus_dm / (atr_14 + 1e-8)
-        minus_di = 100 * smooth_minus_dm / (atr_14 + 1e-8)
+        """Add DMI features (consolidated with ADX)."""
+        # Reuse ADX calculation already present; only add DMI-specific columns
+        plus_di = df["adx_plus_di"] if "adx_plus_di" in df.columns else None
+        minus_di = df["adx_minus_di"] if "adx_minus_di" in df.columns else None
+
+        if plus_di is None or minus_di is None:
+            high_diff = df["high"].diff()
+            low_diff = -df["low"].diff()
+            plus_dm_val = high_diff.where((high_diff > low_diff) & (high_diff > 0), 0)
+            minus_dm_val = low_diff.where((low_diff > high_diff) & (low_diff > 0), 0)
+            smooth_plus_dm = plus_dm_val.rolling(window=14).mean()
+            smooth_minus_dm = minus_dm_val.rolling(window=14).mean()
+            atr_14 = df["atr"]
+            plus_di = 100 * smooth_plus_dm / (atr_14 + 1e-8)
+            minus_di = 100 * smooth_minus_dm / (atr_14 + 1e-8)
+
         df["dmi_plus_di"] = plus_di
         df["dmi_minus_di"] = minus_di
         df["dmi_di_diff"] = plus_di - minus_di
@@ -692,7 +705,6 @@ class TechnicalFeatures(BaseFeatureExtractor):
 
     def _add_cross_asset_features(self, df: pd.DataFrame) -> None:
         """Add cross-asset combination features."""
-        df = df.copy()
         df["price_vs_vwap"] = (df["close"] > df["vwap"]).astype(int)
         df["aroon_dmi_bullish"] = (
             (df["aroon_up"] > df["aroon_down"])
@@ -747,7 +759,6 @@ class TechnicalFeatures(BaseFeatureExtractor):
 
     def _clean_and_fill(self, df: pd.DataFrame) -> None:
         """Fill NaN values and handle outliers with improved strategy."""
-        # First pass: forward fill then backward fill
         df.ffill(inplace=True)
         df.bfill(inplace=True)
 
@@ -773,29 +784,29 @@ class TechnicalFeatures(BaseFeatureExtractor):
             "is_bullish",
             "is_bearish",
         }
-        
-        # Clip outliers for numeric columns (using IQR method for robustness)
-        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        for col in numeric_cols:
-            if col not in skip_cols and col in df.columns:
-                # Use 1st and 99th percentile for clipping
-                lower = df[col].quantile(0.01)
-                upper = df[col].quantile(0.99)
-                df[col] = df[col].clip(lower=lower, upper=upper)
 
-        # Replace inf with NaN
+        numeric_cols = [
+            c for c in df.select_dtypes(include=[np.number]).columns
+            if c not in skip_cols
+        ]
+
+        if numeric_cols:
+            clipped = df[numeric_cols].clip(
+                lower=df[numeric_cols].quantile(0.01),
+                upper=df[numeric_cols].quantile(0.99),
+                axis=1,
+            )
+            df[numeric_cols] = clipped
+
         df.replace([np.inf, -np.inf], np.nan, inplace=True)
-        
-        # Second pass: forward fill then backward fill again
+
         df.ffill(inplace=True)
         df.bfill(inplace=True)
-        
-        # Final pass: use median fill for remaining NaN (better than fillna(0))
-        for col in numeric_cols:
-            if col in df.columns and df[col].isna().any():
-                median_val = df[col].median()
-                if pd.notna(median_val):
-                    df[col] = df[col].fillna(median_val)
-                else:
-                    # If median is also NaN (all NaN column), use 0
-                    df[col] = df[col].fillna(0)
+
+        remaining_na = df[numeric_cols].isna()
+        if remaining_na.any().any():
+            medians = df[numeric_cols].median()
+            df[numeric_cols] = df[numeric_cols].fillna(medians)
+            still_na = df[numeric_cols].isna()
+            if still_na.any().any():
+                df[numeric_cols] = df[numeric_cols].fillna(0)

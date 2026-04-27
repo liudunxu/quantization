@@ -214,20 +214,17 @@ class StockTradingModel:
         ).sort_values("importance", ascending=False)
 
         # Stage 2: IC-based feature selection (Information Coefficient)
-        # Calculate correlation between each feature and labels
-        ic_scores = {}
-        for col in X_quick.columns:
-            try:
-                # Use rank correlation (Spearman) for robustness
-                ic = X_quick[col].corr(y_quick, method='spearman')
-                if not np.isnan(ic):
-                    ic_scores[col] = abs(ic)
-            except Exception:
-                ic_scores[col] = 0.0
-
-        ic_df = pd.DataFrame(
-            {"feature": list(ic_scores.keys()), "ic_score": list(ic_scores.values())}
-        )
+        # Use vectorized Spearman correlation for speed
+        try:
+            ic_df = X_quick.corrwith(y_quick, method='spearman').abs()
+            ic_df = ic_df.fillna(0.0)
+            ic_df.name = "ic_score"
+            ic_df = ic_df.reset_index()
+            ic_df.columns = ["feature", "ic_score"]
+        except Exception:
+            ic_df = pd.DataFrame(
+                {"feature": X_quick.columns, "ic_score": 0.0}
+            )
 
         # Merge CatBoost importance with IC scores
         importance_df = importance_df.merge(ic_df, on="feature", how="left")
@@ -330,16 +327,12 @@ class StockTradingModel:
         self, df: pd.DataFrame, use_selection: bool = True
     ) -> pd.DataFrame:
         """Prepare features for modeling."""
-        # Drop non-feature columns
         drop_cols = ["date", "stock_code", "sector", "industry"]
         drop_cols = [c for c in drop_cols if c in df.columns]
 
         feature_df = df.drop(columns=drop_cols, errors="ignore")
 
-        # Remove any remaining object or string columns
-        for col in feature_df.columns:
-            if feature_df[col].dtype == "object" or feature_df[col].dtype == "str":
-                feature_df = feature_df.drop(columns=[col])
+        feature_df = feature_df.select_dtypes(exclude=["object", "string"])
 
         # Apply feature selection if trained
         if use_selection and self.selected_features is not None:
@@ -349,10 +342,9 @@ class StockTradingModel:
             if len(available_features) > 0:
                 feature_df = feature_df[available_features]
 
-        # Fill NaN with median
-        for col in feature_df.columns:
-            if feature_df[col].isna().any():
-                feature_df[col] = feature_df[col].fillna(feature_df[col].median())
+        # Fill NaN with median (vectorized)
+        medians = feature_df.median()
+        feature_df = feature_df.fillna(medians)
 
         return feature_df
 
@@ -751,6 +743,7 @@ class StockTradingModel:
         model_data = {
             "models": self.models,
             "feature_names": self.feature_names,
+            "selected_features": self.selected_features,
             "config": self.config,
         }
         joblib.dump(model_data, path)
@@ -761,6 +754,7 @@ class StockTradingModel:
         self.models = model_data["models"]
         self.model = self.models[0] if self.models else None
         self.feature_names = model_data["feature_names"]
+        self.selected_features = model_data.get("selected_features", self.feature_names)
         self.config = model_data.get("config", self.config)
 
 
