@@ -444,6 +444,28 @@ def main():
     # 5. 训练模型
     print("\n  Training model (forward_days=1)...")
 
+    # 加载差异化策略
+    try:
+        from scripts.prediction_strategies import get_strategy_for_stock
+        stock_strategy = get_strategy_for_stock(code)
+        print(f"  Strategy: {stock_strategy.name}")
+        print(f"  Description: {stock_strategy.description}")
+        
+        # 应用策略参数
+        if args.threshold == 0.008:  # 仅在使用默认值时覆盖
+            args.threshold = stock_strategy.threshold
+        if args.ml_weight == 0.35:
+            args.ml_weight = stock_strategy.ml_weight
+        if args.technical_weight == 0.25:
+            args.technical_weight = stock_strategy.technical_weight
+        if args.momentum_weight == 0.15:
+            args.momentum_weight = stock_strategy.momentum_weight
+        if not args.exclude_dates and stock_strategy.exclude_dates:
+            args.exclude_dates = True
+    except Exception as e:
+        stock_strategy = None
+        logger.debug(f"Could not load strategy: {e}")
+
     # --single-model 覆盖默认的多模型设置
     use_multi_model = args.multi_model and not args.single_model
 
@@ -468,9 +490,9 @@ def main():
             forward_days=1,
             threshold=args.threshold,
             use_composite_labels=True,
-            trend_weight=0.30,
-            momentum_weight=0.30,
-            market_weight=0.20,
+            trend_weight=stock_strategy.trend_label_weight if stock_strategy else 0.30,
+            momentum_weight=stock_strategy.momentum_label_weight if stock_strategy else 0.30,
+            market_weight=stock_strategy.market_label_weight if stock_strategy else 0.20,
         )
     print("  Model training completed")
 
