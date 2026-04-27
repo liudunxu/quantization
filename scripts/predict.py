@@ -954,6 +954,175 @@ def _cache_eval_metrics(code: str, metrics: dict) -> bool:
         return False
 
 
+def _quick_predict(code: str, is_index: bool = False) -> dict:
+    """轻量预测：只用缓存数据 + 技术信号，不训练模型，不调外部API
+
+    Args:
+        code: Stock or index code
+        is_index: Whether code is an index
+
+    Returns:
+        Lightweight prediction result
+    """
+    import numpy as np
+
+    # 1. 先检查预测缓存
+    cached = _get_cached_prediction(code)
+    if cached:
+        logger.info(f"Quick predict: returning cached prediction for {code}")
+        return cached
+
+    # 2. 从缓存获取特征数据（只读SQLite，不调外部API）
+    config = _get_config_cached()
+    cache = _get_cache_cached()
+
+    if is_index:
+        # 指数没有缓存特征，只能返回错误
+        return {"error": "Quick predict not available for index, use /predict instead"}
+
+    try:
+        stock_info = _get_stock_info_cached(code)
+        market = stock_info.market.replace("_share", "")
+    except ValueError as e:
+        return {"error": str(e)}
+
+    # 尝试从缓存读取特征
+    from src.features import get_feature_combinator
+    combinator = get_feature_combinator(cache)
+
+    # 不强制刷新，只用缓存
+    try:
+        df = combinator.get_combined_features(code, days=365, force_refresh=False)
+    except Exception as e:
+        logger.warning(f"Quick predict: cache miss for {code}: {e}")
+        return {"error": f"No cached data for {code}, use /predict first to fetch data"}
+
+    if df is None or df.empty or len(df) < 30:
+        return {"error": f"Insufficient cached data for {code}, use /predict first"}
+
+    latest = df.iloc[-1]
+    close = latest.get("close", 0)
+
+    # 3. 纯技术分析，不需要模型
+    up_signals = 0
+    down_signals = 0
+    total = 0
+    bullish_factors = []
+    bearish_factors = []
+
+    # RSI
+    rsi = latest.get("rsi", None)
+    if rsi is not None and not pd.isna(rsi):
+        total += 1
+        if rsi < 30:
+            up_signals += 1
+            bullish_factors.append(f"RSI超卖({rsi:.0f})")
+        elif rsi > 70:
+            down_signals += 1
+            bearish_factors.append(f"RSI超买({rsi:.0f})")
+
+    # 均线排列
+    ma5 = latest.get("ma_5", None)
+    ma10 = latest.get("ma_10", None)
+    ma20 = latest.get("ma_20", None)
+    if ma5 and ma10 and ma20 and not pd.isna(ma5) and not pd.isna(ma10) and not pd.isna(ma20):
+        total += 1
+        if ma5 > ma10 > ma20:
+            up_signals += 1
+            bullish_factors.append("多头排列")
+        elif ma5 < ma10 < ma20:
+            down_signals += 1
+            bearish_factors.append("空头排列")
+
+    # MACD
+    macd_hist = latest.get("macd_hist", None)
+    if macd_hist is not None and not pd.isna(macd_hist) and len(df) >= 2:
+        prev_hist = df.iloc[-2].get("macd_hist", 0)
+        if not pd.isna(prev_hist):
+            total += 1
+            if prev_hist < 0 and macd_hist > 0:
+                up_signals += 1
+                bullish_factors.append("MACD金叉")
+            elif prev_hist > 0 and macd_hist < 0:
+                down_signals += 1
+                bearish_factors.append("MACD死叉")
+
+    # 布林带
+    bb_pos = latest.get("bb_position", None)
+    if bb_pos is not None and not pd.isna(bb_pos):
+        total += 1
+        if bb_pos < 0.1:
+            up_signals += 1
+            bullish_factors.append("触及布林下轨")
+        elif bb_pos > 0.9:
+            down_signals += 1
+            bearish_factors.append("触及布林上轨")
+
+    # 动量
+    mom5 = latest.get("momentum_5", 0)
+    if not pd.isna(mom5):
+        total += 1
+        if mom5 > 0.02:
+            up_signals += 1
+            bullish_factors.append(f"5日动量强({mom5:.1%})")
+        elif mom5 < -0.02:
+            down_signals += 1
+            bearish_factors.append(f"5日动量弱({mom5:.1%})")
+
+    # 成交量
+    vol_ratio = latest.get("volume_ratio", None)
+    returns = latest.get("returns", 0)
+    if vol_ratio is not None and not pd.isna(vol_ratio):
+        total += 1
+        if vol_ratio > 2.0 and returns > 0.01:
+            up_signals += 1
+            bullish_factors.append("放量上涨")
+        elif vol_ratio > 2.0 and returns < -0.01:
+            down_signals += 1
+            bearish_factors.append("放量下跌")
+
+    # 判断方向
+    if total == 0:
+        direction = "NEUTRAL"
+        confidence = 0.45
+    elif up_signals > down_signals:
+        direction = "UP"
+        confidence = 0.5 + min(up_signals / total, 0.5) * 0.3
+    elif down_signals > up_signals:
+        direction = "DOWN"
+        confidence = 0.5 + min(down_signals / total, 0.5) * 0.3
+    else:
+        direction = "NEUTRAL"
+        confidence = 0.45
+
+    # 获取日期
+    last_date = pd.to_datetime(df["date"].max()).strftime("%Y-%m-%d") if "date" in df.columns else pd.Timestamp.now().strftime("%Y-%m-%d")
+    target = pd.to_datetime(df["date"].max()) + pd.Timedelta(days=1) if "date" in df.columns else pd.Timestamp.now() + pd.Timedelta(days=1)
+    while target.weekday() >= 5:
+        target += pd.Timedelta(days=1)
+    target_date = target.strftime("%Y-%m-%d")
+
+    result = {
+        "stock_code": code,
+        "market": market,
+        "direction": direction,
+        "confidence": round(confidence, 3),
+        "current_price": close,
+        "prediction_date": last_date,
+        "target_date": target_date,
+        "mode": "quick",
+        "up_signals": up_signals,
+        "down_signals": down_signals,
+        "total_signals": total,
+        "bullish_factors": bullish_factors,
+        "bearish_factors": bearish_factors,
+    }
+
+    # 缓存结果
+    _cache_prediction(code, result)
+    return result
+
+
 def start_server(host: str = "127.0.0.1", port: int = 8000):
     """Start FastAPI HTTP server."""
     try:
@@ -988,11 +1157,11 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
         technical_weight: float = Query(0.25, description="技术分析权重"),
         momentum_weight: float = Query(0.15, description="动量分析权重"),
         exclude_dates: bool = Query(False, description="排除极端波动日期"),
-        fast_mode: bool = Query(False, description="快速模式 (跳过训练/评估/实时价格)"),
-        skip_training: bool = Query(False, description="跳过模型训练"),
-        skip_eval: bool = Query(False, description="跳过模型评估"),
-        skip_realtime: bool = Query(False, description="跳过实时价格查询"),
-        skip_params: bool = Query(False, description="跳过优化参数查询"),
+        fast_mode: bool = Query(True, description="快速模式 (跳过训练/评估/实时价格)"),
+        skip_training: bool = Query(True, description="跳过模型训练"),
+        skip_eval: bool = Query(True, description="跳过模型评估"),
+        skip_realtime: bool = Query(True, description="跳过实时价格查询"),
+        skip_params: bool = Query(True, description="跳过优化参数查询"),
     ):
         if not stock and not index:
             raise HTTPException(
@@ -1008,14 +1177,20 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
 
         loop = asyncio.get_event_loop()
         try:
-            result = await loop.run_in_executor(
-                _executor,
-                run_prediction,
-                code, is_index, train_days, threshold, refresh,
-                multi_model, ml_weight, technical_weight, momentum_weight,
-                exclude_dates, 2.0, fast_mode, skip_training, skip_eval,
-                skip_realtime, skip_params
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    run_prediction,
+                    code, is_index, train_days, threshold, refresh,
+                    multi_model, ml_weight, technical_weight, momentum_weight,
+                    exclude_dates, 2.0, fast_mode, skip_training, skip_eval,
+                    skip_realtime, skip_params
+                ),
+                timeout=50,
             )
+        except asyncio.TimeoutError:
+            logger.error(f"Prediction timeout for {code}")
+            raise HTTPException(status_code=504, detail="Prediction timed out, try /predict/cache or /predict/quick")
         except Exception as e:
             logger.exception(f"Prediction failed for {code}")
             raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
@@ -1037,11 +1212,11 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
         technical_weight = request.get("technical_weight", 0.25)
         momentum_weight = request.get("momentum_weight", 0.15)
         exclude_dates = request.get("exclude_dates", False)
-        fast_mode = request.get("fast_mode", False)
-        skip_training = request.get("skip_training", False)
-        skip_eval = request.get("skip_eval", False)
-        skip_realtime = request.get("skip_realtime", False)
-        skip_params = request.get("skip_params", False)
+        fast_mode = request.get("fast_mode", True)
+        skip_training = request.get("skip_training", True)
+        skip_eval = request.get("skip_eval", True)
+        skip_realtime = request.get("skip_realtime", True)
+        skip_params = request.get("skip_params", True)
 
         if not stock and not index:
             raise HTTPException(
@@ -1057,14 +1232,20 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
 
         loop = asyncio.get_event_loop()
         try:
-            result = await loop.run_in_executor(
-                _executor,
-                run_prediction,
-                code, is_index, train_days, threshold, refresh,
-                multi_model, ml_weight, technical_weight, momentum_weight,
-                exclude_dates, 2.0, fast_mode, skip_training, skip_eval,
-                skip_realtime, skip_params
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    run_prediction,
+                    code, is_index, train_days, threshold, refresh,
+                    multi_model, ml_weight, technical_weight, momentum_weight,
+                    exclude_dates, 2.0, fast_mode, skip_training, skip_eval,
+                    skip_realtime, skip_params
+                ),
+                timeout=50,
             )
+        except asyncio.TimeoutError:
+            logger.error(f"Prediction timeout for {code}")
+            raise HTTPException(status_code=504, detail="Prediction timed out, try /predict/cache or /predict/quick")
         except Exception as e:
             logger.exception(f"Prediction failed for {code}")
             raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
@@ -1072,6 +1253,50 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
 
+        return result
+
+    @app.get("/predict/cache")
+    async def predict_cache(
+        stock: str = Query(None, description="股票代码"),
+        index: str = Query(None, description="指数代码"),
+    ):
+        """返回上次缓存的预测结果，无计算"""
+        if not stock and not index:
+            raise HTTPException(status_code=400, detail="Please provide stock or index")
+        code = index if index else stock
+        cached = _get_cached_prediction(code)
+        if cached:
+            return cached
+        raise HTTPException(status_code=404, detail=f"No cached prediction for {code}, call /predict first")
+
+    @app.get("/predict/quick")
+    async def predict_quick(
+        stock: str = Query(None, description="股票代码"),
+        index: str = Query(None, description="指数代码"),
+    ):
+        """轻量预测：只用缓存数据 + 技术信号，不训练模型，不调外部API"""
+        if not stock and not index:
+            raise HTTPException(status_code=400, detail="Please provide stock or index")
+        if stock and index:
+            raise HTTPException(status_code=400, detail="Please provide only one of stock or index")
+
+        code = index if index else stock
+        is_index = index is not None
+
+        try:
+            loop = asyncio.get_event_loop()
+            result = await asyncio.wait_for(
+                loop.run_in_executor(_executor, _quick_predict, code, is_index),
+                timeout=30,
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Quick prediction timed out")
+        except Exception as e:
+            logger.exception(f"Quick prediction failed for {code}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
         return result
 
     @app.get("/stocks/{code}/info")
@@ -1148,6 +1373,17 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
                     stocks.append({"code": code, "name": name})
 
         return {"zone": zone, "count": len(stocks), "stocks": stocks}
+
+    @app.on_event("startup")
+    async def startup_event():
+        """预热：加载配置和依赖，减少首次请求延迟"""
+        logger.info("Warming up: preloading config and dependencies...")
+        try:
+            _get_config_cached()
+            _get_cache_cached()
+            logger.info("Warmup complete")
+        except Exception as e:
+            logger.warning(f"Warmup failed (non-fatal): {e}")
 
     print(f"\n  Starting Stock Prediction API...")
     print(f"  Server: http://{host}:{port}")

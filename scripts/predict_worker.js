@@ -49,12 +49,12 @@ export default {
       }
     }
 
-    // Route: /predict (GET or POST)
+    // Route: /predict (GET or POST) → proxies to /predict/quick for speed
     if (url.pathname === "/predict" || url.pathname === "/predict/") {
       if (request.method === "POST") {
         try {
           const body = await request.json();
-          const resp = await fetch(`${backendUrl}/predict`, {
+          const resp = await fetch(`${backendUrl}/predict/quick`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
@@ -74,11 +74,45 @@ export default {
       }
 
       try {
-        const resp = await fetch(`${backendUrl}/predict?${query.toString()}`);
+        const resp = await fetch(`${backendUrl}/predict/quick?${query.toString()}`);
         const data = await resp.json();
         return jsonResponse(data, resp.status);
       } catch (e) {
         return jsonResponse({ error: `Prediction failed: ${e.message}` }, 500);
+      }
+    }
+
+    // Route: /predict/full (GET) → full prediction with ML training
+    if (url.pathname === "/predict/full" || url.pathname === "/predict/full/") {
+      const params = url.searchParams;
+      const query = new URLSearchParams();
+      for (const [key, value] of params) {
+        query.append(key, value);
+      }
+
+      try {
+        const resp = await fetch(`${backendUrl}/predict?${query.toString()}`);
+        const data = await resp.json();
+        return jsonResponse(data, resp.status);
+      } catch (e) {
+        return jsonResponse({ error: `Full prediction failed: ${e.message}` }, 500);
+      }
+    }
+
+    // Route: /predict/cache (GET) → cached prediction
+    if (url.pathname === "/predict/cache" || url.pathname === "/predict/cache/") {
+      const params = url.searchParams;
+      const query = new URLSearchParams();
+      for (const [key, value] of params) {
+        query.append(key, value);
+      }
+
+      try {
+        const resp = await fetch(`${backendUrl}/predict/cache?${query.toString()}`);
+        const data = await resp.json();
+        return jsonResponse(data, resp.status);
+      } catch (e) {
+        return jsonResponse({ error: `Cache lookup failed: ${e.message}` }, 500);
       }
     }
 
