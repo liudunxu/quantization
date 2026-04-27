@@ -24,6 +24,11 @@ src/
 ├── features/        # Feature engineering (one file per feature type)
 ├── models/          # ML model training/prediction
 ├── backtest/        # Backtesting engine and strategies
+├── risk/            # Risk management (position sizing, stop-loss)
+├── notification/    # Notification (console, file, webhook)
+├── predictors/      # Ensemble predictor & technical signals
+├── display/         # Output formatting
+├── pipelines/       # Data & model pipelines
 └── utils/           # Utilities (cache, config, stock_info, important_dates)
 ```
 
@@ -61,11 +66,16 @@ src/
 | `scripts/predict.py` | Stock price prediction with ML + HTTP API server |
 | `scripts/prediction_strategies.py` | Per-stock/market prediction strategy configs |
 | `scripts/explore_params.py` | Parameter optimization |
+| `scripts/scan.py` | Daily stock screener - scan watchlist for signals |
+| `scripts/portfolio.py` | Position tracking, P&L management, stop-loss/take-profit |
+| `scripts/daily_report.py` | Morning watchlist report (portfolio + risk + signals) |
 | `src/backtest/engine.py` | Core backtesting engine with risk control |
 | `src/models/trainer.py` | CatBoost model training with ensemble |
 | `src/models/multi_model.py` | Multi-model ensemble (CatBoost + LightGBM + XGBoost) |
 | `src/predictors/ensemble_predictor.py` | Ensemble predictor combining all signal sources |
 | `src/predictors/technical_signals.py` | 18 technical signal generators |
+| `src/risk/manager.py` | Position sizer, stop-loss calculator, risk manager |
+| `src/notification/notifier.py` | Unified notification (console/file/webhook) |
 | `src/pipelines/data_pipeline.py` | Data fetching and feature pipeline |
 | `src/pipelines/model_pipeline.py` | Model training/prediction pipeline |
 | `src/utils/stock_info.py` | Stock code resolution + STOCK_NAMES/ZONE_SUFFIX constants |
@@ -107,6 +117,71 @@ python scripts/predict.py --batch "000001.SZ,0700.HK,AAPL"
 
 # Start HTTP API server
 python scripts/predict.py --serve --host 0.0.0.0 --port 8000
+```
+
+### Stock Scanner (scan.py)
+
+```bash
+# Default: scan all stocks in watchlist (fast mode)
+python scripts/scan.py
+
+# Scan specific market
+python scripts/scan.py --zone cn
+python scripts/scan.py --zone hk
+python scripts/scan.py --zone us
+
+# Filter by direction and confidence
+python scripts/scan.py --direction up --min-confidence 0.70
+
+# Slow mode (re-train models)
+python scripts/scan.py --slow
+
+# JSON output
+python scripts/scan.py --output json
+```
+
+### Portfolio Management (portfolio.py)
+
+```bash
+# View portfolio status
+python scripts/portfolio.py status --capital 1000000
+
+# Open position with stop-loss/take-profit
+python scripts/portfolio.py buy 0700.HK 400 50 --sl 45 --tp 60
+
+# Close position
+python scripts/portfolio.py sell 0700.HK 55
+
+# Update current prices
+python scripts/portfolio.py update
+
+# Check stop-loss/take-profit alerts
+python scripts/portfolio.py check
+
+# Calculate position size
+python scripts/portfolio.py size 0700.HK - 50 1000000 --sl 45
+
+# View trade history
+python scripts/portfolio.py trades
+
+# P&L summary
+python scripts/portfolio.py summary
+```
+
+### Daily Report (daily_report.py)
+
+```bash
+# Full morning report (portfolio + risk + scan)
+python scripts/daily_report.py
+
+# Quick mode (only portfolio + risk, no scan)
+python scripts/daily_report.py --quick
+
+# Filter by market
+python scripts/daily_report.py --zone cn
+
+# JSON output
+python scripts/daily_report.py --output json
 ```
 
 ### Testing the HTTP API
