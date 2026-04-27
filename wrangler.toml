@@ -3,7 +3,7 @@ main = "scripts/predict_worker.js"
 compatibility_date = "2026-03-01"
 
 [vars]
-PREDICTION_API_URL = "https://predict-api-production.up.railway.app"
+PREDICTION_API_URL = "https://stock-prediction-api.onrender.com"
 
 # Optional: uncomment to enable API key auth
 # [vars]

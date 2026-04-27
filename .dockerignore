@@ -1,0 +1,16 @@
+.git
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+node_modules
+cache/
+logs/
+models/
+catboost_info/
+*.pkl
+*.db
+.env
+.venv
+*.egg-info
