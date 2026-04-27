@@ -62,9 +62,12 @@ class PredictionFormatter:
             confidence_level = "低 (LOW)"
             confidence_bar = "███"
 
+        stock_name = p.get('stock_name', p.get('stock_code', 'N/A'))
+        stock_code = p.get('stock_code', 'N/A')
+
         lines = [
             "=" * 60,
-            f"  STOCK PREDICTION - {p.get('stock_code', 'N/A')}",
+            f"  STOCK PREDICTION - {stock_name} ({stock_code})",
             "=" * 60,
             "",
             f"  Current Price  : {p.get('current_price', 0):.2f}",
@@ -209,6 +212,36 @@ class PredictionFormatter:
                 ]
             )
 
+        # 添加风险提示
+        direction = p.get("direction", "NEUTRAL")
+        confidence = p.get("confidence", 0)
+        lines.extend(
+            [
+                "",
+                "  ══════════════════════════════════════════════════════",
+                "  风险评估 (RISK ASSESSMENT)",
+                "  ══════════════════════════════════════════════════════",
+                "",
+                f"  模型准确率 : {p.get('model_accuracy', 0) * 100:.1f}%",
+                f"  置信度     : {confidence:.1%}",
+                f"  市场状态   : {p.get('market_regime', 'unknown')}",
+                f"  多空信号比 : {p.get('bullish_count', 0)}:{p.get('bearish_count', 0)}",
+                f"  策略投票   : {p.get('strategy_bullish_votes', 0)}看涨 / {p.get('strategy_bearish_votes', 0)}看跌",
+                "",
+            ]
+        )
+
+        # 综合评级
+        if confidence >= 0.7 and p.get("model_accuracy", 0) >= 0.5:
+            risk_level = "低风险"
+            lines.append(f"  综合评级   : ★★★ {risk_level}")
+        elif confidence >= 0.55:
+            risk_level = "中风险"
+            lines.append(f"  综合评级   : ★★☆ {risk_level}")
+        else:
+            risk_level = "高风险"
+            lines.append(f"  综合评级   : ★☆☆ {risk_level}")
+
         # 添加交易建议
         direction = p.get("direction", "NEUTRAL")
         lines.extend(
@@ -276,6 +309,7 @@ class PredictionFormatter:
         """CSV格式"""
         headers = [
             "stock_code",
+            "stock_name",
             "prediction_date",
             "target_date",
             "current_price",
@@ -291,6 +325,7 @@ class PredictionFormatter:
             "sentiment_score",
             "adx",
             "alpha",
+            "market_regime",
             "model_accuracy",
             "precision_up",
             "recall_up",

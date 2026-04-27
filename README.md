@@ -177,6 +177,17 @@ python scripts/predict.py --stock 000001.SZ --output json
 
 # CSV输出（便于批量分析）
 python scripts/predict.py --stock 000001.SZ --output csv
+
+# 列出预定义股票列表
+python scripts/predict.py --list cn
+python scripts/predict.py --list hk
+python scripts/predict.py --list us
+
+# 批量预测多只股票
+python scripts/predict.py --batch "000001.SZ,0700.HK,AAPL"
+
+# 启动HTTP API服务
+python scripts/predict.py --serve --host 0.0.0.0 --port 8000
 ```
 
 **预测信号源：**
@@ -391,42 +402,59 @@ quarnt/
 ├── data/                       # 原始数据存储
 ├── models/                     # 模型文件
 ├── src/
-│   ├── pipelines/              # 核心流水线（新增）
+│   ├── pipelines/              # 核心流水线
 │   │   ├── data_pipeline.py    # 数据获取流水线
 │   │   └── model_pipeline.py   # 模型训练/预测流水线
-│   ├── optimization/           # 优化模块（新增）
+│   ├── optimization/           # 优化模块
 │   │   └── scenarios.py        # 场景定义
-│   ├── display/                # 显示模块（新增）
+│   ├── display/                # 显示模块
 │   │   ├── formatters.py       # 输出格式化
-│   │   └── prediction_formatter.py # 预测输出格式化
+│   │   └── prediction_formatter.py # 预测输出格式化（含风险评估）
 │   ├── features/               # 特征工程
-│   │   ├── technical.py        # 技术指标
+│   │   ├── technical.py        # 技术指标（100+特征）
 │   │   ├── fundamental.py      # 基本面数据
 │   │   ├── market.py           # 市场/大盘数据
 │   │   ├── industry.py         # 行业数据
 │   │   ├── sentiment.py        # 情绪分析
+│   │   ├── alpha_features.py   # Alpha因子
+│   │   ├── money_flow.py       # 资金流向（A股）
+│   │   ├── southbound_flow.py  # 南向资金（港股）
+│   │   ├── company_events.py   # 公司事件
+│   │   ├── us_market_sentiment.py # 美股市场情绪
+│   │   ├── index_features.py   # 指数特征
 │   │   └── combinator.py       # 特征合并
+│   ├── predictors/             # 预测器
+│   │   ├── ensemble_predictor.py # 集成预测器（7信号源）
+│   │   └── technical_signals.py  # 18种技术信号
 │   ├── models/                 # 模型训练与预测
-│   │   └── trainer.py          # CatBoost 模型
+│   │   ├── trainer.py          # CatBoost 模型（集成）
+│   │   ├── multi_model.py      # 多模型集成
+│   │   ├── lgbm_model.py       # LightGBM 模型
+│   │   └── xgboost_model.py    # XGBoost 模型
 │   ├── backtest/               # 回测引擎
 │   │   ├── engine.py           # 回测引擎核心
 │   │   ├── strategies.py       # 策略配置
 │   │   └── rule_strategies.py  # 基于规则的策略
 │   ├── data_providers/         # 数据源
+│   │   ├── fetch_stock_data.py # 多数据源统一接口
 │   │   ├── baostock_provider.py
 │   │   ├── akshare_provider.py
 │   │   ├── yfinance_provider.py
+│   │   ├── tushare_provider.py
+│   │   ├── openbb_provider.py
 │   │   └── sentiment_provider.py
 │   └── utils/                  # 工具
 │       ├── cache.py            # 特征缓存
 │       ├── config.py           # 配置管理
-│       ├── stock_info.py       # 股票信息
-│       ├── strategy_params.py  # 策略参数管理
-│       └── important_dates.py  # 重要日期管理（新增）
+│       ├── stock_info.py       # 股票信息 + STOCK_NAMES/ZONE_SUFFIX
+│       ├── strategy_params.py   # 策略参数管理
+│       ├── important_dates.py  # 重要日期管理
+│       └── perf_monitor.py     # 性能监控
 ├── scripts/                    # 入口脚本
+│   ├── predict.py              # 预测脚本 + HTTP API (PredictionService)
+│   ├── prediction_strategies.py # 差异化预测策略配置
 │   ├── decide.py               # 交易决策脚本
 │   ├── backtest.py             # 回测脚本
-│   ├── predict.py              # 涨跌预测脚本（新增）
 │   └── explore_params.py       # 参数优化脚本
 └── tests/                      # 测试
 ```
@@ -696,9 +724,6 @@ pip install fastapi uvicorn
 
 # 启动服务
 python scripts/predict.py --serve --host 0.0.0.0 --port 8000
-
-# 或使用 uvicorn
-uvicorn scripts.predict:app --host 0.0.0.0 --port 8000
 ```
 
 #### API 端点
@@ -706,50 +731,51 @@ uvicorn scripts.predict:app --host 0.0.0.0 --port 8000
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/health` | GET | 健康检查 |
-| `/predict` | GET/POST | 股票预测 |
-| `/stocks/{code}/info` | GET | 股票信息 |
+| `/predict` | GET | 股票预测（完整参数） |
+| `/predict/quick` | GET | 快速预测（跳过训练/评估/实时价格） |
+| `/predict/cache` | GET | 返回缓存的预测结果 |
+| `/predict/batch` | GET | 批量预测多只股票 |
 | `/stocks` | GET | 股票列表（按区域） |
+| `/stocks/{code}/info` | GET | 股票信息 |
 
 #### 请求示例
 
 ```bash
 # A股预测
-curl "https://predict-api-production.up.railway.app/predict?stock=000001.SZ"
+curl "http://localhost:8000/predict?stock=000001.SZ"
 
 # 港股预测
-curl "https://predict-api-production.up.railway.app/predict?stock=0700.HK"
+curl "http://localhost:8000/predict?stock=0700.HK"
 
-# 美股预测
-curl "https://predict-api-production.up.railway.app/predict?stock=AAPL"
+# 快速模式（跳过训练/评估/实时价格，~3秒）
+curl "http://localhost:8000/predict/quick?stock=000001.SZ"
 
-# 指数预测
-curl "https://predict-api-production.up.railway.app/predict?index=000300"
+# 完整预测（带评估指标）
+curl "http://localhost:8000/predict?stock=000001.SZ&fast_mode=false"
 
-# 快速模式（跳过训练/评估/实时价格）
-curl "https://predict-api-production.up.railway.app/predict?stock=000001.SZ&fast_mode=true"
+# 批量预测
+curl "http://localhost:8000/predict/batch?stocks=000001.SZ,0700.HK"
 
-# POST 请求
-curl -X POST "https://predict-api-production.up.railway.app/predict" \
-  -H "Content-Type: application/json" \
-  -d '{"stock": "000001.SZ", "fast_mode": true}'
+# 获取缓存结果
+curl "http://localhost:8000/predict/cache?stock=000001.SZ"
 
 # 获取股票列表
-curl "https://predict-api-production.up.railway.app/stocks?zone=cn"   # A股
-curl "https://predict-api-production.up.railway.app/stocks?zone=hk"   # 港股
-curl "https://predict-api-production.up.railway.app/stocks?zone=us"   # 美股
+curl "http://localhost:8000/stocks?zone=cn"   # A股
+curl "http://localhost:8000/stocks?zone=hk"   # 港股
+curl "http://localhost:8000/stocks?zone=us"   # 美股
 
 # 获取单只股票信息
-curl "https://predict-api-production.up.railway.app/stocks/000001.SZ/info"
+curl "http://localhost:8000/stocks/000001.SZ/info"
 ```
 
 #### 性能优化参数
 
 | 参数 | 类型 | 说明 | 默认值 |
 |------|------|------|--------|
-| `fast_mode` | bool | 快速模式，跳过训练/评估/实时价格 | false |
-| `skip_training` | bool | 跳过模型训练 | false |
-| `skip_eval` | bool | 跳过模型评估 | false |
-| `skip_realtime` | bool | 跳过实时价格查询 | false |
+| `fast_mode` | bool | 快速模式，跳过训练/评估/实时价格 | true |
+| `skip_training` | bool | 跳过模型训练（使用缓存模型） | true |
+| `skip_eval` | bool | 跳过模型评估 | true |
+| `skip_realtime` | bool | 跳过实时价格查询 | true |
 | `skip_params` | bool | 跳过优化参数查询 | false |
 | `train_days` | int | 训练天数 | 365 |
 | `threshold` | float | 涨跌阈值 | 0.008 |
@@ -759,22 +785,10 @@ curl "https://predict-api-production.up.railway.app/stocks/000001.SZ/info"
 
 | 模式 | 预计耗时 | 适用场景 |
 |------|----------|----------|
-| `fast_mode=true` | ~3秒 | 日常快速查询 |
-| `skip_training=true` | ~10秒 | 需要评估指标时 |
+| `/predict/quick` | ~3秒 | 日常快速查询（仅技术分析信号） |
+| `/predict` (fast_mode) | ~5秒 | 快速预测（使用缓存模型） |
+| `/predict` (skip_training) | ~10秒 | 需要评估指标时 |
 | 完整模式 | ~30秒+ | 首次预测/精确分析 |
-
-#### 本地开发
-
-```bash
-# 启动服务
-python scripts/predict.py --serve --port 8000
-
-# 访问 API 文档
-# http://localhost:8000/docs
-
-# 测试预测
-curl "http://localhost:8000/predict?stock=000001.SZ&fast_mode=true"
-```
 
 ## License
 

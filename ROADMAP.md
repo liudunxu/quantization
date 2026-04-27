@@ -36,6 +36,24 @@
 - [x] 高置信度过滤机制
 - [x] 15种规则策略信号叠加
 
+### v1.9 - 代码重构与API优化 (已完成)
+- [x] 重构 predict.py: 提取 PredictionService 类，消除6个模块级全局缓存变量
+- [x] 删除冗余 _quick_predict() (190行)，统一使用 run_prediction() 的 fast_mode
+- [x] 删除重复的 POST /predict 端点，保留 GET 语义
+- [x] 添加 CORS middleware 支持跨域请求
+- [x] 添加 PredictionService 启动预热 (warmup) 和优雅关闭
+- [x] 添加 --list cn/hk/us 命令列出预定义股票
+- [x] 添加 --batch 批量预测功能
+- [x] 添加 /predict/batch API 端点
+- [x] 添加 /predict/quick API 端点（使用 run_prediction fast_mode）
+- [x] 移动 STOCK_NAMES/ZONE_SUFFIX 常量到 src/utils/stock_info.py（消除重复定义）
+- [x] 正确传递策略的 label_weight 参数到模型训练
+- [x] 添加风险评估输出（综合评级、多空信号比、策略投票）
+- [x] 添加 stock_name 到预测输出和格式化器
+- [x] 合并分散的模型/评估指标缓存到 PredictionService
+- [x] 修复 technical.py 未使用变量和 DataFrame 碎片化问题
+- [x] 线程池从4调整为8，提升并发性能
+
 ---
 
 ## 🚀 未来计划
@@ -127,9 +145,13 @@
 - [x] 重构长函数：technical.py extract() 673行 → 36个方法
 - [x] 重构长函数：decide.py main() 439行 → 6个函数
 - [x] 代码质量：ruff clean（183 个 lint 修复，移除重复方法，修复未定义名称）
+- [x] 重构 predict.py: PredictionService 类 + 消除重复代码 (v1.9)
+- [x] 添加 --list/--batch CLI 功能 (v1.9)
+- [x] 添加 /predict/quick, /predict/batch API 端点 + CORS (v1.9)
 
 ### 仍需改进
 - [ ] 完善 docstring（部分模块缺少完整文档）
+- [ ] WebSocket 实时推送支持
 
 ---
 
@@ -165,4 +187,4 @@ chore: 构建/工具相关
 
 ---
 
-**最后更新**: 2026-04-03
+**最后更新**: 2026-04-27

@@ -58,11 +58,20 @@ src/
 |------|---------|
 | `scripts/decide.py` | Main entry point for trading decisions |
 | `scripts/backtest.py` | Strategy comparison and backtesting |
-| `scripts/predict.py` | Stock price prediction with ML |
+| `scripts/predict.py` | Stock price prediction with ML + HTTP API server |
+| `scripts/prediction_strategies.py` | Per-stock/market prediction strategy configs |
 | `scripts/explore_params.py` | Parameter optimization |
 | `src/backtest/engine.py` | Core backtesting engine with risk control |
 | `src/models/trainer.py` | CatBoost model training with ensemble |
-| `src/utils/important_dates.py` | Important dates management for extreme volatility filtering |
+| `src/models/multi_model.py` | Multi-model ensemble (CatBoost + LightGBM + XGBoost) |
+| `src/predictors/ensemble_predictor.py` | Ensemble predictor combining all signal sources |
+| `src/predictors/technical_signals.py` | 18 technical signal generators |
+| `src/pipelines/data_pipeline.py` | Data fetching and feature pipeline |
+| `src/pipelines/model_pipeline.py` | Model training/prediction pipeline |
+| `src/utils/stock_info.py` | Stock code resolution + STOCK_NAMES/ZONE_SUFFIX constants |
+| `src/utils/important_dates.py` | Important dates management |
+| `src/utils/strategy_params.py` | Strategy parameter management with SQLite |
+| `src/utils/cache.py` | Feature caching with SQLite backend |
 | `configs/config.yaml` | All configuration parameters |
 
 ## Testing
@@ -72,12 +81,55 @@ src/
 python -m pytest tests/ -v
 ```
 
+### Lint Check
+```bash
+python -m ruff check scripts/ src/
+```
+
 ### Test Specific Stock
 ```bash
 python scripts/decide.py --stock 000001.SZ --train-days 100 --backtest-days 20
 ```
 
-### Test with Extreme Date Filtering
+### Testing the predict.py CLI
+
+```bash
+# Basic prediction
+python scripts/predict.py --stock 000001.SZ
+
+# List predefined stocks
+python scripts/predict.py --list cn
+python scripts/predict.py --list hk
+python scripts/predict.py --list us
+
+# Batch prediction
+python scripts/predict.py --batch "000001.SZ,0700.HK,AAPL"
+
+# Start HTTP API server
+python scripts/predict.py --serve --host 0.0.0.0 --port 8000
+```
+
+### Testing the HTTP API
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Quick prediction (uses cached model, ~3s)
+curl "http://localhost:8000/predict/quick?stock=000001.SZ"
+
+# Full prediction
+curl "http://localhost:8000/predict?stock=000001.SZ&fast_mode=true"
+
+# Batch prediction
+curl "http://localhost:8000/predict/batch?stocks=000001.SZ,0700.HK"
+
+# Get cached prediction
+curl "http://localhost:8000/predict/cache?stock=000001.SZ"
+
+# Stock list
+curl "http://localhost:8000/stocks?zone=cn"
+```
 ```bash
 # Predict with extreme date filtering
 python scripts/predict.py --stock 000001.SZ --exclude-dates

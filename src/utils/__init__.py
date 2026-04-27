@@ -10,7 +10,13 @@ from .perf_monitor import (
     perf_timer,
     timing_decorator,
 )
-from .stock_info import StockInfo, StockInfoResolver, format_stock_code
+from .stock_info import (
+    STOCK_NAMES,
+    ZONE_SUFFIX,
+    StockInfo,
+    StockInfoResolver,
+    format_stock_code,
+)
 from .strategy_params import StrategyParamManager, get_param_manager
 
 __all__ = [
@@ -18,6 +24,8 @@ __all__ = [
     "get_cache",
     "Config",
     "get_config",
+    "STOCK_NAMES",
+    "ZONE_SUFFIX",
     "StockInfo",
     "StockInfoResolver",
     "format_stock_code",

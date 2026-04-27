@@ -391,29 +391,26 @@ class TechnicalFeatures(BaseFeatureExtractor):
 
     def _add_pattern_features(self, df: pd.DataFrame) -> None:
         """Add price-volume pattern features using historical data only."""
-        # Use past returns only to avoid future data leakage
         ret_5d = df["close"].pct_change(5)
         ret_10d = df["close"].pct_change(10)
-        ret_20d = df["close"].pct_change(20)
-        
+
         # Pattern: significant drop then stabilization (potential reversal signal)
         # Uses past 10-day drop and recent 5-day stabilization
         df["pattern_drop_then_stabilize"] = (
             (ret_10d < -0.05) & (ret_5d.abs() < 0.02)
         ).astype(int)
-        
+
         # Pattern: significant rise then pullback (potential continuation or reversal)
         df["pattern_rise_then_pullback"] = (
             (ret_10d > 0.05) & (ret_5d < -0.02)
         ).astype(int)
 
         # Volume surge patterns (using historical volume comparison)
-        vol_5d_avg = df["volume"].rolling(window=5).mean()
         vol_10d_avg = df["volume"].rolling(window=10).mean()
         df["pattern_vol_surge"] = (
             (df["volume"] / vol_10d_avg > 2.0)
         ).astype(int)
-        
+
         # Volume surge with direction
         df["pattern_vol_surge_rise"] = (
             (df["pattern_vol_surge"] == 1) & (ret_5d > 0)
@@ -424,7 +421,6 @@ class TechnicalFeatures(BaseFeatureExtractor):
 
         # Reversal patterns using historical data
         ret_3d = df["close"].pct_change(3)
-        ret_7d = df["close"].pct_change(7)
         # Prior trend (7 days ago to 3 days ago) vs recent trend (last 3 days)
         prior_ret = (df["close"].shift(3) / df["close"].shift(10) - 1)
         df["pattern_reversal_up"] = ((prior_ret < -0.03) & (ret_3d > 0.03)).astype(int)
@@ -717,45 +713,41 @@ class TechnicalFeatures(BaseFeatureExtractor):
 
     def _add_interaction_features(self, df: pd.DataFrame) -> None:
         """Add interaction features that capture nonlinear relationships."""
-        # RSI * Volume ratio interaction
+        new_cols = {}
+
         if "rsi" in df.columns and "volume_ratio" in df.columns:
-            df["rsi_volume_interaction"] = df["rsi"] * df["volume_ratio"]
-        
-        # Momentum * Volatility interaction
+            new_cols["rsi_volume_interaction"] = df["rsi"] * df["volume_ratio"]
+
         if "momentum_10" in df.columns and "volatility_20d" in df.columns:
-            df["momentum_volatility_interaction"] = df["momentum_10"] * df["volatility_20d"]
-        
-        # MACD histogram * Volume change interaction
+            new_cols["momentum_volatility_interaction"] = df["momentum_10"] * df["volatility_20d"]
+
         if "macd_hist" in df.columns and "volume_change" in df.columns:
-            df["macd_volume_interaction"] = df["macd_hist"] * df["volume_change"]
-        
-        # RSI divergence from price
+            new_cols["macd_volume_interaction"] = df["macd_hist"] * df["volume_change"]
+
         if "rsi" in df.columns and "returns" in df.columns:
-            df["rsi_return_divergence"] = df["rsi"] * df["returns"]
-        
-        # Bollinger Band width * RSI (volatility + momentum)
+            new_cols["rsi_return_divergence"] = df["rsi"] * df["returns"]
+
         if "bb_width" in df.columns and "rsi" in df.columns:
-            df["bb_rsi_interaction"] = df["bb_width"] * df["rsi"]
-        
-        # ADX * Volume ratio (trend strength + volume confirmation)
+            new_cols["bb_rsi_interaction"] = df["bb_width"] * df["rsi"]
+
         if "adx" in df.columns and "volume_ratio" in df.columns:
-            df["adx_volume_interaction"] = df["adx"] * df["volume_ratio"]
-        
-        # Price position in Bollinger Bands * Momentum
+            new_cols["adx_volume_interaction"] = df["adx"] * df["volume_ratio"]
+
         if "bb_pct" in df.columns and "momentum_5" in df.columns:
-            df["bb_momentum_interaction"] = df["bb_pct"] * df["momentum_5"]
-        
-        # Stochastic %K * Volume ratio
+            new_cols["bb_momentum_interaction"] = df["bb_pct"] * df["momentum_5"]
+
         if "stoch_k" in df.columns and "volume_ratio" in df.columns:
-            df["stoch_volume_interaction"] = df["stoch_k"] * df["volume_ratio"]
-        
-        # MFI * ATR ratio (money flow * volatility)
+            new_cols["stoch_volume_interaction"] = df["stoch_k"] * df["volume_ratio"]
+
         if "mfi" in df.columns and "atr_ratio" in df.columns:
-            df["mfi_atr_interaction"] = df["mfi"] * df["atr_ratio"]
-        
-        # CCI * Volume change
+            new_cols["mfi_atr_interaction"] = df["mfi"] * df["atr_ratio"]
+
         if "cci" in df.columns and "volume_change" in df.columns:
-            df["cci_volume_interaction"] = df["cci"] * df["volume_change"]
+            new_cols["cci_volume_interaction"] = df["cci"] * df["volume_change"]
+
+        if new_cols:
+            for name, values in new_cols.items():
+                df[name] = values
 
     def _clean_and_fill(self, df: pd.DataFrame) -> None:
         """Fill NaN values and handle outliers with improved strategy."""
