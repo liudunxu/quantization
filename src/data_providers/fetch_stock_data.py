@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Default provider order by market
 MARKET_PROVIDER_ORDER = {
     "a_share": ["baostock", "akshare", "tushare", "openbb", "yfinance"],
-    "hk": ["openbb", "yfinance", "akshare", "tushare"],
+    "hk": ["yfinance", "openbb", "akshare", "tushare"],
     "us": ["openbb", "yfinance"],
 }
 
