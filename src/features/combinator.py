@@ -43,12 +43,14 @@ class FeatureCombinator:
         """Get combined features for a stock."""
         features = {}
 
-        # Technical features (time series)
+        # Technical features (time series) - required base
         tech_df = self.extractors["technical"].get_or_extract(
             stock_code, force_refresh=force_refresh, days=days
         )
-        if not tech_df.empty:
-            features["technical"] = tech_df
+        if tech_df.empty:
+            logger.warning(f"Technical features empty for {stock_code}, cannot proceed")
+            return pd.DataFrame()
+        features["technical"] = tech_df
 
         # Market features (time series)
         market_df = self.extractors["market"].get_or_extract(
