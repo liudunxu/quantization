@@ -1,13 +1,20 @@
-"""Strategy parameters management with SQLite storage.
+"""Strategy parameters management with SQLite + optional Redis storage.
 
 Supports parameter lookup priority: stock_code > market > default
+Redis is used as a fast cache layer with dual-write from SQLite.
 """
 
 import json
 import logging
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
+# Default strategy parameters by market
 
 logger = logging.getLogger(__name__)
 
@@ -114,17 +121,80 @@ DEFAULT_RULE_PARAMS = {
 
 
 class StrategyParamManager:
-    """Strategy parameter manager with SQLite storage.
+    """Strategy parameter manager with SQLite + optional Redis storage.
 
     Supports parameter lookup priority: stock_code > market > default
+    Redis acts as a fast read-through cache; all writes go to both SQLite and Redis.
     """
 
-    def __init__(self, db_path: str = "cache/strategy_params.db"):
-        """Initialize StrategyParamStore."""
+    REDIS_KEY_PREFIX = "quarnt:param"
+    REDIS_TTL_SECONDS = 7 * 24 * 3600  # 7 days
+
+    def __init__(self, db_path: str = "cache/strategy_params.db", redis_cache=None):
+        """Initialize StrategyParamStore.
+
+        Args:
+            db_path: Path to SQLite database.
+            redis_cache: Optional Redis cache instance (e.g. RedisFeatureCache).
+        """
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._redis = redis_cache
         self._init_db()
         self._init_default_params()
+
+    def _redis_available(self) -> bool:
+        """Check if Redis cache is available."""
+        if self._redis is None:
+            return False
+        return getattr(self._redis, "_available", True)
+
+    def _redis_get(self, key: str) -> Optional[Dict[str, Any]]:
+        """Get JSON value from Redis by key."""
+        if not self._redis_available():
+            return None
+        try:
+            result = self._redis._request("POST", ["GET", key])
+            if result and isinstance(result, str):
+                return json.loads(result)
+        except Exception as e:
+            logger.debug("Redis get failed for key %s: %s", key, e)
+        return None
+
+    def _redis_set(self, key: str, value: Dict[str, Any]) -> None:
+        """Set JSON value in Redis with TTL."""
+        if not self._redis_available():
+            return
+        try:
+            self._redis._request(
+                "POST",
+                ["SET", key, json.dumps(value), "EX", self.REDIS_TTL_SECONDS],
+            )
+        except Exception as e:
+            logger.debug("Redis set failed for key %s: %s", key, e)
+
+    def _redis_delete(self, key: str) -> None:
+        """Delete key from Redis."""
+        if not self._redis_available():
+            return
+        try:
+            self._redis._request("POST", ["DEL", key])
+        except Exception as e:
+            logger.debug("Redis delete failed for key %s: %s", key, e)
+
+    def _market_redis_key(self, market: str, stock_code: Optional[str] = None) -> str:
+        key = f"{self.REDIS_KEY_PREFIX}:market:{market}"
+        if stock_code:
+            key = f"{key}:{stock_code}"
+        return key
+
+    def _strategy_redis_key(
+        self, strategy_name: str, market: str, stock_code: Optional[str] = None
+    ) -> str:
+        key = f"{self.REDIS_KEY_PREFIX}:strategy:{market}:{strategy_name}"
+        if stock_code:
+            key = f"{key}:{stock_code}"
+        return key
 
     def _init_db(self) -> None:
         """Initialize SQLite database."""
@@ -224,6 +294,24 @@ class StrategyParamManager:
         Returns:
             Dictionary of market parameters
         """
+        # Try Redis first (fast path)
+        if stock_code:
+            redis_val = self._redis_get(self._market_redis_key(market, stock_code))
+            if redis_val is not None:
+                logger.debug("Redis hit: stock-specific market params for %s", stock_code)
+                return redis_val
+
+        redis_val = self._redis_get(self._market_redis_key(market))
+        if redis_val is not None:
+            logger.debug("Redis hit: market params for %s", market)
+            return redis_val
+
+        redis_val = self._redis_get(self._market_redis_key("default"))
+        if redis_val is not None:
+            logger.debug("Redis hit: default market params")
+            return redis_val
+
+        # Fallback to SQLite
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
 
@@ -235,8 +323,10 @@ class StrategyParamManager:
                 )
                 row = cursor.fetchone()
                 if row:
-                    logger.debug(f"Found stock-specific market params for {stock_code}")
-                    return json.loads(row["params"])
+                    logger.debug("Found stock-specific market params for %s", stock_code)
+                    params = json.loads(row["params"])
+                    self._redis_set(self._market_redis_key(market, stock_code), params)
+                    return params
 
             # Priority 2: Market-level params
             cursor = conn.execute(
@@ -245,8 +335,10 @@ class StrategyParamManager:
             )
             row = cursor.fetchone()
             if row:
-                logger.debug(f"Found market params for {market}")
-                return json.loads(row["params"])
+                logger.debug("Found market params for %s", market)
+                params = json.loads(row["params"])
+                self._redis_set(self._market_redis_key(market), params)
+                return params
 
             # Priority 3: Default params
             cursor = conn.execute(
@@ -255,7 +347,9 @@ class StrategyParamManager:
             row = cursor.fetchone()
             if row:
                 logger.debug("Using default market params")
-                return json.loads(row["params"])
+                params = json.loads(row["params"])
+                self._redis_set(self._market_redis_key("default"), params)
+                return params
 
             # Fallback to hardcoded defaults
             return DEFAULT_MARKET_PARAMS.get("default", {})
@@ -276,6 +370,28 @@ class StrategyParamManager:
         Returns:
             Dictionary of strategy parameters
         """
+        # Try Redis first (fast path)
+        if stock_code:
+            redis_val = self._redis_get(
+                self._strategy_redis_key(strategy_name, market, stock_code)
+            )
+            if redis_val is not None:
+                logger.debug(
+                    "Redis hit: stock-specific params for %s/%s", stock_code, strategy_name
+                )
+                return redis_val
+
+        redis_val = self._redis_get(self._strategy_redis_key(strategy_name, market))
+        if redis_val is not None:
+            logger.debug("Redis hit: market params for %s/%s", market, strategy_name)
+            return redis_val
+
+        redis_val = self._redis_get(self._strategy_redis_key(strategy_name, "default"))
+        if redis_val is not None:
+            logger.debug("Redis hit: default params for %s", strategy_name)
+            return redis_val
+
+        # Fallback to SQLite
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
 
@@ -291,9 +407,13 @@ class StrategyParamManager:
                 row = cursor.fetchone()
                 if row:
                     logger.debug(
-                        f"Found stock-specific params for {stock_code}/{strategy_name}"
+                        "Found stock-specific params for %s/%s", stock_code, strategy_name
                     )
-                    return json.loads(row["params"])
+                    params = json.loads(row["params"])
+                    self._redis_set(
+                        self._strategy_redis_key(strategy_name, market, stock_code), params
+                    )
+                    return params
 
             # Priority 2: Market-level params
             cursor = conn.execute(
@@ -305,8 +425,10 @@ class StrategyParamManager:
             )
             row = cursor.fetchone()
             if row:
-                logger.debug(f"Found market params for {market}/{strategy_name}")
-                return json.loads(row["params"])
+                logger.debug("Found market params for %s/%s", market, strategy_name)
+                params = json.loads(row["params"])
+                self._redis_set(self._strategy_redis_key(strategy_name, market), params)
+                return params
 
             # Priority 3: Default params
             cursor = conn.execute(
@@ -318,8 +440,10 @@ class StrategyParamManager:
             )
             row = cursor.fetchone()
             if row:
-                logger.debug(f"Using default params for {strategy_name}")
-                return json.loads(row["params"])
+                logger.debug("Using default params for %s", strategy_name)
+                params = json.loads(row["params"])
+                self._redis_set(self._strategy_redis_key(strategy_name, "default"), params)
+                return params
 
             # Fallback to hardcoded defaults
             return DEFAULT_RULE_PARAMS.get(strategy_name, {})
@@ -348,7 +472,10 @@ class StrategyParamManager:
                 (stock_code, market, json.dumps(params), description),
             )
             conn.commit()
-            logger.info(f"Set market params for {stock_code or 'default'}/{market}")
+            logger.info("Set market params for %s/%s", stock_code or "default", market)
+
+        # Dual-write to Redis
+        self._redis_set(self._market_redis_key(market, stock_code), params)
 
     def set_strategy_params(
         self,
@@ -378,8 +505,16 @@ class StrategyParamManager:
             )
             conn.commit()
             logger.info(
-                f"Set strategy params for {stock_code or 'default'}/{market}/{strategy_name}"
+                "Set strategy params for %s/%s/%s",
+                stock_code or "default",
+                market,
+                strategy_name,
             )
+
+        # Dual-write to Redis
+        self._redis_set(
+            self._strategy_redis_key(strategy_name, market, stock_code), params
+        )
 
     def delete_market_params(
         self,
@@ -399,7 +534,10 @@ class StrategyParamManager:
                     (market,),
                 )
             conn.commit()
-            logger.info(f"Deleted market params for {stock_code or 'default'}/{market}")
+            logger.info("Deleted market params for %s/%s", stock_code or "default", market)
+
+        # Also delete from Redis
+        self._redis_delete(self._market_redis_key(market, stock_code))
 
     def delete_strategy_params(
         self,
@@ -427,8 +565,16 @@ class StrategyParamManager:
                 )
             conn.commit()
             logger.info(
-                f"Deleted strategy params for {stock_code or 'default'}/{market}/{strategy_name}"
+                "Deleted strategy params for %s/%s/%s",
+                stock_code or "default",
+                market,
+                strategy_name,
             )
+
+        # Also delete from Redis
+        self._redis_delete(
+            self._strategy_redis_key(strategy_name, market, stock_code)
+        )
 
     def list_params(
         self,
@@ -529,8 +675,27 @@ _manager: Optional[StrategyParamManager] = None
 def get_param_manager(
     db_path: str = "cache/strategy_params.db",
 ) -> StrategyParamManager:
-    """Get or create the singleton StrategyParamManager instance."""
+    """Get or create the singleton StrategyParamManager instance.
+
+    Automatically wires up Redis (Upstash) if UPSTASH_REDIS_REST_URL
+    and UPSTASH_REDIS_REST_TOKEN environment variables are set.
+    """
     global _manager
     if _manager is None:
-        _manager = StrategyParamManager(db_path)
+        redis_cache = None
+        redis_url = os.environ.get("UPSTASH_REDIS_REST_URL", "")
+        redis_token = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "")
+        if redis_url and redis_token:
+            try:
+                from .cache import RedisFeatureCache
+
+                redis_cache = RedisFeatureCache(
+                    url=redis_url,
+                    token=redis_token,
+                    ttl_seconds=StrategyParamManager.REDIS_TTL_SECONDS,
+                )
+                logger.info("Redis param cache enabled (Upstash)")
+            except Exception as e:
+                logger.warning("Failed to initialize Redis param cache: %s", e)
+        _manager = StrategyParamManager(db_path, redis_cache=redis_cache)
     return _manager

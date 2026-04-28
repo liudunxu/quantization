@@ -80,7 +80,7 @@ src/
 | `src/pipelines/model_pipeline.py` | Model training/prediction pipeline |
 | `src/utils/stock_info.py` | Stock code resolution + STOCK_NAMES/ZONE_SUFFIX constants |
 | `src/utils/important_dates.py` | Important dates management |
-| `src/utils/strategy_params.py` | Strategy parameter management with SQLite |
+| `src/utils/strategy_params.py` | Strategy parameter management with SQLite + optional Redis (Upstash) |
 | `src/utils/cache.py` | Feature caching with SQLite backend |
 | `configs/config.yaml` | All configuration parameters |
 
