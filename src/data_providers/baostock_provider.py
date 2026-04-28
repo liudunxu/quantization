@@ -1,6 +1,7 @@
 """BaoStock data provider for Chinese A-shares."""
 
 import logging
+import socket
 import time
 
 import pandas as pd
@@ -104,8 +105,13 @@ class BaostockProvider(BaseDataProvider):
 
         for attempt in range(retry_count):
             try:
-                # Login to baostock
-                login_result = bs.login()
+                # Login to baostock with socket timeout to avoid hanging
+                old_timeout = socket.getdefaulttimeout()
+                socket.setdefaulttimeout(10)
+                try:
+                    login_result = bs.login()
+                finally:
+                    socket.setdefaulttimeout(old_timeout)
                 if login_result.error_code != "0":
                     last_error = f"Login failed: {login_result.error_msg}"
                     logger.warning(f"[{self.name}] {last_error}")
@@ -123,15 +129,19 @@ class BaostockProvider(BaseDataProvider):
                 ).strftime("%Y-%m-%d")
                 end_date = pd.Timestamp.today().strftime("%Y-%m-%d")
 
-                # Query historical data
-                rs = bs.query_history_k_data_plus(
+                # Query historical data with socket timeout
+                socket.setdefaulttimeout(15)
+                try:
+                    rs = bs.query_history_k_data_plus(
                     code,
                     "date,open,high,low,close,volume",
                     start_date=start_date,
                     end_date=end_date,
                     frequency="d",
                     adjustflag=self.adjustflag,
-                )
+                    )
+                finally:
+                    socket.setdefaulttimeout(old_timeout)
 
                 if rs.error_code != "0":
                     last_error = f"Query failed: {rs.error_msg}"

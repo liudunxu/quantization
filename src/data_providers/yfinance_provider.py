@@ -23,6 +23,15 @@ class YFinanceProvider(BaseDataProvider):
         """Return provider name."""
         return self._name
 
+    def _convert_symbol(self, stock_code: str) -> str:
+        """Convert stock code to yfinance format.
+
+        A-share SH suffix -> SS (yfinance uses .SS for Shanghai)
+        """
+        if stock_code.endswith(".SH"):
+            return stock_code.replace(".SH", ".SS")
+        return stock_code
+
     def fetch(
         self,
         stock_code: str,
@@ -32,11 +41,12 @@ class YFinanceProvider(BaseDataProvider):
     ) -> pd.DataFrame:
         """Fetch stock data from Yahoo Finance with retry logic."""
         last_error = None
+        symbol = self._convert_symbol(stock_code)
 
         for attempt in range(retry_count):
             try:
                 data = yf.download(
-                    stock_code, period=f"{days}d", auto_adjust=False, progress=False
+                    symbol, period=f"{days}d", auto_adjust=False, progress=False, timeout=5
                 )
 
                 if data.empty:

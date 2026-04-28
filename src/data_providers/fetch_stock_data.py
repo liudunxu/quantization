@@ -1,6 +1,7 @@
 """Stock data fetcher with multi-provider fallback."""
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from typing import List, Optional
 
 import pandas as pd
@@ -166,7 +167,19 @@ class StockDataFetcher:
             tried_providers.append(provider.name)
             logger.info(f"[StockDataFetcher] Trying {provider.name} for {stock_code}")
 
-            df = provider.fetch(stock_code, days=days)
+            executor = ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(provider.fetch, stock_code, days, 1, 1.0)
+            try:
+                df = future.result(timeout=10)
+            except FutureTimeoutError:
+                logger.warning(
+                    f"[StockDataFetcher] {provider.name} timed out after 10s for {stock_code}"
+                )
+                executor.shutdown(wait=False)
+                continue
+            finally:
+                executor.shutdown(wait=False)
+
             if not df.empty:
                 logger.info(
                     f"[StockDataFetcher] Success with {provider.name} ({len(df)} rows)"

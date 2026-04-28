@@ -5,7 +5,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from ..data_providers import fetch_stock_data
+from ..data_providers import fetch_index_data, fetch_stock_data
 from ..utils.cache import FeatureCache
 from ..utils.stock_info import StockInfoResolver
 from .base import BaseFeatureExtractor
@@ -33,8 +33,11 @@ class MarketFeatures(BaseFeatureExtractor):
         except ValueError:
             index_code = "^GSPC"
 
-        # Use multi-provider data fetcher for index
-        index_data = fetch_stock_data(index_code, days=days + 60)
+        # Use dedicated index fetcher for A-share indices, general fetcher otherwise
+        if index_code.endswith(".SH") or index_code.endswith(".SZ"):
+            index_data = fetch_index_data(index_code.split(".")[0], days=days + 60)
+        else:
+            index_data = fetch_stock_data(index_code, days=days + 60)
         if index_data.empty:
             return pd.DataFrame()
 

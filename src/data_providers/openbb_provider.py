@@ -60,7 +60,10 @@ class OpenBBProvider(BaseDataProvider):
         """Convert stock code to OpenBB format.
 
         OpenBB uses the same format as yfinance for most markets.
+        A-share SH suffix -> SS (yfinance uses .SS for Shanghai)
         """
+        if stock_code.endswith(".SH"):
+            return stock_code.replace(".SH", ".SS")
         return stock_code
 
     def fetch(

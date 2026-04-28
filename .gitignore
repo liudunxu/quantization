@@ -61,3 +61,4 @@ backtest_results/
 # Railway
 .railway/
 railway.toml
+models/

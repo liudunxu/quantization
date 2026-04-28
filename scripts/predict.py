@@ -62,7 +62,7 @@ class PredictionService:
     """
 
     def __init__(self):
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._config = None
         self._cache = None
         self._param_manager = None

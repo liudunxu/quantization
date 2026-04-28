@@ -13,6 +13,7 @@ from .baostock_provider import BaostockProvider
 from .base import BaseDataProvider
 from .fetch_stock_data import (
     StockDataFetcher,
+    fetch_index_data,
     fetch_realtime_price,
     fetch_stock_data,
     get_data_fetcher,
@@ -33,5 +34,6 @@ __all__ = [
     "StockDataFetcher",
     "get_data_fetcher",
     "fetch_stock_data",
+    "fetch_index_data",
     "fetch_realtime_price",
 ]
