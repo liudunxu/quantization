@@ -67,11 +67,20 @@ class EnsemblePredictor:
         latest_df = df.iloc[[-1]]
         latest = df.iloc[-1]
 
-        # 1. ML模型预测
-        ml_result = self._get_ml_prediction(model, latest_df)
+        # 1. ML模型预测（极速模式下跳过，避免低CPU环境下的推理开销）
+        if fast_mode and model is None:
+            ml_result = {
+                "action": "HOLD",
+                "confidence": 0.5,
+                "up_prob": 0.33,
+                "down_prob": 0.33,
+                "hold_prob": 0.34,
+            }
+        else:
+            ml_result = self._get_ml_prediction(model, latest_df)
 
         # 2. 技术信号分析
-        technical_result = self.technical_generator.analyze(df)
+        technical_result = self.technical_generator.analyze(df, fast_mode=fast_mode)
 
         # 3. 动量分析
         momentum_result = self._analyze_momentum(latest, df)

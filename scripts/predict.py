@@ -385,22 +385,26 @@ def run_prediction(
     else:
         model = _service.get_cached_model(code) or _service.load_disk_model(code)
         if model is None:
-            logger.info("No cached model found, training new model...")
-            if multi_model:
-                from src.models import MultiModelEnsemble
-                ensemble = MultiModelEnsemble()
-                ensemble.train(train_df, forward_days=1, threshold=threshold)
-                model = ensemble
+            if fast_mode:
+                logger.info("Fast mode: no cached model, skipping ML prediction")
+                model = None
             else:
-                model = _service.model_pipeline.train(
-                    train_df, forward_days=1, threshold=threshold,
-                    use_composite_labels=True,
-                    trend_weight=trend_weight,
-                    momentum_weight=momentum_label_weight,
-                    market_weight=market_label_weight,
-                )
-            _service.cache_model(code, model)
-            _service.save_disk_model(code, model)
+                logger.info("No cached model found, training new model...")
+                if multi_model:
+                    from src.models import MultiModelEnsemble
+                    ensemble = MultiModelEnsemble()
+                    ensemble.train(train_df, forward_days=1, threshold=threshold)
+                    model = ensemble
+                else:
+                    model = _service.model_pipeline.train(
+                        train_df, forward_days=1, threshold=threshold,
+                        use_composite_labels=True,
+                        trend_weight=trend_weight,
+                        momentum_weight=momentum_label_weight,
+                        market_weight=market_label_weight,
+                    )
+                _service.cache_model(code, model)
+                _service.save_disk_model(code, model)
 
     if skip_eval or fast_mode:
         eval_metrics = _service.load_disk_metrics(code) or {

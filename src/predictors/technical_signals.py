@@ -19,11 +19,12 @@ class TechnicalSignalGenerator:
         self.signals = []
         self.explanations = []
 
-    def analyze(self, df: pd.DataFrame) -> Dict[str, Any]:
+    def analyze(self, df: pd.DataFrame, fast_mode: bool = False) -> Dict[str, Any]:
         """分析技术指标并生成信号
 
         Args:
             df: 包含技术指标的 DataFrame
+            fast_mode: 极速模式，只检查核心指标以减少 CPU 开销
 
         Returns:
             包含信号、解释和置信度的字典
@@ -82,133 +83,134 @@ class TechnicalSignalGenerator:
         else:
             neutral_factors.append(bb_explanation)
 
-        # 5. 成交量信号
-        vol_signal, vol_explanation = self._check_volume(latest, df)
-        if vol_signal == "BULLISH":
-            bullish_factors.append(vol_explanation)
-        elif vol_signal == "BEARISH":
-            bearish_factors.append(vol_explanation)
-        else:
-            neutral_factors.append(vol_explanation)
+        if not fast_mode:
+            # 5. 成交量信号
+            vol_signal, vol_explanation = self._check_volume(latest, df)
+            if vol_signal == "BULLISH":
+                bullish_factors.append(vol_explanation)
+            elif vol_signal == "BEARISH":
+                bearish_factors.append(vol_explanation)
+            else:
+                neutral_factors.append(vol_explanation)
 
-        # 6. 动量信号
-        mom_signal, mom_explanation = self._check_momentum(latest)
-        if mom_signal == "BULLISH":
-            bullish_factors.append(mom_explanation)
-        elif mom_signal == "BEARISH":
-            bearish_factors.append(mom_explanation)
-        else:
-            neutral_factors.append(mom_explanation)
+            # 6. 动量信号
+            mom_signal, mom_explanation = self._check_momentum(latest)
+            if mom_signal == "BULLISH":
+                bullish_factors.append(mom_explanation)
+            elif mom_signal == "BEARISH":
+                bearish_factors.append(mom_explanation)
+            else:
+                neutral_factors.append(mom_explanation)
 
-        # 7. KDJ信号
-        kdj_signal, kdj_explanation = self._check_kdj(latest)
-        if kdj_signal == "BULLISH":
-            bullish_factors.append(kdj_explanation)
-        elif kdj_signal == "BEARISH":
-            bearish_factors.append(kdj_explanation)
-        else:
-            neutral_factors.append(kdj_explanation)
+            # 7. KDJ信号
+            kdj_signal, kdj_explanation = self._check_kdj(latest)
+            if kdj_signal == "BULLISH":
+                bullish_factors.append(kdj_explanation)
+            elif kdj_signal == "BEARISH":
+                bearish_factors.append(kdj_explanation)
+            else:
+                neutral_factors.append(kdj_explanation)
 
-        # 8. ATR波动率信号
-        atr_signal, atr_explanation = self._check_atr(latest, df)
-        if atr_signal == "BULLISH":
-            bullish_factors.append(atr_explanation)
-        elif atr_signal == "BEARISH":
-            bearish_factors.append(atr_explanation)
-        else:
-            neutral_factors.append(atr_explanation)
+            # 8. ATR波动率信号
+            atr_signal, atr_explanation = self._check_atr(latest, df)
+            if atr_signal == "BULLISH":
+                bullish_factors.append(atr_explanation)
+            elif atr_signal == "BEARISH":
+                bearish_factors.append(atr_explanation)
+            else:
+                neutral_factors.append(atr_explanation)
 
-        # 9. ADX趋势强度信号
-        adx_signal, adx_explanation = self._check_adx(latest)
-        if adx_signal == "BULLISH":
-            bullish_factors.append(adx_explanation)
-        elif adx_signal == "BEARISH":
-            bearish_factors.append(adx_explanation)
-        else:
-            neutral_factors.append(adx_explanation)
+            # 9. ADX趋势强度信号
+            adx_signal, adx_explanation = self._check_adx(latest)
+            if adx_signal == "BULLISH":
+                bullish_factors.append(adx_explanation)
+            elif adx_signal == "BEARISH":
+                bearish_factors.append(adx_explanation)
+            else:
+                neutral_factors.append(adx_explanation)
 
-        # 10. MFI资金流信号
-        mfi_signal, mfi_explanation = self._check_mfi(latest)
-        if mfi_signal == "BULLISH":
-            bullish_factors.append(mfi_explanation)
-        elif mfi_signal == "BEARISH":
-            bearish_factors.append(mfi_explanation)
-        else:
-            neutral_factors.append(mfi_explanation)
+            # 10. MFI资金流信号
+            mfi_signal, mfi_explanation = self._check_mfi(latest)
+            if mfi_signal == "BULLISH":
+                bullish_factors.append(mfi_explanation)
+            elif mfi_signal == "BEARISH":
+                bearish_factors.append(mfi_explanation)
+            else:
+                neutral_factors.append(mfi_explanation)
 
-        # 11. CCI信号
-        cci_signal, cci_explanation = self._check_cci(latest)
-        if cci_signal == "BULLISH":
-            bullish_factors.append(cci_explanation)
-        elif cci_signal == "BEARISH":
-            bearish_factors.append(cci_explanation)
-        else:
-            neutral_factors.append(cci_explanation)
+            # 11. CCI信号
+            cci_signal, cci_explanation = self._check_cci(latest)
+            if cci_signal == "BULLISH":
+                bullish_factors.append(cci_explanation)
+            elif cci_signal == "BEARISH":
+                bearish_factors.append(cci_explanation)
+            else:
+                neutral_factors.append(cci_explanation)
 
-        # 12. DMI信号
-        dmi_signal, dmi_explanation = self._check_dmi(latest)
-        if dmi_signal == "BULLISH":
-            bullish_factors.append(dmi_explanation)
-        elif dmi_signal == "BEARISH":
-            bearish_factors.append(dmi_explanation)
-        else:
-            neutral_factors.append(dmi_explanation)
+            # 12. DMI信号
+            dmi_signal, dmi_explanation = self._check_dmi(latest)
+            if dmi_signal == "BULLISH":
+                bullish_factors.append(dmi_explanation)
+            elif dmi_signal == "BEARISH":
+                bearish_factors.append(dmi_explanation)
+            else:
+                neutral_factors.append(dmi_explanation)
 
-        # 13. RSI背离信号
-        rsi_div_signal, rsi_div_explanation = self._check_rsi_divergence(latest, df)
-        if rsi_div_signal == "BULLISH":
-            bullish_factors.append(rsi_div_explanation)
-        elif rsi_div_signal == "BEARISH":
-            bearish_factors.append(rsi_div_explanation)
-        else:
-            neutral_factors.append(rsi_div_explanation)
+            # 13. RSI背离信号
+            rsi_div_signal, rsi_div_explanation = self._check_rsi_divergence(latest, df)
+            if rsi_div_signal == "BULLISH":
+                bullish_factors.append(rsi_div_explanation)
+            elif rsi_div_signal == "BEARISH":
+                bearish_factors.append(rsi_div_explanation)
+            else:
+                neutral_factors.append(rsi_div_explanation)
 
-        # 14. 量价背离信号
-        vp_div_signal, vp_div_explanation = self._check_volume_price_divergence(
-            latest, df
-        )
-        if vp_div_signal == "BULLISH":
-            bullish_factors.append(vp_div_explanation)
-        elif vp_div_signal == "BEARISH":
-            bearish_factors.append(vp_div_explanation)
-        else:
-            neutral_factors.append(vp_div_explanation)
+            # 14. 量价背离信号
+            vp_div_signal, vp_div_explanation = self._check_volume_price_divergence(
+                latest, df
+            )
+            if vp_div_signal == "BULLISH":
+                bullish_factors.append(vp_div_explanation)
+            elif vp_div_signal == "BEARISH":
+                bearish_factors.append(vp_div_explanation)
+            else:
+                neutral_factors.append(vp_div_explanation)
 
-        # 15. Ichimoku云信号
-        ichimoku_signal, ichimoku_explanation = self._check_ichimoku(latest)
-        if ichimoku_signal == "BULLISH":
-            bullish_factors.append(ichimoku_explanation)
-        elif ichimoku_signal == "BEARISH":
-            bearish_factors.append(ichimoku_explanation)
-        else:
-            neutral_factors.append(ichimoku_explanation)
+            # 15. Ichimoku云信号
+            ichimoku_signal, ichimoku_explanation = self._check_ichimoku(latest)
+            if ichimoku_signal == "BULLISH":
+                bullish_factors.append(ichimoku_explanation)
+            elif ichimoku_signal == "BEARISH":
+                bearish_factors.append(ichimoku_explanation)
+            else:
+                neutral_factors.append(ichimoku_explanation)
 
-        # 16. Williams %R信号
-        willr_signal, willr_explanation = self._check_williams_r(latest)
-        if willr_signal == "BULLISH":
-            bullish_factors.append(willr_explanation)
-        elif willr_signal == "BEARISH":
-            bearish_factors.append(willr_explanation)
-        else:
-            neutral_factors.append(willr_explanation)
+            # 16. Williams %R信号
+            willr_signal, willr_explanation = self._check_williams_r(latest)
+            if willr_signal == "BULLISH":
+                bullish_factors.append(willr_explanation)
+            elif willr_signal == "BEARISH":
+                bearish_factors.append(willr_explanation)
+            else:
+                neutral_factors.append(willr_explanation)
 
-        # 17. OBV量能信号
-        obv_signal, obv_explanation = self._check_obv(latest, df)
-        if obv_signal == "BULLISH":
-            bullish_factors.append(obv_explanation)
-        elif obv_signal == "BEARISH":
-            bearish_factors.append(obv_explanation)
-        else:
-            neutral_factors.append(obv_explanation)
+            # 17. OBV量能信号
+            obv_signal, obv_explanation = self._check_obv(latest, df)
+            if obv_signal == "BULLISH":
+                bullish_factors.append(obv_explanation)
+            elif obv_signal == "BEARISH":
+                bearish_factors.append(obv_explanation)
+            else:
+                neutral_factors.append(obv_explanation)
 
-        # 18. 连续涨跌信号
-        streak_signal, streak_explanation = self._check_streak(latest)
-        if streak_signal == "BULLISH":
-            bullish_factors.append(streak_explanation)
-        elif streak_signal == "BEARISH":
-            bearish_factors.append(streak_explanation)
-        else:
-            neutral_factors.append(streak_explanation)
+            # 18. 连续涨跌信号
+            streak_signal, streak_explanation = self._check_streak(latest)
+            if streak_signal == "BULLISH":
+                bullish_factors.append(streak_explanation)
+            elif streak_signal == "BEARISH":
+                bearish_factors.append(streak_explanation)
+            else:
+                neutral_factors.append(streak_explanation)
 
         # 综合判断
         bullish_count = len(bullish_factors)
@@ -217,7 +219,6 @@ class TechnicalSignalGenerator:
 
         if bullish_count > bearish_count:
             direction = "UP"
-            # 即使只有一个信号优势，也给出方向
             confidence = (
                 0.5 + (bullish_count - bearish_count) / max(total_signals, 1) * 0.5
             )
@@ -227,7 +228,6 @@ class TechnicalSignalGenerator:
                 0.5 + (bearish_count - bullish_count) / max(total_signals, 1) * 0.5
             )
         else:
-            # 当数量相等时，选择第一个非中性因素的方向
             if bullish_factors:
                 direction = "UP"
                 confidence = 0.52
@@ -238,7 +238,6 @@ class TechnicalSignalGenerator:
                 direction = "NEUTRAL"
                 confidence = 0.45
 
-        # 增强置信度计算
         signal_strength = abs(bullish_count - bearish_count)
         if signal_strength >= 3:
             confidence = min(confidence + 0.18, 0.95)
