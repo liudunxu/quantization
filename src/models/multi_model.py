@@ -45,7 +45,7 @@ class MultiModelEnsemble(BaseModel):
             available["lightgbm"] = True
         except ImportError:
             available["lightgbm"] = False
-            logger.warning("LightGBM not available")
+            logger.debug("LightGBM not available")
 
         try:
             import xgboost  # noqa: F401
@@ -53,7 +53,7 @@ class MultiModelEnsemble(BaseModel):
             available["xgboost"] = True
         except ImportError:
             available["xgboost"] = False
-            logger.warning("XGBoost not available")
+            logger.debug("XGBoost not available")
 
         return available
 
