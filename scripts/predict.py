@@ -698,7 +698,7 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )

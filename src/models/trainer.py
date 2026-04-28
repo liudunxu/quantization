@@ -691,6 +691,37 @@ class StockTradingModel:
 
         return pred_class, confidence
 
+    def predict_batch(self, df: pd.DataFrame) -> List[Tuple[int, float]]:
+        """Batch predict trading actions for multiple rows.
+
+        Much faster than calling predict() in a loop because it avoids
+        repeated feature preparation overhead.
+
+        Returns:
+            List of (action, confidence) tuples, one per row in df.
+            action: 1 (buy), 0 (hold), -1 (sell)
+        """
+        if len(self.models) == 0:
+            raise ValueError("Model not trained")
+
+        X = self._prepare_features(df)
+
+        # Ensemble prediction: average probabilities across all models
+        all_probabilities = []
+        for model in self.models:
+            probs = model.predict_proba(X)
+            all_probabilities.append(probs)
+
+        # Average probabilities (soft voting)
+        avg_probabilities = np.mean(all_probabilities, axis=0)
+        pred_classes = np.argmax(avg_probabilities, axis=1)
+        confidences = np.max(avg_probabilities, axis=1)
+
+        # Convert 0,1,2 back to -1,0,1
+        pred_classes = pred_classes - 1
+
+        return list(zip(pred_classes.tolist(), confidences.tolist()))
+
     def predict_proba(self, df: pd.DataFrame) -> Dict[str, float]:
         """Get prediction probabilities for all classes (averaged across ensemble)."""
         if len(self.models) == 0:

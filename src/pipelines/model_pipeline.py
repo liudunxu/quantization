@@ -202,64 +202,111 @@ class ModelPipeline:
             }
 
         # 统计各类别
-        tp_up = 0  # 预测UP，实际UP
-        fp_up = 0  # 预测UP，实际非UP
-        fn_up = 0  # 实际UP，预测非UP
-        tp_down = 0  # 预测DOWN，实际DOWN
-        fp_down = 0  # 预测DOWN，实际非DOWN
-        fn_down = 0  # 实际DOWN，预测非DOWN
+        tp_up = 0
+        fp_up = 0
+        fn_up = 0
+        tp_down = 0
+        fp_down = 0
+        fn_down = 0
         correct = 0
         total = 0
 
-        for i in range(len(eval_df) - 1):
-            row = eval_df.iloc[[i]]
-            current_close = eval_df["close"].iloc[i]
-            next_close = eval_df["close"].iloc[i + 1]
-            actual_return = (next_close - current_close) / current_close
+        model_name = getattr(model, "model_name", "")
+        eval_rows = eval_df.iloc[:-1]
 
-            # 确定实际方向
-            if actual_return > threshold:
-                actual_direction = "UP"
-            elif actual_return < -threshold:
-                actual_direction = "DOWN"
-            else:
-                actual_direction = "NEUTRAL"
-
+        # Fast path: batch prediction for StockTradingModel
+        if model_name != "MultiModelEnsemble" and hasattr(model, "predict_batch"):
             try:
-                # 处理MultiModelEnsemble
-                model_name = getattr(model, "model_name", "")
-                if model_name == "MultiModelEnsemble":
-                    action, confidence = model.predict(row)
-                    action_map = {"BUY": "UP", "SELL": "DOWN", "HOLD": "NEUTRAL"}
-                    predicted_direction = action_map.get(action, "NEUTRAL")
-                else:
-                    prediction = self.predict_direction(model, row, current_close)
-                    predicted_direction = prediction["direction"]
+                batch_results = model.predict_batch(eval_rows)
+                actual_returns = (
+                    eval_df["close"].iloc[1:].values - eval_df["close"].iloc[:-1].values
+                ) / eval_df["close"].iloc[:-1].values
 
-                if predicted_direction == actual_direction:
-                    correct += 1
+                for i, (pred_action, _) in enumerate(batch_results):
+                    action_map = {1: "UP", 0: "NEUTRAL", -1: "DOWN"}
+                    predicted_direction = action_map.get(pred_action, "NEUTRAL")
 
-                # 统计UP类别
-                if predicted_direction == "UP":
-                    if actual_direction == "UP":
-                        tp_up += 1
+                    actual_return = actual_returns[i]
+                    if actual_return > threshold:
+                        actual_direction = "UP"
+                    elif actual_return < -threshold:
+                        actual_direction = "DOWN"
                     else:
-                        fp_up += 1
-                elif actual_direction == "UP":
-                    fn_up += 1
+                        actual_direction = "NEUTRAL"
 
-                # 统计DOWN类别
-                if predicted_direction == "DOWN":
-                    if actual_direction == "DOWN":
-                        tp_down += 1
-                    else:
-                        fp_down += 1
-                elif actual_direction == "DOWN":
-                    fn_down += 1
+                    if predicted_direction == actual_direction:
+                        correct += 1
 
-                total += 1
+                    if predicted_direction == "UP":
+                        if actual_direction == "UP":
+                            tp_up += 1
+                        else:
+                            fp_up += 1
+                    elif actual_direction == "UP":
+                        fn_up += 1
+
+                    if predicted_direction == "DOWN":
+                        if actual_direction == "DOWN":
+                            tp_down += 1
+                        else:
+                            fp_down += 1
+                    elif actual_direction == "DOWN":
+                        fn_down += 1
+
+                    total += 1
             except Exception:
-                continue
+                # Fallback to row-by-row if batch fails
+                logger.exception("Batch evaluation failed, falling back to row-by-row")
+                total = 0
+                correct = 0
+                tp_up = fp_up = fn_up = tp_down = fp_down = fn_down = 0
+
+        # Fallback path: row-by-row for MultiModelEnsemble or if batch failed
+        if total == 0:
+            for i in range(len(eval_df) - 1):
+                row = eval_df.iloc[[i]]
+                current_close = eval_df["close"].iloc[i]
+                next_close = eval_df["close"].iloc[i + 1]
+                actual_return = (next_close - current_close) / current_close
+
+                if actual_return > threshold:
+                    actual_direction = "UP"
+                elif actual_return < -threshold:
+                    actual_direction = "DOWN"
+                else:
+                    actual_direction = "NEUTRAL"
+
+                try:
+                    if model_name == "MultiModelEnsemble":
+                        action, confidence = model.predict(row)
+                        action_map = {"BUY": "UP", "SELL": "DOWN", "HOLD": "NEUTRAL"}
+                        predicted_direction = action_map.get(action, "NEUTRAL")
+                    else:
+                        prediction = self.predict_direction(model, row, current_close)
+                        predicted_direction = prediction["direction"]
+
+                    if predicted_direction == actual_direction:
+                        correct += 1
+
+                    if predicted_direction == "UP":
+                        if actual_direction == "UP":
+                            tp_up += 1
+                        else:
+                            fp_up += 1
+                    elif actual_direction == "UP":
+                        fn_up += 1
+
+                    if predicted_direction == "DOWN":
+                        if actual_direction == "DOWN":
+                            tp_down += 1
+                        else:
+                            fp_down += 1
+                    elif actual_direction == "DOWN":
+                        fn_down += 1
+
+                    total += 1
+                except Exception:
+                    continue
 
         accuracy = correct / total if total > 0 else 0.0
 
