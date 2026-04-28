@@ -13,7 +13,8 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const backendUrl = env.PREDICTION_API_URL || "http://localhost:8000";
-    const apiSecret = env.API_SECRET || null;
+    const apiSecret = env.API_SECRET;
+    const internalSecret = env.INTERNAL_API_SECRET;
 
     // CORS handling
     if (request.method === "OPTIONS") {
@@ -27,15 +28,20 @@ export default {
       });
     }
 
-    // Auth check
-    if (apiSecret) {
-      const authHeader = request.headers.get("Authorization");
-      if (!authHeader || authHeader !== `Bearer ${apiSecret}`) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
+    // Auth check - API_SECRET is required
+    if (!apiSecret) {
+      return new Response(JSON.stringify({ error: "API_SECRET not configured" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader || authHeader !== `Bearer ${apiSecret}`) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     // Route: /health
@@ -74,7 +80,8 @@ export default {
       }
 
       try {
-        const resp = await fetch(`${backendUrl}/predict/quick?${query.toString()}`);
+        const headers = internalSecret ? { "X-Internal-Auth": internalSecret } : {};
+        const resp = await fetch(`${backendUrl}/predict/quick?${query.toString()}`, { headers });
         const data = await resp.json();
         return jsonResponse(data, resp.status);
       } catch (e) {
@@ -91,7 +98,8 @@ export default {
       }
 
       try {
-        const resp = await fetch(`${backendUrl}/predict?${query.toString()}`);
+        const headers = internalSecret ? { "X-Internal-Auth": internalSecret } : {};
+        const resp = await fetch(`${backendUrl}/predict?${query.toString()}`, { headers });
         const data = await resp.json();
         return jsonResponse(data, resp.status);
       } catch (e) {
@@ -108,7 +116,8 @@ export default {
       }
 
       try {
-        const resp = await fetch(`${backendUrl}/predict/cache?${query.toString()}`);
+        const headers = internalSecret ? { "X-Internal-Auth": internalSecret } : {};
+        const resp = await fetch(`${backendUrl}/predict/cache?${query.toString()}`, { headers });
         const data = await resp.json();
         return jsonResponse(data, resp.status);
       } catch (e) {
@@ -124,7 +133,8 @@ export default {
       }
 
       try {
-        const resp = await fetch(`${backendUrl}/stocks/${code}/info`);
+        const headers = internalSecret ? { "X-Internal-Auth": internalSecret } : {};
+        const resp = await fetch(`${backendUrl}/stocks/${code}/info`, { headers });
         const data = await resp.json();
         return jsonResponse(data, resp.status);
       } catch (e) {
@@ -136,7 +146,8 @@ export default {
     if (url.pathname === "/stocks" || url.pathname === "/stocks/") {
       const zone = url.searchParams.get("zone") || "cn";
       try {
-        const resp = await fetch(`${backendUrl}/stocks?zone=${zone}`);
+        const headers = internalSecret ? { "X-Internal-Auth": internalSecret } : {};
+        const resp = await fetch(`${backendUrl}/stocks?zone=${zone}`, { headers });
         const data = await resp.json();
         return jsonResponse(data, resp.status);
       } catch (e) {

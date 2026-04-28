@@ -680,6 +680,20 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
         version="2.0.0",
     )
 
+    # Internal auth middleware - protects all routes except /health
+    INTERNAL_SECRET = os.environ.get("INTERNAL_API_SECRET")
+
+    @app.middleware("http")
+    async def internal_auth_middleware(request, call_next):
+        if request.url.path == "/health" or request.url.path == "/docs" or request.url.path == "/openapi.json":
+            return await call_next(request)
+        if INTERNAL_SECRET:
+            auth = request.headers.get("X-Internal-Auth")
+            if auth != INTERNAL_SECRET:
+                from fastapi.responses import JSONResponse
+                return JSONResponse({"error": "Forbidden"}, status_code=403)
+        return await call_next(request)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
