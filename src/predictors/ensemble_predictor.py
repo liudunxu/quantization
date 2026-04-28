@@ -48,6 +48,7 @@ class EnsemblePredictor:
         model: StockTradingModel,
         df: pd.DataFrame,
         current_price: float,
+        fast_mode: bool = False,
     ) -> Dict[str, Any]:
         """综合预测
 
@@ -55,6 +56,7 @@ class EnsemblePredictor:
             model: 训练好的ML模型
             df: 包含特征的DataFrame
             current_price: 当前价格
+            fast_mode: 极速模式，跳过非核心分析以加速返回
 
         Returns:
             综合预测结果
@@ -73,6 +75,24 @@ class EnsemblePredictor:
 
         # 3. 动量分析
         momentum_result = self._analyze_momentum(latest, df)
+
+        if fast_mode:
+            # 极速模式：只保留核心信号，跳过复杂分析模块
+            final_result = self._combine_predictions(
+                ml_result,
+                technical_result,
+                momentum_result,
+                None,
+                current_price,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            final_result["fast_mode"] = True
+            return final_result
 
         # 4. 市场情绪分析
         sentiment_result = self._analyze_sentiment(latest)
@@ -964,10 +984,11 @@ class EnsemblePredictor:
             bearish_factors.append(momentum_result["explanation"])
 
         # 从情绪分析获取因素
-        if sentiment_result["direction"] == "UP":
-            bullish_factors.append(sentiment_result["explanation"])
-        elif sentiment_result["direction"] == "DOWN":
-            bearish_factors.append(sentiment_result["explanation"])
+        if sentiment_result:
+            if sentiment_result["direction"] == "UP":
+                bullish_factors.append(sentiment_result["explanation"])
+            elif sentiment_result["direction"] == "DOWN":
+                bearish_factors.append(sentiment_result["explanation"])
 
         # 从趋势强度获取因素
         if trend_result:
@@ -1037,7 +1058,7 @@ class EnsemblePredictor:
             "bearish_factors": bearish_factors[:8],  # 最多8个看跌因素
             "momentum_5": momentum_result.get("momentum_5", 0),
             "momentum_10": momentum_result.get("momentum_10", 0),
-            "sentiment_score": sentiment_result.get("score", 0),
+            "sentiment_score": sentiment_result.get("score", 0) if sentiment_result else 0,
             "adx": trend_result.get("adx", 0) if trend_result else 0,
             "plus_di": trend_result.get("plus_di", 0) if trend_result else 0,
             "minus_di": trend_result.get("minus_di", 0) if trend_result else 0,

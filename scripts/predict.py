@@ -296,6 +296,10 @@ def run_prediction(
             logger.info(f"Returning cached prediction for {code}")
             return cached
 
+    # 极速模式减少数据天数，降低特征计算和模型加载开销
+    if fast_mode and train_days > 90:
+        train_days = 90
+
     market = "a_share"
     if not is_index:
         try:
@@ -426,7 +430,7 @@ def run_prediction(
         "model_accuracy": accuracy,
     })
 
-    prediction = ensemble_predictor.predict(model, df, current_price)
+    prediction = ensemble_predictor.predict(model, df, current_price, fast_mode=fast_mode)
 
     prediction["stock_code"] = code
     prediction["market"] = market
@@ -720,7 +724,7 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
                     exclude_dates, 2.0, fast_mode, skip_training, skip_eval,
                     skip_realtime, skip_params,
                 ),
-                timeout=60,
+                timeout=120,
             )
         except asyncio.TimeoutError:
             logger.error(f"Prediction timeout for {code}")
@@ -765,11 +769,11 @@ def start_server(host: str = "127.0.0.1", port: int = 8000):
             result = await asyncio.wait_for(
                 loop.run_in_executor(
                     _executor, run_prediction,
-                    code, is_index, 365, 0.008, False,
-                    True, 0.35, 0.25, 0.15,
+                    code, is_index, 90, 0.008, False,
+                    False, 0.35, 0.25, 0.15,
                     False, 2.0, True, True, True, True, True,
                 ),
-                timeout=30,
+                timeout=60,
             )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="Quick prediction timed out")
