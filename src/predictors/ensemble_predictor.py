@@ -86,7 +86,10 @@ class EnsemblePredictor:
         momentum_result = self._analyze_momentum(latest, df)
 
         if fast_mode:
-            # 极速模式：只保留核心信号，跳过复杂分析模块
+            # 极速模式：保留轻量的支撑阻力/市场状态计算，避免页面上显示为0
+            support_resistance = self._analyze_support_resistance(latest, df)
+            market_regime = self._analyze_market_regime(latest, df)
+
             final_result = self._combine_predictions(
                 ml_result,
                 technical_result,
@@ -96,8 +99,8 @@ class EnsemblePredictor:
                 None,
                 None,
                 None,
-                None,
-                None,
+                market_regime,
+                support_resistance,
                 None,
             )
             final_result["fast_mode"] = True
