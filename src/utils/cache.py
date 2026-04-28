@@ -19,7 +19,7 @@ class SQLiteFeatureCache:
     """SQLite-based feature cache with fine-grained control."""
 
     # Default cache expiration in hours (24 hours = 1 day)
-    DEFAULT_TTL_HOURS = 24
+    DEFAULT_TTL_HOURS = 14 * 24  # 14 days
 
     def __init__(self, cache_dir: str = "cache", ttl_hours: Optional[int] = None):
         """Initialize FeatureCache."""
@@ -410,7 +410,7 @@ class RedisFeatureCache:
     DataFrames are serialized to Parquet bytes, then base64-encoded for storage.
     """
 
-    DEFAULT_TTL_SECONDS = 24 * 3600  # 24 hours
+    DEFAULT_TTL_SECONDS = 14 * 24 * 3600  # 14 days
 
     def __init__(
         self,

@@ -128,7 +128,7 @@ class StrategyParamManager:
     """
 
     REDIS_KEY_PREFIX = "quarnt:param"
-    REDIS_TTL_SECONDS = 7 * 24 * 3600  # 7 days
+    REDIS_TTL_SECONDS = 14 * 24 * 3600  # 14 days
 
     def __init__(self, db_path: str = "cache/strategy_params.db", redis_cache=None):
         """Initialize StrategyParamStore.

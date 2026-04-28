@@ -71,10 +71,10 @@ class PredictionService:
         self._model_pipeline = None
         self._stock_info_cache: Dict[str, StockInfo] = {}
         self._pred_cache: Dict[str, tuple] = {}
-        self._pred_ttl = 300
+        self._pred_ttl = 14 * 24 * 3600  # 14 days
         self._model_cache: Dict[str, Any] = {}
         self._model_timestamp: Dict[str, float] = {}
-        self._model_ttl = 3600
+        self._model_ttl = 14 * 24 * 3600  # 14 days
 
     @property
     def config(self):
